@@ -1,6 +1,6 @@
 # RaspiScanner
 
-Progetto standalone (non legato al resto del repository OLIMPO): un
+Progetto standalone: un
 Raspberry Pi che, collegato via ethernet a una rete sconosciuta, si
 autoconfigura per parlarci e offre una dashboard web per scansionare i
 dispositivi presenti — con una vista dedicata alle sole telecamere IP.
