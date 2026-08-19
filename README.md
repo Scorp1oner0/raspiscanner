@@ -54,6 +54,34 @@ dispositivi presenti — con una vista dedicata alle sole telecamere IP.
   `nmcli` (NetworkManager) è opzionale, usato solo per l'elenco/connessione
   Wi-Fi.
 
+## Limiti dello scan ARP (leggere prima di segnalare "non trova un dispositivo")
+
+Lo scan "Tutti i dispositivi"/"Solo camere" si basa su ARP: trova solo host
+che hanno un IP nella subnet scansionata e rispondono entro il timeout.
+Alcuni casi che sembrano bug non lo sono:
+
+- **La macchina su cui gira lo scanner stesso** non riceverebbe mai la
+  propria richiesta ARP broadcast di ritorno (nessuno switch la rimanda
+  sulla porta da cui e' arrivata) — per questo il tool la aggiunge sempre
+  esplicitamente ai risultati, IP e MAC li conosce gia' senza bisogno di
+  interrogare la rete.
+- **Switch unmanaged** (molti modelli economici, es. certi PLANET/TP-Link
+  entry level) non hanno nessun indirizzo IP: sono pura elettronica L2 e
+  sono invisibili a *qualsiasi* scan basato su IP, non solo al nostro. Se
+  un dispositivo di rete non compare mai, verifica se ha davvero
+  un'interfaccia di gestione IP prima di sospettare un problema del tool.
+- **Un host appena collegato** puo' non rispondere ancora: se lo switch
+  a monte ha (R)STP attivo, la porta resta in stato "listening" per
+  qualche secondo prima di inoltrare traffico, oltre al tempo che il
+  dispositivo stesso impiega a fare DHCP al boot. Aspetta 20-30s dopo aver
+  collegato un cavo prima di lanciare lo scan, o rilancialo se il primo
+  giro non lo trova.
+- Per verificare in modo indipendente dal tool se un dispositivo e'
+  davvero raggiungibile sulla subnet: `sudo arp-scan --interface=eth0
+  --localnet` oppure `sudo nmap -sn <subnet>`, oppure controlla la tabella
+  dei lease DHCP del router/AP (es. su Mikrotik: `/ip dhcp-server lease
+  print`).
+
 ## Installazione
 
 ```bash

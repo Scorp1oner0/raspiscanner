@@ -40,7 +40,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         if psrc:
             arp_kwargs["psrc"] = psrc
         pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(**arp_kwargs)
-        answered, _ = srp(pkt, timeout=timeout, iface=iface, retry=1)
+        answered, _ = srp(pkt, timeout=timeout, iface=iface, retry=config.ARP_SCAN_RETRY)
     except (PermissionError, OSError) as exc:
         log.error("ARP scan fallito su %s (%s): permessi insufficienti? %s", iface, cidr, exc)
         return []

@@ -101,6 +101,20 @@ def has_carrier(iface):
         return False
 
 
+def get_interface_mac(iface):
+    """MAC address dell'interfaccia locale, o None. Un host non riceve mai
+    la propria richiesta ARP broadcast di ritorno (lo switch non la
+    rimanda sulla porta da cui e' arrivata), quindi un ARP scan non trova
+    mai se stesso: questo serve per aggiungere comunque la macchina locale
+    all'elenco dei dispositivi, dato che IP e MAC li conosciamo gia'."""
+    try:
+        with open(f"/sys/class/net/{iface}/address") as fh:
+            mac = fh.read().strip().upper()
+            return mac or None
+    except (FileNotFoundError, OSError):
+        return None
+
+
 def _run(cmd, timeout=15):
     try:
         return subprocess.run(

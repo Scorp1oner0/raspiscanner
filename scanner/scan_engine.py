@@ -116,8 +116,15 @@ def _run_scan_thread(networks):
                 break
             log.info("discovery ARP su %s (%s)", cidr, iface)
             hosts = arp_scan(cidr, iface, psrc=iface_ip)
+            seen_ips = set()
             for h in hosts:
                 all_hosts.append((h["ip"], h["mac"], iface, iface_ip, cidr))
+                seen_ips.add(h["ip"])
+            if iface_ip not in seen_ips:
+                # Un host non riceve mai la propria richiesta ARP broadcast
+                # di ritorno: senza questo, la macchina su cui gira lo
+                # scanner non comparirebbe mai da sola nei risultati.
+                all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, iface_ip, cidr))
             onvif_results.update(onvif_probe(iface_ip=iface_ip, timeout=3))
 
         total = len(all_hosts)

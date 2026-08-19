@@ -69,8 +69,13 @@ ONVIF_MULTICAST_ADDR = "239.255.255.250"
 PORT_SCAN_TIMEOUT = 0.6
 PORT_SCAN_THREADS = 60
 
-# Timeout ARP scan per host durante la discovery di rete
-ARP_SCAN_TIMEOUT = 3
+# Timeout e ripetizioni dell'ARP scan su una subnet. Un host appena
+# collegato (es. dietro una porta switch con STP/RSTP che tiene la porta
+# in "listening" per qualche secondo) o semplicemente lento a rispondere
+# puo' sfuggire a un singolo giro breve: alziamo timeout/retry rispetto al
+# minimo per non perdere questi casi, a scapito di uno scan un po' piu' lento.
+ARP_SCAN_TIMEOUT = 4
+ARP_SCAN_RETRY = 2
 
 # Timeout risoluzione hostname (reverse DNS, best-effort)
 HOSTNAME_TIMEOUT = 0.6
