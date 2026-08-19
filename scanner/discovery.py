@@ -19,14 +19,27 @@ except ImportError:  # scapy non installato: la discovery ARP non funzionera'
     log.warning("scapy non disponibile: la scansione ARP e' disabilitata")
 
 
-def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT):
+def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     """Esegue un ARP sweep sulla subnet indicata. Ritorna lista di
     {'ip': ..., 'mac': ...} per gli host che hanno risposto.
+
+    `psrc`, se indicato, forza l'IP sorgente del pacchetto ARP invece di
+    lasciarlo decidere a scapy dalla sua tabella di routing interna: scapy
+    la costruisce una sola volta all'import e non la aggiorna da sola
+    quando cambiamo l'IP dell'interfaccia (es. passando da una classe
+    preimpostata alla successiva, o da una rete a un'altra dopo un
+    "riconfigura rete"). Senza `psrc` esplicito, dopo un cambio di rete lo
+    scan puo' partire con un IP sorgente non piu' valido e non ricevere
+    risposta da nessuno, sembrando "bloccato" sulla rete precedente.
     """
     if not SCAPY_AVAILABLE:
         return []
     try:
-        pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=cidr)
+        scapy_conf.route.resync()
+        arp_kwargs = {"pdst": cidr}
+        if psrc:
+            arp_kwargs["psrc"] = psrc
+        pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(**arp_kwargs)
         answered, _ = srp(pkt, timeout=timeout, iface=iface, retry=1)
     except (PermissionError, OSError) as exc:
         log.error("ARP scan fallito su %s (%s): permessi insufficienti? %s", iface, cidr, exc)
@@ -37,11 +50,11 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT):
     return results
 
 
-def quick_subnet_probe(iface, cidr, timeout=config.CLASS_PROBE_TIMEOUT):
+def quick_subnet_probe(iface, cidr, timeout=config.CLASS_PROBE_TIMEOUT, psrc=None):
     """True se almeno un host risponde su quella subnet (usato durante
     l'autoconfigurazione per capire se una classe preimpostata e' quella giusta).
     """
-    hosts = arp_scan(cidr, iface, timeout=timeout)
+    hosts = arp_scan(cidr, iface, timeout=timeout, psrc=psrc)
     return len(hosts) > 0
 
 

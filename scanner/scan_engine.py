@@ -109,7 +109,7 @@ def _run_scan_thread(networks):
             if _stop_flag.is_set():
                 break
             log.info("discovery ARP su %s (%s)", cidr, iface)
-            hosts = arp_scan(cidr, iface)
+            hosts = arp_scan(cidr, iface, psrc=iface_ip)
             for h in hosts:
                 all_hosts.append((h["ip"], h["mac"], iface, iface_ip))
             onvif_results.update(onvif_probe(iface_ip=iface_ip, timeout=3))

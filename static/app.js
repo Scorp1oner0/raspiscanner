@@ -7,21 +7,42 @@ function escapeHtml(s) {
   }[c]));
 }
 
+function formatAgo(ts) {
+  if (!ts) return "-";
+  const secs = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (secs < 5) return "adesso";
+  if (secs < 60) return `${secs}s fa`;
+  return `${Math.round(secs / 60)}min fa`;
+}
+
 async function refreshNetwork() {
   try {
     const res = await fetch("/api/network");
     const data = await res.json();
 
     $("eth-iface").textContent = data.eth.iface ? `(${data.eth.iface})` : "";
-    $("eth-up").textContent = data.eth.up ? "collegato" : "non collegato";
+    $("eth-up").textContent = data.eth.reconfiguring
+      ? "🔄 riconfigurazione in corso..."
+      : (data.eth.up ? "collegato" : "non collegato");
     $("eth-mode").textContent = data.eth.mode || "-";
     $("eth-ip").textContent = data.eth.ip || "-";
     $("eth-cidr").textContent = data.eth.cidr || "-";
+    $("eth-last-change").textContent = formatAgo(data.eth.last_change);
+
+    const errLine = $("eth-error-line");
+    if (data.eth.error) {
+      errLine.classList.remove("hidden");
+      $("eth-error").textContent = data.eth.error;
+    } else {
+      errLine.classList.add("hidden");
+    }
 
     $("wifi-iface").textContent = data.wifi.iface ? `(${data.wifi.iface})` : "";
     $("wifi-ssid").textContent = data.wifi.ssid || "-";
     $("wifi-ip").textContent = data.wifi.ip || "-";
     $("wifi-cidr").textContent = data.wifi.cidr || "-";
+
+    return data;
   } catch (e) {
     console.error("refreshNetwork", e);
   }
@@ -123,8 +144,20 @@ async function stopScan() {
 
 async function rescanNetwork() {
   $("net-msg").textContent = "Riconfigurazione in corso (puo' richiedere fino a un minuto)...";
+  $("btn-rescan-net").disabled = true;
   await fetch("/api/network/rescan", { method: "POST" });
-  setTimeout(() => { $("net-msg").textContent = ""; refreshNetwork(); }, 20000);
+
+  // Poll finche' il backend segnala reconfiguring:true invece di indovinare
+  // un tempo fisso: la riconfigurazione puo' durare da pochi secondi (DHCP
+  // subito disponibile) a ~30s (tutte le classi preimpostate provate).
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const data = await refreshNetwork();
+    if (data && !data.eth.reconfiguring) break;
+  }
+  $("net-msg").textContent = "";
+  $("btn-rescan-net").disabled = false;
 }
 
 async function toggleWifiList() {

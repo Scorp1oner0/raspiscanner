@@ -30,9 +30,19 @@ log = logging.getLogger("raspiscanner.network")
 
 _state_lock = threading.Lock()
 _status = {
-    "eth": {"iface": None, "up": False, "mode": None, "ip": None, "cidr": None},
+    "eth": {
+        "iface": None, "up": False, "mode": None, "ip": None, "cidr": None,
+        "reconfiguring": False, "error": None, "last_change": None,
+    },
     "wifi": {"iface": None, "up": False, "ssid": None, "ip": None, "cidr": None},
 }
+
+# Serializza autoconfigure_ethernet(): puo' essere chiamata sia dal monitor
+# automatico (fronte di salita del carrier) sia manualmente dalla dashboard.
+# Senza questo lock due chiamate concorrenti possono accavallare `ip addr
+# flush/add` e lasciare l'interfaccia in uno stato incoerente che sembra
+# "bloccato" sulla rete precedente.
+_autoconfig_lock = threading.Lock()
 
 
 def get_status():
@@ -118,12 +128,32 @@ def set_link_up(iface):
 
 
 def try_dhcp(iface, timeout=config.DHCP_TIMEOUT_SECONDS):
-    """Tenta un lease DHCP sull'interfaccia. Ritorna True se ottenuto un IP."""
+    """Tenta un lease DHCP sull'interfaccia. Ritorna True se ottenuto un IP.
+
+    Usa un file di lease/pid dedicato e lo cancella prima di ogni tentativo:
+    con il lease file di default, se la rete e' cambiata, dhclient prova
+    prima a rinnovare (INIT-REBOOT) il vecchio indirizzo verso il vecchio
+    server DHCP (ormai irraggiungibile) e spesso consuma l'intero timeout
+    prima di arrendersi e passare a un DISCOVER pulito sulla rete nuova.
+    Partire sempre da un lease vuoto forza un DISCOVER immediato.
+    """
     log.info("provo DHCP su %s (timeout %ss)", iface, timeout)
-    _run(["dhclient", "-r", iface], timeout=5)
+    lease_file = f"/run/raspiscanner-dhclient-{iface}.lease"
+    pid_file = f"/run/raspiscanner-dhclient-{iface}.pid"
+    dhclient_common = ["-lf", lease_file, "-pf", pid_file]
+
+    _run(["dhclient", "-r"] + dhclient_common + [iface], timeout=5)
+    for path in (lease_file, pid_file):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
     flush_addresses(iface)
     set_link_up(iface)
-    res = _run(["dhclient", "-1", "-v", "-timeout", str(timeout), iface], timeout=timeout + 5)
+    res = _run(
+        ["dhclient", "-1", "-v", "-timeout", str(timeout)] + dhclient_common + [iface],
+        timeout=timeout + 5,
+    )
     if res is None:
         return False
     ip_info = get_interface_ip(iface)
@@ -149,7 +179,7 @@ def try_preset_classes(iface):
         static_ip = preset["static_ip"]
         log.info("provo classe %s (IP candidato %s)", cidr, static_ip)
         assign_static(iface, static_ip, prefix=cidr.split("/")[1])
-        alive = quick_subnet_probe(iface, cidr, timeout=config.CLASS_PROBE_TIMEOUT)
+        alive = quick_subnet_probe(iface, cidr, timeout=config.CLASS_PROBE_TIMEOUT, psrc=static_ip)
         if alive:
             log.info("classe %s attiva su %s", cidr, iface)
             return preset
@@ -158,36 +188,65 @@ def try_preset_classes(iface):
 
 
 def autoconfigure_ethernet(iface=None):
-    """Esegue la logica DHCP -> fallback classi preimpostate su eth."""
+    """Esegue la logica DHCP -> fallback classi preimpostate su eth.
+
+    Serializzata da _autoconfig_lock: se e' gia' in corso un tentativo
+    (avviato dal monitor o da una richiesta precedente della dashboard),
+    la chiamata viene ignorata invece di accavallarsi alla prima. Qualsiasi
+    eccezione durante il tentativo viene intercettata e riportata nello
+    stato invece di lasciare la dashboard bloccata sull'ultimo risultato
+    valido senza spiegazione.
+    """
     iface = iface or find_default_eth_iface()
     if not iface:
         log.warning("nessuna interfaccia ethernet trovata")
         return
 
-    if not has_carrier(iface):
-        _set_status("eth", iface=iface, up=False, mode=None, ip=None, cidr=None)
+    if not _autoconfig_lock.acquire(blocking=False):
+        log.info("autoconfigurazione gia' in corso su %s, richiesta ignorata", iface)
         return
 
-    if try_dhcp(iface):
-        ip_info = get_interface_ip(iface)
-        _set_status(
-            "eth", iface=iface, up=True, mode="dhcp",
-            ip=ip_info[0], cidr=f"{ip_info[0].rsplit('.', 1)[0]}.0/{ip_info[1]}",
-        )
-        return
+    try:
+        _set_status("eth", iface=iface, reconfiguring=True, error=None)
 
-    log.info("DHCP non disponibile su %s, provo classi preimpostate", iface)
-    preset = try_preset_classes(iface)
-    if preset:
-        _set_status(
-            "eth", iface=iface, up=True, mode="static-fallback",
-            ip=preset["static_ip"], cidr=preset["cidr"],
-        )
-        return
+        if not has_carrier(iface):
+            _set_status(
+                "eth", iface=iface, up=False, mode=None, ip=None, cidr=None,
+                reconfiguring=False, last_change=time.time(),
+            )
+            return
 
-    flush_addresses(iface)
-    _set_status("eth", iface=iface, up=True, mode="nessuna-rete", ip=None, cidr=None)
-    log.warning("nessuna classe preimpostata ha risposto su %s", iface)
+        try:
+            if try_dhcp(iface):
+                ip_info = get_interface_ip(iface)
+                _set_status(
+                    "eth", iface=iface, up=True, mode="dhcp",
+                    ip=ip_info[0], cidr=f"{ip_info[0].rsplit('.', 1)[0]}.0/{ip_info[1]}",
+                    reconfiguring=False, error=None, last_change=time.time(),
+                )
+                return
+
+            log.info("DHCP non disponibile su %s, provo classi preimpostate", iface)
+            preset = try_preset_classes(iface)
+            if preset:
+                _set_status(
+                    "eth", iface=iface, up=True, mode="static-fallback",
+                    ip=preset["static_ip"], cidr=preset["cidr"],
+                    reconfiguring=False, error=None, last_change=time.time(),
+                )
+                return
+
+            flush_addresses(iface)
+            _set_status(
+                "eth", iface=iface, up=True, mode="nessuna-rete", ip=None, cidr=None,
+                reconfiguring=False, error=None, last_change=time.time(),
+            )
+            log.warning("nessuna classe preimpostata ha risposto su %s", iface)
+        except Exception as exc:  # non deve mai lasciare lo stato "congelato" in silenzio
+            log.exception("autoconfigurazione fallita su %s", iface)
+            _set_status("eth", iface=iface, reconfiguring=False, error=str(exc), last_change=time.time())
+    finally:
+        _autoconfig_lock.release()
 
 
 def refresh_wifi_status():
@@ -248,18 +307,28 @@ def _monitor_loop(stop_event):
     eth_iface = find_default_eth_iface()
     last_carrier = None
     while not stop_event.is_set():
-        if eth_iface:
-            carrier = has_carrier(eth_iface)
-            if carrier and not last_carrier:
-                log.info("cavo eth collegato su %s, avvio autoconfig", eth_iface)
-                autoconfigure_ethernet(eth_iface)
-            elif not carrier and last_carrier:
-                log.info("cavo eth scollegato da %s", eth_iface)
-                _set_status("eth", iface=eth_iface, up=False, mode=None, ip=None, cidr=None)
-            last_carrier = carrier
-        else:
-            eth_iface = find_default_eth_iface()
-        refresh_wifi_status()
+        try:
+            if eth_iface:
+                carrier = has_carrier(eth_iface)
+                if carrier and not last_carrier:
+                    log.info("cavo eth collegato su %s, avvio autoconfig", eth_iface)
+                    autoconfigure_ethernet(eth_iface)
+                elif not carrier and last_carrier:
+                    log.info("cavo eth scollegato da %s", eth_iface)
+                    _set_status(
+                        "eth", iface=eth_iface, up=False, mode=None, ip=None, cidr=None,
+                        reconfiguring=False, error=None, last_change=time.time(),
+                    )
+                last_carrier = carrier
+            else:
+                eth_iface = find_default_eth_iface()
+            refresh_wifi_status()
+        except Exception:
+            # Il monitor gira per tutta la vita del processo: un'eccezione
+            # qui non deve fermarlo per sempre, altrimenti nessuna
+            # riconfigurazione automatica avverra' mai piu' finche' non si
+            # riavvia il servizio.
+            log.exception("errore nel loop di monitor rete")
         stop_event.wait(config.LINK_POLL_INTERVAL)
 
 
