@@ -1,0 +1,81 @@
+# Database OUI (MAC vendor) offline, ridotto e "best effort".
+# Formato: PREFISSO,Nome Vendor
+# Non esaustivo: copre i vendor piu' comuni per reti domestiche/aziendali,
+# telecamere IP/NVR e schede tipiche (Raspberry Pi, moduli IoT).
+# La classificazione "e' una telecamera" nello scanner NON dipende da
+# questa tabella (si basa su porte/protocolli), quindi un vendor mancante
+# o impreciso qui non compromette la scansione camere: e' solo un'etichetta
+# informativa in piu' nella tabella dei risultati.
+# Per un database completo: lanciare update_oui.py da una macchina con
+# accesso a internet (scarica il registro ufficiale IEEE) e sostituire
+# questo file.
+B8:27:EB,Raspberry Pi Foundation
+DC:A6:32,Raspberry Pi Trading Ltd
+E4:5F:01,Raspberry Pi Trading Ltd
+28:CD:C1,Raspberry Pi Trading Ltd
+D8:3A:DD,Raspberry Pi Trading Ltd
+24:6F:28,Espressif (ESP8266/ESP32)
+30:AE:A4,Espressif (ESP8266/ESP32)
+A4:CF:12,Espressif (ESP8266/ESP32)
+84:CC:A8,Espressif (ESP8266/ESP32)
+EC:FA:BC,Espressif (ESP8266/ESP32)
+3C:71:BF,Espressif (ESP8266/ESP32)
+8C:AA:B5,Espressif (ESP8266/ESP32)
+CC:50:E3,Espressif (ESP8266/ESP32)
+4C:BD:8F,Hikvision
+44:19:B6,Hikvision
+BC:AD:28,Hikvision
+C0:56:E3,Hikvision
+A4:14:37,Hikvision
+28:57:BE,Hikvision
+3C:EF:8C,Dahua Technology
+90:02:A9,Dahua Technology
+E0:50:8B,Dahua Technology
+4C:11:BF,Dahua Technology
+BC:32:1D,Dahua Technology
+AC:CC:8E,Axis Communications
+00:40:8C,Axis Communications
+B8:A4:4F,Axis Communications
+00:02:D1,Vivotek
+54:42:49,Sony Corporation
+00:80:F0,Panasonic
+50:C7:BF,TP-Link Technologies
+98:DA:C4,TP-Link Technologies
+C4:6E:1F,TP-Link Technologies
+D8:47:32,TP-Link Technologies
+60:E3:27,TP-Link Technologies
+A4:2B:B0,TP-Link Technologies
+24:A4:3C,Ubiquiti Networks
+04:18:D6,Ubiquiti Networks
+78:8A:20,Ubiquiti Networks
+F0:9F:C2,Ubiquiti Networks
+DC:9F:DB,Ubiquiti Networks
+1C:7E:E5,D-Link
+C8:D3:A3,D-Link
+00:1E:58,D-Link
+B8:A3:86,D-Link
+A0:04:60,Netgear
+20:E5:2A,Netgear
+44:94:FC,Netgear
+84:1B:5E,Netgear
+00:1A:A1,Cisco Systems
+00:0C:85,Cisco Systems
+00:1B:D4,Cisco Systems
+34:CE:00,Xiaomi Communications
+78:11:DC,Xiaomi Communications
+F0:B4:29,Xiaomi Communications
+44:65:0D,Amazon Technologies
+FC:65:DE,Amazon Technologies
+68:37:E9,Amazon Technologies
+F4:F5:D8,Google
+54:60:09,Google
+8C:79:F5,Samsung Electronics
+00:12:47,Samsung Electronics
+00:E0:FC,Huawei Technologies
+48:46:FB,Huawei Technologies
+00:1B:21,Intel Corporate
+3C:97:0E,Intel Corporate
+00:0C:29,VMware Virtual NIC
+00:50:56,VMware Virtual NIC
+52:54:00,QEMU/KVM Virtual Machine
+08:00:27,Oracle VirtualBox

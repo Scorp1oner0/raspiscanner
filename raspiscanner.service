@@ -1,0 +1,16 @@
+[Unit]
+Description=RaspiScanner - dashboard scanner di rete e telecamere IP
+After=network.target
+
+[Service]
+Type=simple
+# Serve root (o cap_net_raw/cap_net_admin) per ARP scan e per riconfigurare
+# l'interfaccia ethernet (ip addr/link, dhclient).
+User=root
+WorkingDirectory=/opt/raspiscanner
+ExecStart=/opt/raspiscanner/venv/bin/python3 /opt/raspiscanner/app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
