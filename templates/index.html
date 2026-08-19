@@ -20,21 +20,25 @@
         <div class="net-title">🔌 Ethernet <span id="eth-iface" class="iface-name"></span></div>
         <div class="net-line">Stato: <span id="eth-up">-</span></div>
         <div class="net-line">Modalita': <span id="eth-mode">-</span></div>
-        <div class="net-line">IP: <span id="eth-ip">-</span></div>
-        <div class="net-line">Rete: <span id="eth-cidr">-</span></div>
+        <div class="net-line">Indirizzi:</div>
+        <div id="eth-addresses" class="addr-list"><div class="addr-empty">-</div></div>
         <div class="net-line">Ultimo aggiornamento: <span id="eth-last-change">-</span></div>
         <div class="net-line net-error hidden" id="eth-error-line">Errore: <span id="eth-error"></span></div>
       </div>
       <div class="net-box" id="net-wifi">
         <div class="net-title">📶 Wi-Fi <span id="wifi-iface" class="iface-name"></span></div>
         <div class="net-line">SSID: <span id="wifi-ssid">-</span></div>
-        <div class="net-line">IP: <span id="wifi-ip">-</span></div>
-        <div class="net-line">Rete: <span id="wifi-cidr">-</span></div>
+        <div class="net-line">Indirizzi:</div>
+        <div id="wifi-addresses" class="addr-list"><div class="addr-empty">-</div></div>
         <button class="btn small" id="btn-wifi-list">Reti visibili</button>
       </div>
     </div>
     <div id="wifi-networks" class="wifi-list hidden"></div>
     <button class="btn" id="btn-rescan-net">🔄 Riconfigura rete</button>
+    <label class="force-label">
+      <input type="checkbox" id="chk-force-rescan">
+      forza DHCP/fallback (cancella gli IP attuali)
+    </label>
     <span id="net-msg" class="msg"></span>
   </section>
 
@@ -63,10 +67,10 @@
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>IP</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Interfaccia</th>
+            <th>IP</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Interfaccia</th><th>Rete</th>
             <th>Porte aperte</th><th>Tipo</th>
           </tr></thead>
-          <tbody id="table-all"><tr><td colspan="7" class="empty">Nessun dato: avvia una scansione</td></tr></tbody>
+          <tbody id="table-all"><tr><td colspan="8" class="empty">Nessun dato: avvia una scansione</td></tr></tbody>
         </table>
       </div>
     </div>

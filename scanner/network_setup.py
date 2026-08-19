@@ -17,6 +17,7 @@ comandi di base `ip` e `dhclient`, cosi' funziona su qualunque Raspberry Pi
 OS purche' l'interfaccia non sia gestita in conflitto da un altro servizio
 (vedi README per come marcarla "unmanaged" in NetworkManager/dhcpcd).
 """
+import ipaddress
 import logging
 import os
 import subprocess
@@ -31,10 +32,10 @@ log = logging.getLogger("raspiscanner.network")
 _state_lock = threading.Lock()
 _status = {
     "eth": {
-        "iface": None, "up": False, "mode": None, "ip": None, "cidr": None,
+        "iface": None, "up": False, "mode": None, "ip": None, "cidr": None, "addresses": [],
         "reconfiguring": False, "error": None, "last_change": None,
     },
-    "wifi": {"iface": None, "up": False, "ssid": None, "ip": None, "cidr": None},
+    "wifi": {"iface": None, "up": False, "ssid": None, "ip": None, "cidr": None, "addresses": []},
 }
 
 # Serializza autoconfigure_ethernet(): puo' essere chiamata sia dal monitor
@@ -53,6 +54,11 @@ def get_status():
 def _set_status(key, **kwargs):
     with _state_lock:
         _status[key].update(kwargs)
+
+
+def _get_status_field(key, field, default=None):
+    with _state_lock:
+        return _status[key].get(field, default)
 
 
 def list_interfaces():
@@ -105,18 +111,46 @@ def _run(cmd, timeout=15):
         return None
 
 
-def get_interface_ip(iface):
-    """Ritorna (ip, prefix) se l'interfaccia ha un IPv4 assegnato, altrimenti None."""
+def get_interface_ips(iface):
+    """Ritorna [(ip, prefix), ...] per TUTTI gli IPv4 assegnati all'interfaccia.
+
+    Un'interfaccia puo' avere piu' indirizzi (es. IP secondari configurati a
+    mano per raggiungere piu' subnet sullo stesso cavo): vanno rilevati e
+    scansionati tutti, non solo il primo.
+    """
     res = _run(["ip", "-4", "-o", "addr", "show", "dev", iface])
     if not res or res.returncode != 0:
-        return None
+        return []
+    out = []
     for line in res.stdout.splitlines():
         parts = line.split()
         if "inet" in parts:
             cidr = parts[parts.index("inet") + 1]  # es 192.168.1.42/24
             ip, prefix = cidr.split("/")
-            return ip, int(prefix)
-    return None
+            out.append((ip, int(prefix)))
+    return out
+
+
+def get_interface_ip(iface):
+    """Ritorna (ip, prefix) del primo IPv4 assegnato, o None. Scorciatoia
+    per i punti (DHCP, classe statica appena assegnata) in cui sappiamo che
+    l'interfaccia ha al piu' un indirizzo perche' l'abbiamo appena flushata."""
+    ips = get_interface_ips(iface)
+    return ips[0] if ips else None
+
+
+def _network_cidr(ip, prefix):
+    """Calcola l'indirizzo di rete corretto per qualunque prefisso (non solo
+    /24): l'IP di un'interfaccia configurata a mano puo' benissimo essere su
+    una /16 o /23, non solo sulle /24 che questo tool assegna da solo."""
+    return str(ipaddress.ip_network(f"{ip}/{prefix}", strict=False))
+
+
+def _address_list(iface):
+    return [
+        {"ip": ip, "cidr": _network_cidr(ip, prefix)}
+        for ip, prefix in get_interface_ips(iface)
+    ]
 
 
 def flush_addresses(iface):
@@ -187,8 +221,15 @@ def try_preset_classes(iface):
     return None
 
 
-def autoconfigure_ethernet(iface=None):
+def autoconfigure_ethernet(iface=None, force=False):
     """Esegue la logica DHCP -> fallback classi preimpostate su eth.
+
+    Se l'interfaccia ha GIA' uno o piu' indirizzi IPv4 che non sono stati
+    assegnati da noi (mode precedente None/"manuale" invece di
+    "dhcp"/"static-fallback" — es. IP secondari configurati a mano per
+    raggiungere piu' subnet sullo stesso cavo), non li tocchiamo: si
+    passa `force=True` per azzerarli comunque e far ripartire DHCP/fallback
+    da zero.
 
     Serializzata da _autoconfig_lock: se e' gia' in corso un tentativo
     (avviato dal monitor o da una richiesta precedente della dashboard),
@@ -211,17 +252,33 @@ def autoconfigure_ethernet(iface=None):
 
         if not has_carrier(iface):
             _set_status(
-                "eth", iface=iface, up=False, mode=None, ip=None, cidr=None,
+                "eth", iface=iface, up=False, mode=None, ip=None, cidr=None, addresses=[],
                 reconfiguring=False, last_change=time.time(),
             )
             return
 
         try:
+            owns_current_config = _get_status_field("eth", "mode") in ("dhcp", "static-fallback")
+            existing = [] if force else _address_list(iface)
+            if existing and not owns_current_config:
+                primary = existing[0]
+                _set_status(
+                    "eth", iface=iface, up=True, mode="manuale",
+                    ip=primary["ip"], cidr=primary["cidr"], addresses=existing,
+                    reconfiguring=False, error=None, last_change=time.time(),
+                )
+                log.info(
+                    "%d IP preesistenti su %s non assegnati da questo tool, lasciati invariati",
+                    len(existing), iface,
+                )
+                return
+
             if try_dhcp(iface):
-                ip_info = get_interface_ip(iface)
+                addresses = _address_list(iface)
+                primary = addresses[0]
                 _set_status(
                     "eth", iface=iface, up=True, mode="dhcp",
-                    ip=ip_info[0], cidr=f"{ip_info[0].rsplit('.', 1)[0]}.0/{ip_info[1]}",
+                    ip=primary["ip"], cidr=primary["cidr"], addresses=addresses,
                     reconfiguring=False, error=None, last_change=time.time(),
                 )
                 return
@@ -229,16 +286,17 @@ def autoconfigure_ethernet(iface=None):
             log.info("DHCP non disponibile su %s, provo classi preimpostate", iface)
             preset = try_preset_classes(iface)
             if preset:
+                addresses = [{"ip": preset["static_ip"], "cidr": preset["cidr"]}]
                 _set_status(
                     "eth", iface=iface, up=True, mode="static-fallback",
-                    ip=preset["static_ip"], cidr=preset["cidr"],
+                    ip=preset["static_ip"], cidr=preset["cidr"], addresses=addresses,
                     reconfiguring=False, error=None, last_change=time.time(),
                 )
                 return
 
             flush_addresses(iface)
             _set_status(
-                "eth", iface=iface, up=True, mode="nessuna-rete", ip=None, cidr=None,
+                "eth", iface=iface, up=True, mode="nessuna-rete", ip=None, cidr=None, addresses=[],
                 reconfiguring=False, error=None, last_change=time.time(),
             )
             log.warning("nessuna classe preimpostata ha risposto su %s", iface)
@@ -249,23 +307,38 @@ def autoconfigure_ethernet(iface=None):
         _autoconfig_lock.release()
 
 
+def refresh_eth_addresses(iface):
+    """Ri-legge SOLO la lista di indirizzi correnti, senza flush/DHCP: usato
+    dal monitor per tenere la dashboard aggiornata quando un IP viene
+    aggiunto/rimosso da fuori (es. configurazione manuale) senza un vero e
+    proprio evento di link. Non cambia `mode`.
+    """
+    addresses = _address_list(iface)
+    if addresses:
+        primary = addresses[0]
+        _set_status("eth", addresses=addresses, ip=primary["ip"], cidr=primary["cidr"])
+    else:
+        _set_status("eth", addresses=[])
+
+
 def refresh_wifi_status():
     iface = find_default_wifi_iface()
     if not iface:
-        _set_status("wifi", iface=None, up=False, ssid=None, ip=None, cidr=None)
+        _set_status("wifi", iface=None, up=False, ssid=None, ip=None, cidr=None, addresses=[])
         return
-    ip_info = get_interface_ip(iface)
+    addresses = _address_list(iface)
     ssid = None
     res = _run(["iwgetid", "-r", iface], timeout=3)
     if res and res.returncode == 0:
         ssid = res.stdout.strip() or None
-    if ip_info:
+    if addresses:
+        primary = addresses[0]
         _set_status(
             "wifi", iface=iface, up=True, ssid=ssid,
-            ip=ip_info[0], cidr=f"{ip_info[0].rsplit('.', 1)[0]}.0/{ip_info[1]}",
+            ip=primary["ip"], cidr=primary["cidr"], addresses=addresses,
         )
     else:
-        _set_status("wifi", iface=iface, up=bool(ssid), ssid=ssid, ip=None, cidr=None)
+        _set_status("wifi", iface=iface, up=bool(ssid), ssid=ssid, ip=None, cidr=None, addresses=[])
 
 
 def wifi_scan_networks():
@@ -316,9 +389,14 @@ def _monitor_loop(stop_event):
                 elif not carrier and last_carrier:
                     log.info("cavo eth scollegato da %s", eth_iface)
                     _set_status(
-                        "eth", iface=eth_iface, up=False, mode=None, ip=None, cidr=None,
+                        "eth", iface=eth_iface, up=False, mode=None, ip=None, cidr=None, addresses=[],
                         reconfiguring=False, error=None, last_change=time.time(),
                     )
+                elif carrier and not _autoconfig_lock.locked():
+                    # Nessun evento di link, ma teniamo aggiornata la lista
+                    # indirizzi: puo' cambiare senza un vero cambio di cavo
+                    # (es. un IP secondario aggiunto/rimosso a mano).
+                    refresh_eth_addresses(eth_iface)
                 last_carrier = carrier
             else:
                 eth_iface = find_default_eth_iface()

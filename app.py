@@ -51,11 +51,14 @@ def api_network():
 
 @app.route("/api/network/rescan", methods=["POST"])
 def api_network_rescan():
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get("force"))
+
     def _do():
-        network_setup.autoconfigure_ethernet()
+        network_setup.autoconfigure_ethernet(force=force)
         network_setup.refresh_wifi_status()
     threading.Thread(target=_do, daemon=True).start()
-    return jsonify({"status": "avviato"})
+    return jsonify({"status": "avviato", "force": force})
 
 
 @app.route("/api/wifi/networks")

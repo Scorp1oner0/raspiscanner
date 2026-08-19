@@ -8,21 +8,32 @@ dispositivi presenti — con una vista dedicata alle sole telecamere IP.
 ## Cosa fa
 
 1. **Autoconfigurazione ethernet.** Quando l'interfaccia `eth0` rileva il
-   cavo collegato, prova prima un lease **DHCP**. Se non arriva entro il
-   timeout, prova in sequenza una lista di **classi private preimpostate**
-   (192.168.1.0/24, 192.168.0.0/24, 10.0.0.0/24, ecc. — vedi
-   `scanner/config.py`): per ciascuna si assegna un IP statico "alto" e
-   verifica con un probe ARP se ci sono host che rispondono. La prima
-   classe "viva" trovata viene mantenuta. Il monitor gira in continuo: se
-   scolleghi e ricolleghi il cavo (magari su un'altra rete), rifà tutto da
-   capo automaticamente.
+   cavo collegato e non ha gia' un indirizzo, prova prima un lease **DHCP**.
+   Se non arriva entro il timeout, prova in sequenza una lista di **classi
+   private preimpostate** (192.168.1.0/24, 192.168.0.0/24, 10.0.0.0/24,
+   ecc. — vedi `scanner/config.py`): per ciascuna si assegna un IP statico
+   "alto" e verifica con un probe ARP se ci sono host che rispondono. La
+   prima classe "viva" trovata viene mantenuta. Il monitor gira in
+   continuo: se scolleghi e ricolleghi il cavo (magari su un'altra rete),
+   rifà tutto da capo automaticamente.
+
+   Se l'interfaccia ha **gia'** uno o piu' indirizzi IPv4 che il tool non
+   ha assegnato lui stesso (es. IP secondari configurati a mano per
+   raggiungere piu' subnet sullo stesso cavo), non li tocca: li rileva e
+   li usa cosi' come sono (modalita' "manuale" nella dashboard). Il
+   pulsante "Riconfigura rete" ha un'opzione "forza" per azzerare comunque
+   tutto e far ripartire DHCP/fallback da zero.
 2. **Dashboard web** (porta `7332`) con:
-   - stato di ethernet e Wi-Fi (IP, classe, modalità di configurazione);
+   - stato di ethernet e Wi-Fi, con **tutti** gli indirizzi IPv4 attivi
+     (non solo il primo: un'interfaccia con piu' IP configurati mostra ed
+     espone allo scan ognuna delle reti corrispondenti), classe/modalità
+     di configurazione;
    - elenco reti Wi-Fi visibili e connessione manuale (se `nmcli` è
      disponibile);
-   - **scan "Tutti i dispositivi"**: ARP scan su tutte le subnet attive
-     (eth + wifi), con IP, MAC, vendor (da OUI offline), hostname
-     (reverse DNS best-effort), interfaccia, porte aperte, tipo;
+   - **scan "Tutti i dispositivi"**: ARP scan su **tutte** le subnet
+     attive (ogni indirizzo IPv4 su eth + wifi, non solo il primo trovato),
+     con IP, MAC, vendor (da OUI offline), hostname (reverse DNS
+     best-effort), interfaccia, rete di appartenenza, porte aperte, tipo;
    - **scan "Solo camere"**: stesso scan, filtrato sui dispositivi
      riconosciuti come telecamere/NVR/DVR. Il riconoscimento **non** si
      basa sul vendor MAC (poco affidabile offline) ma su segnali di

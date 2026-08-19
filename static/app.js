@@ -15,6 +15,17 @@ function formatAgo(ts) {
   return `${Math.round(secs / 60)}min fa`;
 }
 
+function renderAddressList(elId, addresses) {
+  const box = $(elId);
+  if (!addresses || addresses.length === 0) {
+    box.innerHTML = '<div class="addr-empty">-</div>';
+    return;
+  }
+  box.innerHTML = addresses.map((a) => `
+    <div class="addr-row"><span>${escapeHtml(a.ip)}</span><span class="iface-name">${escapeHtml(a.cidr)}</span></div>
+  `).join("");
+}
+
 async function refreshNetwork() {
   try {
     const res = await fetch("/api/network");
@@ -25,8 +36,7 @@ async function refreshNetwork() {
       ? "🔄 riconfigurazione in corso..."
       : (data.eth.up ? "collegato" : "non collegato");
     $("eth-mode").textContent = data.eth.mode || "-";
-    $("eth-ip").textContent = data.eth.ip || "-";
-    $("eth-cidr").textContent = data.eth.cidr || "-";
+    renderAddressList("eth-addresses", data.eth.addresses);
     $("eth-last-change").textContent = formatAgo(data.eth.last_change);
 
     const errLine = $("eth-error-line");
@@ -39,8 +49,7 @@ async function refreshNetwork() {
 
     $("wifi-iface").textContent = data.wifi.iface ? `(${data.wifi.iface})` : "";
     $("wifi-ssid").textContent = data.wifi.ssid || "-";
-    $("wifi-ip").textContent = data.wifi.ip || "-";
-    $("wifi-cidr").textContent = data.wifi.cidr || "-";
+    renderAddressList("wifi-addresses", data.wifi.addresses);
 
     return data;
   } catch (e) {
@@ -57,7 +66,7 @@ function renderAllTable(devices) {
   const tbody = $("table-all");
   $("count-all").textContent = devices.length;
   if (devices.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">Nessun dato: avvia una scansione</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">Nessun dato: avvia una scansione</td></tr>';
     return;
   }
   tbody.innerHTML = devices.map((d) => `
@@ -67,6 +76,7 @@ function renderAllTable(devices) {
       <td>${escapeHtml(d.vendor)}</td>
       <td>${escapeHtml(d.hostname)}</td>
       <td>${escapeHtml(d.iface)}</td>
+      <td>${escapeHtml(d.network)}</td>
       <td>${renderPorts(d.open_ports)}</td>
       <td>${d.is_camera ? '<span class="camera-badge">📹 ' + escapeHtml(d.device_type) + "</span>" : escapeHtml(d.device_type)}</td>
     </tr>
@@ -143,9 +153,14 @@ async function stopScan() {
 }
 
 async function rescanNetwork() {
+  const force = $("chk-force-rescan").checked;
   $("net-msg").textContent = "Riconfigurazione in corso (puo' richiedere fino a un minuto)...";
   $("btn-rescan-net").disabled = true;
-  await fetch("/api/network/rescan", { method: "POST" });
+  await fetch("/api/network/rescan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ force }),
+  });
 
   // Poll finche' il backend segnala reconfiguring:true invece di indovinare
   // un tempo fisso: la riconfigurazione puo' durare da pochi secondi (DHCP

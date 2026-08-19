@@ -46,13 +46,19 @@ def _set_device(ip, device):
 
 
 def _active_networks():
-    """Ritorna [(iface, cidr, local_ip), ...] per eth e wifi attivi."""
+    """Ritorna [(iface, cidr, local_ip), ...], uno per OGNI indirizzo IPv4
+    attivo su eth e wifi (un'interfaccia puo' averne piu' di uno, es. IP
+    secondari configurati a mano per raggiungere piu' subnet sullo stesso
+    cavo: vanno scansionate tutte, non solo la prima)."""
     status = network_setup.get_status()
     nets = []
     for key in ("eth", "wifi"):
         info = status.get(key, {})
-        if info.get("up") and info.get("ip") and info.get("cidr"):
-            nets.append((info["iface"], info["cidr"], info["ip"]))
+        if not info.get("up"):
+            continue
+        for addr in info.get("addresses") or []:
+            if addr.get("ip") and addr.get("cidr"):
+                nets.append((info["iface"], addr["cidr"], addr["ip"]))
     return nets
 
 
@@ -103,7 +109,7 @@ def run_scan():
 
 def _run_scan_thread(networks):
     try:
-        all_hosts = []  # (ip, mac, iface, iface_ip)
+        all_hosts = []  # (ip, mac, iface, iface_ip, cidr)
         onvif_results = {}
         for iface, cidr, iface_ip in networks:
             if _stop_flag.is_set():
@@ -111,18 +117,19 @@ def _run_scan_thread(networks):
             log.info("discovery ARP su %s (%s)", cidr, iface)
             hosts = arp_scan(cidr, iface, psrc=iface_ip)
             for h in hosts:
-                all_hosts.append((h["ip"], h["mac"], iface, iface_ip))
+                all_hosts.append((h["ip"], h["mac"], iface, iface_ip, cidr))
             onvif_results.update(onvif_probe(iface_ip=iface_ip, timeout=3))
 
         total = len(all_hosts)
         _update(total=total)
 
-        for idx, (ip, mac, iface, iface_ip) in enumerate(all_hosts):
+        for idx, (ip, mac, iface, iface_ip, cidr) in enumerate(all_hosts):
             if _stop_flag.is_set():
                 break
             _update(progress=idx, current_ip=ip)
             device = _scan_host(ip, mac, iface_ip, onvif_results)
             device["iface"] = iface
+            device["network"] = cidr
             _set_device(ip, device)
 
         _update(progress=total, current_ip=None)
