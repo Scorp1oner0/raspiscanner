@@ -6,6 +6,21 @@ dashboard web **e** una modalita' da riga di comando per scansionare i
 dispositivi presenti — telecamere IP, NVR/DVR, apparati di rete — con un
 report di sicurezza in stile "assessment".
 
+## Perché RaspiScanner?
+
+Non è l'ennesimo ARP scanner o l'ennesimo client ONVIF: esistono già ottimi
+strumenti per la discovery di rete generica (Nmap, Netdiscover, arp-scan) e
+per collegarsi a singole telecamere via ONVIF/RTSP. RaspiScanner nasce per
+un caso d'uso più specifico che nessuno dei due copre da solo: mettere in un
+unico strumento portatile — un Raspberry Pi che si autoconfigura su una rete
+sconosciuta al volo, senza bisogno di sapere in anticipo classe/gateway —
+la discovery di rete, il fingerprinting via ARP/porte/ONVIF, la
+**distinzione tra telecamera, NVR/DVR e apparato di rete**, e un report di
+sicurezza passivo pensato per il sopralluogo su un impianto di
+videosorveglianza esistente, non per un audit di rete generico. Non
+reinventa Nmap: costruisce un livello sopra alcuni dei suoi stessi
+meccanismi di discovery, orientato a un caso d'uso preciso.
+
 ## Cosa fa
 
 1. **Autoconfigurazione ethernet.** Quando l'interfaccia `eth0` rileva il
