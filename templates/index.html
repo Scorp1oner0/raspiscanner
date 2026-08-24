@@ -9,7 +9,7 @@
 <body>
 <header class="topbar">
   <div class="brand">📡 RaspiScanner</div>
-  <div class="subtitle">Scanner di rete &amp; telecamere IP per Raspberry Pi</div>
+  <div class="subtitle">Scanner di rete, telecamere IP/NVR e apparati — con report di sicurezza</div>
 </header>
 
 <main>
@@ -52,6 +52,13 @@
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div id="progress-label" class="progress-label"></div>
+    <p class="security-note">
+      ⚠ Probe di rete <strong>attivi ma non intrusivi</strong> (ARP request,
+      tentativi di connessione TCP, richieste HTTP, WS-Discovery multicast):
+      generano traffico reale verso i dispositivi target. Nessun login, test
+      di credenziali o tentativo di sfruttamento. Usa solo su reti che sei
+      autorizzato a scansionare.
+    </p>
   </section>
 
   <section class="card">
