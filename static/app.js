@@ -213,6 +213,77 @@ async function toggleWifiList() {
   }
 }
 
+async function openHotspotModal() {
+  $("hotspot-modal").classList.remove("hidden");
+  $("hotspot-msg").textContent = "";
+  await refreshHotspotStatus();
+}
+
+function closeHotspotModal() {
+  $("hotspot-modal").classList.add("hidden");
+}
+
+async function refreshHotspotStatus() {
+  const box = $("hotspot-status-box");
+  box.textContent = "Verifica stato...";
+  try {
+    const res = await fetch("/api/hotspot/status");
+    const data = await res.json();
+    if (data.active) {
+      box.innerHTML = `🟢 Attivo — SSID <strong>${escapeHtml(data.ssid)}</strong>, raggiungibile su <strong>${escapeHtml(data.ip)}:7332</strong>`;
+    } else {
+      box.textContent = "⚪ Non attivo";
+    }
+    if (!$("hotspot-ssid").value) {
+      $("hotspot-ssid").value = data.ssid || data.default_ssid || "";
+    }
+  } catch (e) {
+    box.textContent = "Errore nel recupero dello stato.";
+  }
+}
+
+async function generateHotspotPassword() {
+  try {
+    const res = await fetch("/api/hotspot/generate-password");
+    const data = await res.json();
+    $("hotspot-password").value = data.password;
+  } catch (e) {
+    console.error("generateHotspotPassword", e);
+  }
+}
+
+async function startHotspot() {
+  const ssid = $("hotspot-ssid").value.trim();
+  const password = $("hotspot-password").value;
+  $("hotspot-msg").textContent = "Attivazione in corso...";
+  try {
+    const res = await fetch("/api/hotspot/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ssid, password }),
+    });
+    const data = await res.json();
+    $("hotspot-msg").textContent = data.message || "";
+    await refreshHotspotStatus();
+    await refreshNetwork();
+  } catch (e) {
+    $("hotspot-msg").textContent = "Errore di rete.";
+  }
+}
+
+async function stopHotspot() {
+  $("hotspot-msg").textContent = "Disattivazione in corso...";
+  try {
+    const res = await fetch("/api/hotspot/stop", { method: "POST" });
+    const data = await res.json();
+    $("hotspot-msg").textContent = data.message || "";
+    await refreshHotspotStatus();
+    await refreshNetwork();
+  } catch (e) {
+    $("hotspot-msg").textContent = "Errore di rete.";
+  }
+}
+
 function init() {
   setupTabs();
   $("btn-scan-start").addEventListener("click", startScan);
@@ -220,6 +291,14 @@ function init() {
   $("btn-rescan-net").addEventListener("click", rescanNetwork);
   $("btn-wifi-list").addEventListener("click", toggleWifiList);
   $("btn-refresh-report").addEventListener("click", refreshReport);
+  $("btn-open-hotspot").addEventListener("click", openHotspotModal);
+  $("btn-close-hotspot").addEventListener("click", closeHotspotModal);
+  $("btn-hotspot-generate").addEventListener("click", generateHotspotPassword);
+  $("btn-hotspot-start").addEventListener("click", startHotspot);
+  $("btn-hotspot-stop").addEventListener("click", stopHotspot);
+  $("hotspot-modal").addEventListener("click", (ev) => {
+    if (ev.target.id === "hotspot-modal") closeHotspotModal();
+  });
 
   refreshNetwork();
   refreshScan();

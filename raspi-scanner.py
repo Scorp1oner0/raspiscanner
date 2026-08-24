@@ -25,6 +25,7 @@ import time
 from flask import Flask, Response, jsonify, render_template, request
 
 from scanner import scan_engine
+from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
 
@@ -84,6 +85,37 @@ def api_wifi_connect():
         return jsonify({"error": "ssid obbligatorio"}), 400
     ok, message = network_setup.wifi_connect(ssid, password)
     return jsonify({"ok": ok, "message": message}), (200 if ok else 502)
+
+
+@app.route("/api/hotspot/status")
+def api_hotspot_status():
+    status = hotspot.get_hotspot_status()
+    wifi_iface = network_setup.find_default_wifi_iface() or "wlan0"
+    status["default_ssid"] = hotspot.default_ssid(iface=wifi_iface)
+    return jsonify(status)
+
+
+@app.route("/api/hotspot/generate-password")
+def api_hotspot_generate_password():
+    return jsonify({"password": hotspot.generate_password()})
+
+
+@app.route("/api/hotspot/start", methods=["POST"])
+def api_hotspot_start():
+    data = request.get_json(silent=True) or {}
+    ssid = data.get("ssid") or ""
+    password = data.get("password") or ""
+    iface = network_setup.find_default_wifi_iface()
+    if not iface:
+        return jsonify({"ok": False, "message": "Nessuna interfaccia Wi-Fi trovata"}), 400
+    ok, message = hotspot.start_hotspot(iface, ssid, password)
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+
+@app.route("/api/hotspot/stop", methods=["POST"])
+def api_hotspot_stop():
+    ok, message = hotspot.stop_hotspot()
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 
 @app.route("/api/scan/start", methods=["POST"])

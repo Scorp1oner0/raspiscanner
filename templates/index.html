@@ -31,6 +31,7 @@
         <div class="net-line">Indirizzi:</div>
         <div id="wifi-addresses" class="addr-list"><div class="addr-empty">-</div></div>
         <button class="btn small" id="btn-wifi-list">Reti visibili</button>
+        <button class="btn small" id="btn-open-hotspot">📡 Hotspot</button>
       </div>
     </div>
     <div id="wifi-networks" class="wifi-list hidden"></div>
@@ -100,6 +101,39 @@
     </div>
   </section>
 </main>
+
+<div class="modal-overlay hidden" id="hotspot-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span>📡 Hotspot Wi-Fi</span>
+      <button class="modal-close" id="btn-close-hotspot">✕</button>
+    </div>
+    <p class="modal-desc">
+      Trasforma il Wi-Fi del dispositivo da client a punto di accesso: utile
+      per raggiungere la dashboard senza cavo quando il dispositivo e'
+      installato in un punto scomodo (es. in quota). <strong>Attivarlo
+      scollega il Wi-Fi da qualunque rete a cui e' collegato adesso</strong> —
+      la stessa antenna non puo' fare le due cose insieme.
+    </p>
+
+    <div id="hotspot-status-box" class="hotspot-status">Verifica stato...</div>
+
+    <label class="modal-label">SSID</label>
+    <input type="text" id="hotspot-ssid" class="modal-input" placeholder="RaspiScanner-XXXX">
+
+    <label class="modal-label">Password (minimo 8 caratteri, WPA2)</label>
+    <div class="modal-row">
+      <input type="text" id="hotspot-password" class="modal-input" placeholder="password">
+      <button class="btn small" id="btn-hotspot-generate">🎲 Genera</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn primary" id="btn-hotspot-start">▶️ Attiva hotspot</button>
+      <button class="btn" id="btn-hotspot-stop">⏹️ Disattiva</button>
+    </div>
+    <span id="hotspot-msg" class="msg"></span>
+  </div>
+</div>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

@@ -49,6 +49,19 @@ report di sicurezza in stile "assessment".
    Wi-Fi, tabella "Tutti i dispositivi", tabella "Solo camere" (include
    anche gli NVR/DVR), scheda "Report", esportazione **CSV/JSON**.
 
+5. **Hotspot Wi-Fi** (popup "📡 Hotspot" sulla card Wi-Fi): trasforma il
+   Wi-Fi da client (connesso a una rete esistente) ad access point,
+   utile per raggiungere la dashboard senza cavo quando il dispositivo e'
+   installato in un punto scomodo da cablare (es. dentro una scatola in
+   quota). SSID/password configurabili dal popup (password generabile
+   automaticamente); una volta attivo il profilo resta salvato e si
+   riattiva da solo ai riavvii successivi, cosi' il dispositivo torna
+   raggiungibile via Wi-Fi anche dopo un'interruzione di corrente.
+   **Attivarlo scollega il Wi-Fi da qualunque rete a cui era connesso**:
+   la stessa antenna non puo' fare contemporaneamente client e access
+   point. Richiede NetworkManager (`nmcli`), gia' usato per la
+   connessione Wi-Fi client.
+
 ## Uso
 
 ```bash
@@ -193,6 +206,7 @@ scanner/
   network/
     setup.py                          Autoconfig eth (DHCP/fallback) + monitor + wifi
     infra.py                           Gateway di default + "e' un apparato di rete?"
+    hotspot.py                          Access point Wi-Fi (raggiungibilita' senza cavo)
   reporting/
     security.py                         Security findings (Telnet, HTTP, default service)
     risk.py                              Aggregazione severita' -> riepilogo rischio

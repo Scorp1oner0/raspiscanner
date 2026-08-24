@@ -110,3 +110,73 @@ td.empty { text-align: center; opacity: 0.5; white-space: normal; }
 .camera-badge { color: var(--accent); }
 .mono { font-family: inherit; }
 a.link { color: #00ccff; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+.modal-overlay.hidden { display: none; }
+
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.modal-close:hover { opacity: 1; }
+
+.modal-desc { font-size: 13px; opacity: 0.8; line-height: 1.5; margin-bottom: 14px; }
+
+.modal-label { display: block; font-size: 12px; opacity: 0.8; margin: 10px 0 4px; }
+
+.modal-input {
+  width: 100%;
+  background: #0c0f14;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.modal-row { display: flex; gap: 8px; align-items: center; }
+.modal-row .modal-input { flex: 1; }
+
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+.hotspot-status {
+  background: #0c0f14;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}

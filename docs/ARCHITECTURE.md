@@ -22,7 +22,8 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
 │   │
 │   ├── network/               Autoconfig dell'interfaccia + apparati di rete
 │   │   ├── setup.py             DHCP -> fallback classi preimpostate, monitor cavo/wifi
-│   │   └── infra.py              Gateway di default + "e' un router/switch/AP?"
+│   │   ├── infra.py              Gateway di default + "e' un router/switch/AP?"
+│   │   └── hotspot.py             Access point Wi-Fi (nmcli) per raggiungibilita' senza cavo
 │   │
 │   └── reporting/             Il report "NETWORK ASSESSMENT"
 │       ├── security.py          Findings passivi (Telnet esposto, HTTP abilitato, ...)
