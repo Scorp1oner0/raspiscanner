@@ -14,6 +14,10 @@ scansionate, nel formato:
       HTTP / HTTPS / RTSP
     ...
 
+    SECURITY
+      ⚠ Telnet exposed — 192.168.10.1 (MikroTik network device)
+      ⚠ HTTP enabled — 192.168.10.21 (Hikvision camera)
+
     RISK SUMMARY
       Critical: 0
       High:     1
@@ -25,6 +29,7 @@ from . import security as security_module
 
 _HEADER_RULE = "─" * 28
 _SECTION_RULE = "═" * 40
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 # Etichette di protocollo compatte per la riga "servizi" del report: piu'
 # leggibili delle etichette descrittive usate nella dashboard (es.
@@ -77,13 +82,19 @@ def generate(network_cidr, devices):
     nvrs = [d for d in devices if d.get("is_nvr")]
     infra = [d for d in devices if d.get("is_network_infra")]
 
-    all_findings = []
-    seen_messages = []
+    all_findings = []  # per il riepilogo rischio: ogni finding, non deduplicato
+    device_findings = []  # per la lista leggibile: (severity, ip, label, message)
+    seen = set()
     for d in devices:
+        label = _device_label(d)
         for f in _device_findings(d):
             all_findings.append(f)
-            if f["message"] not in seen_messages:
-                seen_messages.append(f["message"])
+            key = (d["ip"], f["message"])
+            if key in seen:
+                continue
+            seen.add(key)
+            device_findings.append((f.get("severity", "low"), d["ip"], label, f["message"]))
+    device_findings.sort(key=lambda t: (_SEVERITY_ORDER.get(t[0], 9), t[1]))
     risk_counts = risk_module.summarize(all_findings)
 
     lines = ["NETWORK ASSESSMENT", _HEADER_RULE, "", f"Network: {network_cidr}", ""]
@@ -105,10 +116,10 @@ def generate(network_cidr, devices):
     _section("NVR", nvrs)
     _section("NETWORK", infra, with_services=False)
 
-    if seen_messages:
+    if device_findings:
         lines.append("SECURITY")
-        for message in seen_messages:
-            lines.append(f"  ⚠ {message}")
+        for severity, ip, label, message in device_findings:
+            lines.append(f"  ⚠ {message} — {ip} ({label})")
         lines.append("")
 
     lines.append("RISK SUMMARY")

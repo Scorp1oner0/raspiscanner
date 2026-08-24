@@ -89,6 +89,28 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("Medium:   2", report)
         self.assertIn("Low:      0", report)
 
+    def test_security_findings_attributed_to_device_ip(self):
+        """Bug reale: la versione precedente deduplicava i finding SOLO per
+        messaggio, senza dire su quale IP si trovassero — un report con
+        "HTTP enabled" su due device diversi mostrava una riga sola,
+        indistinguibile."""
+        report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
+        self.assertIn("⚠ Telnet exposed — 192.168.10.10", report)
+        self.assertIn("⚠ HTTP enabled — 192.168.10.21", report)
+        self.assertIn("⚠ HTTP enabled — 192.168.10.1", report)
+
+    def test_findings_on_different_devices_not_collapsed(self):
+        """CAMERA (192.168.10.21) e SWITCH (192.168.10.1) hanno entrambi
+        'HTTP enabled': devono comparire come DUE righe distinte, non una."""
+        report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
+        http_lines = [line for line in report.splitlines() if "HTTP enabled" in line]
+        self.assertEqual(len(http_lines), 2)
+
+    def test_findings_sorted_by_severity_critical_first(self):
+        report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
+        security_section = report.split("SECURITY\n", 1)[1].split("\n\n", 1)[0]
+        self.assertTrue(security_section.strip().startswith("⚠ Telnet exposed"))
+
     def test_section_order_camera_before_nvr_before_network(self):
         report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
         cameras_idx = report.index("CAMERAS")

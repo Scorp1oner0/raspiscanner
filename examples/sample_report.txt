@@ -23,8 +23,9 @@ NETWORK
   192.168.10.1
 
 SECURITY
-  ⚠ HTTP enabled
-  ⚠ Telnet exposed
+  ⚠ Telnet exposed — 192.168.10.10 (Hikvision NVR)
+  ⚠ HTTP enabled — 192.168.10.1 (TP-Link Technologies network device)
+  ⚠ HTTP enabled — 192.168.10.21 (Hikvision camera)
 
 RISK SUMMARY
   Critical: 1

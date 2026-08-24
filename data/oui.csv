@@ -1,14 +1,22 @@
-# Database OUI (MAC vendor) offline, ridotto e "best effort".
+# Database OUI (MAC vendor) offline, ridotto e "best effort" (~100 voci).
 # Formato: PREFISSO,Nome Vendor
-# Non esaustivo: copre i vendor piu' comuni per reti domestiche/aziendali,
-# telecamere IP/NVR e schede tipiche (Raspberry Pi, moduli IoT).
-# La classificazione "e' una telecamera" nello scanner NON dipende da
-# questa tabella (si basa su porte/protocolli), quindi un vendor mancante
-# o impreciso qui non compromette la scansione camere: e' solo un'etichetta
-# informativa in piu' nella tabella dei risultati.
-# Per un database completo: lanciare update_oui.py da una macchina con
-# accesso a internet (scarica il registro ufficiale IEEE) e sostituire
-# questo file.
+#
+# QUESTO FILE E' VOLUTAMENTE MINIMO. Il registro IEEE completo ha circa
+# 35.000 prefissi: qui ce ne sono a mano solo un centinaio dei piu' comuni,
+# per funzionare offline "out of the box" senza dover scaricare nulla.
+# E' NORMALE vedere "Sconosciuto" per molti dispositivi con questo file.
+#
+# Per coprire la stragrande maggioranza dei dispositivi reali, lancia (da
+# una macchina CON accesso a internet, non serve sia il Raspberry stesso):
+#
+#     python3 scripts/update_oui.py
+#
+# Scarica il registro ufficiale IEEE e sovrascrive questo file con la
+# versione completa. Va rifatto solo occasionalmente (nuovi vendor
+# compaiono di rado). La classificazione "e' una telecamera/NVR/apparato
+# di rete" nello scanner NON dipende da questa tabella (si basa su
+# porte/protocolli/gateway), quindi un vendor mancante qui e' solo
+# un'etichetta informativa in meno, non un problema di accuratezza scan.
 B8:27:EB,Raspberry Pi Foundation
 DC:A6:32,Raspberry Pi Trading Ltd
 E4:5F:01,Raspberry Pi Trading Ltd
@@ -83,3 +91,30 @@ F4:F5:D8,Google
 00:50:56,VMware Virtual NIC
 52:54:00,QEMU/KVM Virtual Machine
 08:00:27,Oracle VirtualBox
+3C:07:54,Apple
+A8:5C:2C,Apple
+F0:18:98,Apple
+AC:BC:32,Apple
+40:B3:95,Apple
+8C:85:90,Apple
+D0:81:7A,Apple
+00:1B:63,Apple
+28:6A:BA,Apple
+7C:6D:62,Apple
+28:F0:76,Belkin International
+00:17:3F,Belkin International
+C0:56:27,Linksys
+48:F8:B3,Linksys
+1C:87:2C,ASUSTek Computer
+2C:56:DC,ASUSTek Computer
+70:8B:CD,ASUSTek Computer
+94:10:3E,Sonos
+5C:AA:FD,Sonos
+00:17:88,Philips (Hue)
+EC:B5:FA,Philips (Hue)
+54:AF:97,Vivotek
+00:80:77,Bosch Security Systems
+00:1C:23,Dell
+D4:BE:D9,Dell
+3C:D9:2B,Hewlett Packard
+A0:D3:C1,Hewlett Packard
