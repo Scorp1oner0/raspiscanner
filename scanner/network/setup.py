@@ -24,8 +24,8 @@ import subprocess
 import threading
 import time
 
-from . import config
-from .discovery import quick_subnet_probe
+from .. import config
+from ..discovery import quick_subnet_probe
 
 log = logging.getLogger("raspiscanner.network")
 

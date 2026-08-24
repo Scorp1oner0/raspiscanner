@@ -126,6 +126,16 @@ async function refreshScan() {
   }
 }
 
+async function refreshReport() {
+  try {
+    const res = await fetch("/api/report");
+    const data = await res.json();
+    $("report-text").textContent = data.text || "Nessun dato.";
+  } catch (e) {
+    $("report-text").textContent = "Errore nel recupero del report.";
+  }
+}
+
 function setupTabs() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -134,6 +144,8 @@ function setupTabs() {
       const tab = btn.dataset.tab;
       $("panel-all").classList.toggle("hidden", tab !== "all");
       $("panel-cameras").classList.toggle("hidden", tab !== "cameras");
+      $("panel-report").classList.toggle("hidden", tab !== "report");
+      if (tab === "report") refreshReport();
     });
   });
 }
@@ -207,6 +219,7 @@ function init() {
   $("btn-scan-stop").addEventListener("click", stopScan);
   $("btn-rescan-net").addEventListener("click", rescanNetwork);
   $("btn-wifi-list").addEventListener("click", toggleWifiList);
+  $("btn-refresh-report").addEventListener("click", refreshReport);
 
   refreshNetwork();
   refreshScan();

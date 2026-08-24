@@ -1,0 +1,54 @@
+"""Findings di sicurezza rilevabili passivamente da porte/banner esposti.
+
+Sono euristiche basate su osservazione, non verifiche attive: nessun
+tentativo di login, nessun test di credenziali di default, nessuno
+sfruttamento. Solo "cosa espone il dispositivo".
+"""
+TELNET_PORT = 23
+HTTP_PORTS = {80, 81, 8080, 8081, 8000, 8899, 9000, 5000}
+
+# Titoli di pagina generici che suggeriscono un'interfaccia web mai
+# personalizzata/configurata (segnale debole, va preso come indizio non
+# come prova: alcuni vendor usano questi titoli anche a configurazione
+# avvenuta).
+_DEFAULT_TITLE_MARKERS = ("index of /", "welcome", "login")
+
+
+def find_security_issues(device):
+    """device: dict con 'open_ports', 'http_banners', 'is_camera', 'is_nvr'.
+    Ritorna una lista di finding: {"id":.., "message":.., "severity":..}
+    con severity in critical/high/medium/low.
+    """
+    ports_open = {p["port"] for p in device.get("open_ports", [])}
+    banners = device.get("http_banners") or {}
+    findings = []
+
+    if TELNET_PORT in ports_open:
+        # Telnet su una telecamera/NVR e' il caso storicamente piu' sfruttato
+        # (botnet IoT tipo Mirai): lo trattiamo come critico specificamente
+        # su questi dispositivi, alto altrove.
+        is_video_device = device.get("is_camera") or device.get("is_nvr")
+        findings.append({
+            "id": "telnet_exposed",
+            "message": "Telnet exposed",
+            "severity": "critical" if is_video_device else "high",
+        })
+
+    if ports_open & HTTP_PORTS:
+        findings.append({
+            "id": "http_enabled",
+            "message": "HTTP enabled",
+            "severity": "medium",
+        })
+
+    for port, banner in banners.items():
+        title = (banner.get("title") or "").strip().lower()
+        if any(marker in title for marker in _DEFAULT_TITLE_MARKERS):
+            findings.append({
+                "id": "default_service",
+                "message": "Default service detected",
+                "severity": "low",
+            })
+            break  # un solo finding di questo tipo per dispositivo
+
+    return findings

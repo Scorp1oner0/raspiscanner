@@ -6,12 +6,14 @@ rispondono con i propri XAddrs (URL del servizio ONVIF) e i Types
 supportati. E' un segnale molto piu' affidabile del solo controllo porte
 per riconoscere una telecamera vera.
 """
+import http.client
 import logging
 import socket
 import time
+import urllib.parse
 import uuid
 
-from . import config
+from .. import config
 
 log = logging.getLogger("raspiscanner.onvif")
 
@@ -31,6 +33,14 @@ _PROBE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
     </d:Probe>
   </e:Body>
 </e:Envelope>"""
+
+_DEVICE_INFO_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
+               xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+  <soap:Body>
+    <tds:GetDeviceInformation/>
+  </soap:Body>
+</soap:Envelope>"""
 
 
 def _extract_between(text, start_tag_frag, end_tag_frag):
@@ -86,3 +96,50 @@ def onvif_probe(iface_ip=None, timeout=3):
         results[ip] = {"xaddrs": xaddrs, "types": types}
     sock.close()
     return results
+
+
+def get_device_info(xaddr, timeout=3):
+    """Interroga l'endpoint ONVIF GetDeviceInformation sull'XAddr ricevuto
+    dal WS-Discovery per ottenere Manufacturer/Model/FirmwareVersion REALI,
+    invece di indovinarli dal banner HTTP. Ritorna {} se la richiesta fallisce
+    o il dispositivo la richiede autenticata (comune: GetDeviceInformation e'
+    spesso protetto, non e' garantito ottenere sempre il dato).
+    """
+    parsed = urllib.parse.urlparse(xaddr)
+    if not parsed.hostname:
+        return {}
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    path = parsed.path or "/onvif/device_service"
+    conn_cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+
+    try:
+        conn = conn_cls(parsed.hostname, port, timeout=timeout)
+        conn.request(
+            "POST", path, body=_DEVICE_INFO_TEMPLATE.encode("utf-8"),
+            headers={
+                "Content-Type": "application/soap+xml; charset=utf-8",
+                "User-Agent": "raspiscanner",
+            },
+        )
+        resp = conn.getresponse()
+        body = resp.read(8192).decode("utf-8", errors="ignore")
+        status = resp.status
+        conn.close()
+    except Exception as exc:
+        log.debug("GetDeviceInformation fallito per %s: %s", xaddr, exc)
+        return {}
+
+    if status >= 400 or not body:
+        return {}
+
+    manufacturer = _extract_between(body, "manufacturer", "manufacturer")
+    model = _extract_between(body, "model", "model")
+    firmware = _extract_between(body, "firmwareversion", "firmwareversion")
+    info = {}
+    if manufacturer:
+        info["manufacturer"] = manufacturer
+    if model:
+        info["model"] = model
+    if firmware:
+        info["firmware"] = firmware
+    return info

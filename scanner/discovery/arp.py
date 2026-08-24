@@ -6,7 +6,7 @@ tutto il resto dell'applicazione che deve anche riconfigurare le interfacce.
 import logging
 import socket
 
-from . import config
+from .. import config
 
 log = logging.getLogger("raspiscanner.discovery")
 

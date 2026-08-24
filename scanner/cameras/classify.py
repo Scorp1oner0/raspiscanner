@@ -1,22 +1,27 @@
-"""Classificazione di un dispositivo scansionato come telecamera/NVR/DVR.
+"""Classificazione "e' una telecamera IP" + URL RTSP/admin proposti.
 
 La decisione si basa su segnali di protocollo (ONVIF, RTSP, porte tipiche
-DVR/NVR, banner HTTP), non sul vendor MAC: e' un metodo molto piu'
-affidabile perche' non dipende dalla completezza del database OUI locale.
+video, banner HTTP), non sul vendor MAC: e' un metodo molto piu' affidabile
+perche' non dipende dalla completezza del database OUI locale.
+
+Non distingue da sola gli NVR/DVR (vedi scanner.nvr.classify): un
+registratore condivide spesso le stesse porte/segnali di una telecamera.
+La distinzione finale (telecamera vs NVR) la fa scan_engine combinando
+questo risultato con quello di nvr.classify.
 """
-from . import config
+from .. import config
 
 _CAMERA_KEYWORDS = (
-    "camera", "ipcam", "nvr", "dvr", "hikvision", "dahua", "axis",
+    "camera", "ipcam", "hikvision", "dahua", "axis",
     "reolink", "foscam", "vivotek", "onvif", "webcam", "cctv",
 )
 
 
-def classify_device(open_ports, http_banners, onvif_info):
+def classify_camera(open_ports, http_banners, onvif_info):
     """open_ports: lista di {"port":.., "service":..}
     http_banners: {port: {"server":.., "title":..}}
     onvif_info: {"xaddrs": [...], "types": "..."} oppure None
-    Ritorna (is_camera: bool, tipo: str, dettagli: list[str])
+    Ritorna (is_camera: bool, reasons: list[str]).
     """
     ports_open = {p["port"] for p in open_ports}
     reasons = []
@@ -42,8 +47,7 @@ def classify_device(open_ports, http_banners, onvif_info):
                 reasons.append(f"banner HTTP:{port} contiene '{kw}'")
                 break
 
-    device_type = "Telecamera/NVR" if is_camera else "Generico"
-    return is_camera, device_type, reasons
+    return is_camera, reasons
 
 
 def guess_rtsp_url(ip, open_ports):

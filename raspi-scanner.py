@@ -1,23 +1,32 @@
 #!/usr/bin/env python3
-"""RaspiScanner - dashboard di rete per Raspberry Pi.
+"""RaspiScanner - network + IP camera/NVR scanner per Raspberry Pi.
 
 Auto-configura l'interfaccia ethernet (DHCP, con fallback su classi
-private preimpostate) e offre una dashboard web per scansionare i
-dispositivi sulle reti eth/wifi attive, con una vista dedicata alle sole
-telecamere IP/NVR/DVR trovate.
+private preimpostate) e offre due modalita' d'uso:
 
-Avvio:
-    sudo python3 app.py
+- **Dashboard web** (default): scan interattivo di dispositivi/telecamere
+  sulle reti eth/wifi attive, con esportazione CSV/JSON.
+      sudo python3 raspi-scanner.py
+
+- **Report da riga di comando**: esegue uno scan completo e stampa un
+  report testuale "NETWORK ASSESSMENT" (dispositivi, telecamere, NVR,
+  apparati di rete, security findings, riepilogo rischio), poi esce.
+      sudo python3 raspi-scanner.py --report
 """
+import argparse
 import csv
 import io
 import json
 import logging
+import sys
 import threading
+import time
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from scanner import network_setup, scan_engine
+from scanner import scan_engine
+from scanner.network import setup as network_setup
+from scanner.reporting import assessment
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("raspiscanner.app")
@@ -104,6 +113,11 @@ def api_devices_cameras():
     return jsonify(scan_engine.devices_cameras())
 
 
+@app.route("/api/report")
+def api_report():
+    return jsonify({"text": assessment.generate_all(scan_engine.devices_all())})
+
+
 @app.route("/api/export")
 def api_export():
     kind = request.args.get("type", "all")
@@ -113,12 +127,16 @@ def api_export():
     if fmt == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["ip", "mac", "vendor", "hostname", "device_type", "open_ports", "rtsp_url", "admin_url"])
+        writer.writerow([
+            "ip", "mac", "vendor", "model", "hostname", "device_type",
+            "open_ports", "rtsp_url", "admin_url",
+        ])
         for d in devices:
             ports = ";".join(f"{p['port']}/{p['service']}" for p in d.get("open_ports", []))
             writer.writerow([
-                d.get("ip"), d.get("mac"), d.get("vendor"), d.get("hostname") or "",
-                d.get("device_type"), ports, d.get("rtsp_url") or "", d.get("admin_url") or "",
+                d.get("ip"), d.get("mac"), d.get("vendor"), d.get("model") or "",
+                d.get("hostname") or "", d.get("device_type"), ports,
+                d.get("rtsp_url") or "", d.get("admin_url") or "",
             ])
         return Response(
             buf.getvalue(), mimetype="text/csv",
@@ -131,6 +149,49 @@ def api_export():
     )
 
 
-if __name__ == "__main__":
+def run_dashboard(port=7332):
     _ensure_startup()
-    app.run(host="0.0.0.0", port=7332, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+
+
+def run_cli_report(timeout=180):
+    """Esegue uno scan completo e stampa il report testuale, poi esce.
+    Non avvia il server Flask."""
+    network_setup.start_monitor()
+    time.sleep(2)  # tempo minimo perche' il monitor rilevi lo stato di eth/wifi
+
+    ok, message = scan_engine.run_scan()
+    if not ok:
+        print(f"Impossibile avviare lo scan: {message}", file=sys.stderr)
+        return 1
+
+    print("Scan in corso...", file=sys.stderr)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        state = scan_engine.get_state()
+        if not state["running"]:
+            break
+        time.sleep(1)
+    else:
+        print("Timeout raggiunto, stampo i risultati parziali.", file=sys.stderr)
+        scan_engine.stop_scan()
+
+    print(assessment.generate_all(scan_engine.devices_all()))
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--report", action="store_true", help="esegue uno scan e stampa il report testuale, senza avviare la dashboard")
+    parser.add_argument("--port", type=int, default=7332, help="porta della dashboard web (default 7332)")
+    parser.add_argument("--timeout", type=int, default=180, help="timeout in secondi per --report (default 180)")
+    args = parser.parse_args()
+
+    if args.report:
+        sys.exit(run_cli_report(timeout=args.timeout))
+    else:
+        run_dashboard(port=args.port)
+
+
+if __name__ == "__main__":
+    main()

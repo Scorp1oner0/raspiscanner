@@ -5,13 +5,16 @@ Da lanciare su una macchina CON accesso a internet (es. in laboratorio,
 prima di portare il Raspberry sul campo). Il file prodotto sostituisce
 quello incluso nel repo, molto piu' ridotto.
 
-Uso:
-    python3 update_oui.py
+Uso (dalla radice del repo):
+    python3 scripts/update_oui.py
 """
 import csv
 import io
+import os
 import sys
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from scanner.config import OUI_CSV_PATH
 

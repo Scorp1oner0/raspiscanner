@@ -8,7 +8,7 @@ Type=simple
 # l'interfaccia ethernet (ip addr/link, dhclient).
 User=root
 WorkingDirectory=/opt/raspiscanner
-ExecStart=/opt/raspiscanner/venv/bin/python3 /opt/raspiscanner/app.py
+ExecStart=/opt/raspiscanner/venv/bin/python3 /opt/raspiscanner/raspi-scanner.py
 Restart=on-failure
 RestartSec=5
 

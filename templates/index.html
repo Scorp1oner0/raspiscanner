@@ -57,6 +57,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="all">Tutti i dispositivi (<span id="count-all">0</span>)</button>
       <button class="tab-btn" data-tab="cameras">Solo camere (<span id="count-cameras">0</span>)</button>
+      <button class="tab-btn" data-tab="report">Report</button>
     </div>
 
     <div class="tab-panel" id="panel-all">
@@ -89,6 +90,13 @@
           <tbody id="table-cameras"><tr><td colspan="7" class="empty">Nessuna telecamera trovata</td></tr></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="tab-panel hidden" id="panel-report">
+      <div class="export-row">
+        <button class="btn small" id="btn-refresh-report">🔄 Aggiorna report</button>
+      </div>
+      <pre id="report-text" class="report-text">Nessun dato: avvia una scansione, poi apri questa scheda.</pre>
     </div>
   </section>
 </main>

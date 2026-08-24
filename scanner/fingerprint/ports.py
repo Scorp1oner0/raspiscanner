@@ -4,7 +4,7 @@ import logging
 import socket
 from concurrent.futures import ThreadPoolExecutor
 
-from . import config
+from .. import config
 
 log = logging.getLogger("raspiscanner.portscan")
 

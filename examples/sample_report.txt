@@ -1,0 +1,33 @@
+Esempio di output di: python3 raspi-scanner.py --report
+(oppure della scheda "Report" nella dashboard, /api/report)
+
+NETWORK ASSESSMENT
+────────────────────────────
+
+Network: 192.168.10.0/24
+
+3 devices discovered
+
+CAMERAS
+  Hikvision camera
+  192.168.10.21
+  HTTP / HTTPS / RTSP
+
+NVR
+  Hikvision NVR
+  192.168.10.10
+  HTTPS / RTSP / Telnet
+
+NETWORK
+  TP-Link Technologies network device
+  192.168.10.1
+
+SECURITY
+  ⚠ HTTP enabled
+  ⚠ Telnet exposed
+
+RISK SUMMARY
+  Critical: 1
+  High:     0
+  Medium:   2
+  Low:      0
