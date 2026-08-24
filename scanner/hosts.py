@@ -2,15 +2,16 @@
 rete): PC, stampanti, hardware dedicato riconoscibile dal vendor OUI
 (Raspberry Pi, moduli IoT, speaker/hub smart-home).
 
-Come le altre classificazioni del progetto, sono euristiche passive basate
-su cosa il dispositivo espone o annuncia volontariamente (porte aperte,
-vendor MAC), non un fingerprint OS attivo in stile `nmap -O` (nessun
-pacchetto crafted per analizzare lo stack TCP/IP).
+Come le altre classificazioni del progetto, sono euristiche basate su cosa
+il dispositivo espone o annuncia volontariamente a una connessione TCP
+normale (porte aperte, vendor MAC) — probe attivi ma non intrusivi, non un
+fingerprint OS attivo in stile `nmap -O` (nessun pacchetto crafted per
+analizzare lo stack TCP/IP).
 
 Limite strutturale, non un bug: un dispositivo che non espone NESSUNA
 porta (comune su telefoni e computer moderni, con firewall attivo di
-default) non puo' essere identificato oltre "Generico" da uno scan
-passivo — non c'e' nulla da leggere se il dispositivo non parla. Un
+default) non puo' essere identificato oltre "Generico" — non c'e' nulla
+da leggere se il dispositivo non risponde a nessuna connessione. Un
 riconoscimento affidabile dei telefoni richiederebbe mDNS/Bonjour (molti
 annunciano il proprio nome li'), non ancora implementato qui.
 """

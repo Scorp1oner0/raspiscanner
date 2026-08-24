@@ -16,7 +16,7 @@ unico strumento portatile — un Raspberry Pi che si autoconfigura su una rete
 sconosciuta al volo, senza bisogno di sapere in anticipo classe/gateway —
 la discovery di rete, il fingerprinting via ARP/porte/ONVIF, la
 **distinzione tra telecamera, NVR/DVR e apparato di rete**, e un report di
-sicurezza passivo pensato per il sopralluogo su un impianto di
+sicurezza (probe attivi ma non intrusivi) pensato per il sopralluogo su un impianto di
 videosorveglianza esistente, non per un audit di rete generico. Non
 reinventa Nmap: costruisce un livello sopra alcuni dei suoi stessi
 meccanismi di discovery, orientato a un caso d'uso preciso.
@@ -54,11 +54,12 @@ meccanismi di discovery, orientato a un caso d'uso preciso.
    SMB/RDP/IPP/JetDirect), o **Generico** se nessuno di questi segnali e'
    disponibile — limite strutturale, non un bug: un dispositivo senza
    porte aperte (comune su telefoni e PC moderni con firewall attivo di
-   default) non e' identificabile oltre questo con uno scan passivo.
+   default) non espone nulla da leggere, e non si va oltre con fingerprint
+   attivo dello stack TCP/IP in stile `nmap -O`.
 
 3. **Report "NETWORK ASSESSMENT"**: per ogni rete scansionata, un report
    testuale con dispositivi trovati per categoria (camere/NVR/rete),
-   findings di sicurezza rilevati passivamente (Telnet esposto, HTTP
+   findings di sicurezza rilevati con probe attivi ma non intrusivi (Telnet esposto, HTTP
    abilitato, servizio con banner di default) e un riepilogo del rischio
    (Critical/High/Medium/Low). Vedi `examples/sample_report.txt` per un
    esempio completo. Disponibile sia dalla dashboard (scheda "Report") sia
@@ -202,9 +203,11 @@ Scarica il registro ufficiale IEEE e sovrascrive `data/oui.csv`.
 
 Questo è uno strumento di ricognizione di rete: usalo solo su reti che sei
 autorizzato a scansionare. L'ARP scan, il port scan e i security findings
-sono **passivi** — nessun login, nessun test di credenziali di default,
-nessun tentativo di sfruttamento — ma generano comunque traffico visibile
-sulla rete target.
+sono probe di rete **attivi ma non intrusivi** — mandano pacchetti reali
+(ARP request, tentativi di connessione TCP, richieste HTTP, WS-Discovery
+multicast), quindi non sono "passivi" in senso stretto, ma non fanno mai
+login, test di credenziali di default o tentativi di sfruttamento — e
+generano comunque traffico visibile sulla rete target.
 
 ## Struttura del progetto
 

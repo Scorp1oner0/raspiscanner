@@ -27,7 +27,7 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
 │   │   └── hotspot.py             Access point Wi-Fi (nmcli) per raggiungibilita' senza cavo
 │   │
 │   └── reporting/             Il report "NETWORK ASSESSMENT"
-│       ├── security.py          Findings passivi (Telnet esposto, HTTP abilitato, ...)
+│       ├── security.py          Findings da probe attivi ma non intrusivi (Telnet esposto, HTTP abilitato, ...)
 │       ├── risk.py               Aggregazione severita' -> Critical/High/Medium/Low
 │       └── assessment.py          Genera il testo del report per una o piu' reti
 │
@@ -56,9 +56,10 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
    suggerisce, altrimenti il generico "Apparato di rete"), poi hardware
    riconosciuto dal vendor o da porte tipiche (Raspberry Pi, PC via
    SMB/RDP, stampante via IPP/JetDirect), infine "Generico" se nessun
-   segnale e' disponibile — limite strutturale di uno scan passivo (un
-   dispositivo senza porte aperte, comune su telefoni/PC moderni, non e'
-   identificabile oltre questo).
+   segnale e' disponibile — limite strutturale (un dispositivo senza porte
+   aperte, comune su telefoni/PC moderni, non espone nulla da leggere, e
+   non si va oltre con fingerprint attivo dello stack TCP/IP in stile
+   `nmap -O`).
 5. Il risultato aggregato e' consultabile via dashboard (polling HTTP,
    CSV/JSON) o tramite `scanner.reporting.assessment.generate_all()`, che
    raggruppa per rete e produce il report testuale "NETWORK ASSESSMENT" con
@@ -67,12 +68,13 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
 
 ## Limiti noti (per scelta, non per dimenticanza)
 
-- Tutte le classificazioni (camera/NVR/rete) e i security findings sono
-  **euristiche passive**: nessun login, nessun test di credenziali, nessun
-  tentativo di sfruttamento. Non garantiscono di essere sempre corrette (un
-  falso positivo/negativo e' un limite noto, documentato nei docstring dei
-  moduli interessati), ma non fanno mai nulla di piu' invasivo di una
-  richiesta di rete passiva.
+- Tutte le classificazioni (camera/NVR/rete) e i security findings si
+  basano su **probe attivi ma non intrusivi** (ARP request, tentativi di
+  connessione TCP, richieste HTTP, WS-Discovery multicast): non sono
+  "passivi" in senso tecnico stretto (mandano pacchetti reali), ma non
+  fanno mai login, test di credenziali o tentativi di sfruttamento. Non
+  garantiscono di essere sempre corrette (un falso positivo/negativo e'
+  un limite noto, documentato nei docstring dei moduli interessati).
 - L'ARP scan funziona solo sulla subnet L2 direttamente connessa: un
   dispositivo raggiungibile solo tramite routing (altra VLAN/subnet) non
   verra' mai trovato da questo meccanismo, per limite strutturale del

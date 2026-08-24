@@ -103,8 +103,9 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
     # suggerisce). Poi l'hardware riconosciuto dal vendor o dalle porte
     # tipiche (Raspberry Pi, PC, stampante). Altrimenti resta "Generico":
     # un dispositivo senza nessuno di questi segnali (comune su telefoni e
-    # PC moderni con firewall di default) non e' identificabile oltre
-    # questo con uno scan passivo.
+    # PC moderni con firewall di default) non espone nulla da leggere, e
+    # non si va oltre con fingerprint attivo dello stack TCP/IP in stile
+    # `nmap -O`.
     if is_nvr:
         device_type = "NVR/DVR"
     elif is_camera:

@@ -1,8 +1,9 @@
-"""Findings di sicurezza rilevabili passivamente da porte/banner esposti.
+"""Findings di sicurezza da porte/banner esposti da un host gia' scoperto.
 
-Sono euristiche basate su osservazione, non verifiche attive: nessun
-tentativo di login, nessun test di credenziali di default, nessuno
-sfruttamento. Solo "cosa espone il dispositivo".
+Si basano su probe di rete attivi ma non intrusivi (connessioni TCP,
+richieste HTTP) gia' fatte da fingerprint.ports: nessun tentativo di
+login, nessun test di credenziali di default, nessuno sfruttamento. Solo
+"cosa espone il dispositivo" a una connessione normale.
 """
 TELNET_PORT = 23
 HTTP_PORTS = {80, 81, 8080, 8081, 8000, 8899, 9000, 5000}

@@ -8,7 +8,8 @@ Server header o nel <title>). Senza questo segnale un registratore verra'
 comunque rilevato come dispositivo video da scanner.cameras.classify, ma
 etichettato "Telecamera" invece di "NVR/DVR" nel report — un limite noto,
 non un errore: distinguere con certezza un NVR da una camera richiederebbe
-interrogare l'API del vendor (fuori dallo scope di uno scan passivo).
+interrogare l'API proprietaria del vendor (di norma autenticata), fuori
+dallo scope di questo tool che resta non intrusivo.
 """
 _NVR_KEYWORDS = ("nvr", "dvr", "recorder", "video recorder")
 
