@@ -20,14 +20,28 @@ from scanner.config import OUI_CSV_PATH
 
 SOURCE_URL = "https://standards-oui.ieee.org/oui/oui.csv"
 
+# IEEE blocca (HTTP 418) le richieste con lo User-Agent generico di
+# urllib ("Python-urllib/x.y"), riconosciuto come traffico da bot. Un
+# User-Agent da browser normale basta a farla passare.
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 
 def main():
     print(f"Scarico {SOURCE_URL} ...")
+    req = urllib.request.Request(SOURCE_URL, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(SOURCE_URL, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
-    except Exception as exc:  # rete non disponibile, host irraggiungibile, ecc.
+    except Exception as exc:  # rete non disponibile, host irraggiungibile, bloccato, ecc.
         print(f"Download fallito: {exc}", file=sys.stderr)
+        print(
+            "Puoi anche scaricare il CSV a mano da "
+            f"{SOURCE_URL} e salvarlo come {OUI_CSV_PATH}.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     reader = csv.reader(io.StringIO(raw))
