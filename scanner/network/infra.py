@@ -10,10 +10,18 @@ import subprocess
 
 log = logging.getLogger("raspiscanner.network.infra")
 
-_INFRA_KEYWORDS = (
-    "router", "switch", "access point", "gateway", "routeros", "mikrotik",
-    "wireless controller", "ap management",
-)
+# Parola chiave nel banner -> sottotipo specifico da mostrare invece del
+# generico "Apparato di rete". L'ordine conta solo per il primo match.
+_KEYWORD_SUBTYPE = {
+    "router": "Router",
+    "gateway": "Router",
+    "routeros": "Router",
+    "mikrotik": "Router",
+    "switch": "Switch",
+    "access point": "Access Point",
+    "wireless controller": "Access Point",
+    "ap management": "Access Point",
+}
 
 _INFRA_VENDOR_HINTS = (
     "tp-link", "ubiquiti", "netgear", "d-link", "cisco", "mikrotik",
@@ -42,12 +50,21 @@ def get_default_gateway(iface):
 
 
 def classify_network_device(ip, gateway_ip, vendor_name, http_banners):
-    """Ritorna (is_network_infra: bool, reasons: list[str])."""
+    """Ritorna (is_network_infra: bool, subtype: str|None, reasons: list[str]).
+
+    `subtype` e' "Router"/"Switch"/"Access Point" quando un segnale specifico
+    lo indica, altrimenti None (resta il generico "Apparato di rete" nel
+    chiamante). Essere il gateway di default e' il segnale piu' forte e
+    vince su qualunque altro: un dispositivo puo' fare anche da switch, ma
+    se instrada il traffico verso l'esterno e' prima di tutto un router.
+    """
     reasons = []
     is_infra = False
+    subtype = None
 
     if gateway_ip and ip == gateway_ip:
         is_infra = True
+        subtype = "Router"
         reasons.append("e' il gateway di default della rete")
 
     vendor_lower = (vendor_name or "").lower()
@@ -59,10 +76,12 @@ def classify_network_device(ip, gateway_ip, vendor_name, http_banners):
         text = " ".join(filter(None, [banner.get("server"), banner.get("title")])).lower()
         if not text:
             continue
-        for kw in _INFRA_KEYWORDS:
+        for kw, kw_subtype in _KEYWORD_SUBTYPE.items():
             if kw in text:
                 is_infra = True
+                if subtype is None:
+                    subtype = kw_subtype
                 reasons.append(f"banner HTTP:{port} contiene '{kw}'")
                 break
 
-    return is_infra, reasons
+    return is_infra, subtype, reasons

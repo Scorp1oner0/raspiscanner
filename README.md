@@ -44,12 +44,17 @@ meccanismi di discovery, orientato a un caso d'uso preciso.
    indirizzo IPv4 configurato, non solo il primo): ARP scan per IP/MAC,
    port scan mirato + banner HTTP, probe **ONVIF WS-Discovery** (con
    `GetDeviceInformation` per vendor/model reali quando disponibile),
-   lookup vendor da OUI offline. Ogni dispositivo viene classificato in
-   **Telecamera**, **NVR/DVR**, **Apparato di rete** (router/switch/AP,
-   individuato anche via IP == gateway di default) o **Generico** — la
-   classificazione video non si basa sul vendor MAC (poco affidabile
-   offline) ma su segnali di protocollo: ONVIF, porte tipiche (RTSP 554,
-   Hikvision 8000, Dahua 37777/34567), banner HTTP.
+   lookup vendor da OUI offline. Ogni dispositivo viene classificato, in
+   ordine di specificita': **Telecamera**/**NVR-DVR** (segnali di
+   protocollo — ONVIF, porte tipiche RTSP 554/Hikvision 8000/Dahua
+   37777/34567, banner HTTP — non sul vendor MAC, poco affidabile
+   offline), **Router**/**Switch**/**Access Point** (IP == gateway di
+   default, o banner/vendor), **Raspberry Pi**/altro hardware IoT
+   riconosciuto dal vendor, **PC**/**Stampante di rete** (porte tipiche
+   SMB/RDP/IPP/JetDirect), o **Generico** se nessuno di questi segnali e'
+   disponibile — limite strutturale, non un bug: un dispositivo senza
+   porte aperte (comune su telefoni e PC moderni con firewall attivo di
+   default) non e' identificabile oltre questo con uno scan passivo.
 
 3. **Report "NETWORK ASSESSMENT"**: per ogni rete scansionata, un report
    testuale con dispositivi trovati per categoria (camere/NVR/rete),
@@ -208,6 +213,7 @@ raspi-scanner.py            Entry point: dashboard Flask (default) o CLI --repor
 scanner/
   config.py                  Costanti condivise (classi preimpostate, porte, timeout)
   vendor.py                   Lookup vendor da OUI offline
+  hosts.py                     Classificazione "e' un Raspberry Pi/PC/stampante?"
   scan_engine.py                Orchestrazione scan + stato per la dashboard
   discovery/
     arp.py                       ARP scan (scapy) + reverse DNS

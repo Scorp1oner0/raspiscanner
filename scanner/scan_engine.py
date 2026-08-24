@@ -13,6 +13,7 @@ from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url
 from .cameras.onvif import get_device_info, onvif_probe
 from .discovery import arp_scan, resolve_hostname
 from .fingerprint import grab_http_banner, scan_ports
+from .hosts import classify_host
 from .network import setup as network_setup
 from .network.infra import classify_network_device, get_default_gateway
 from .nvr.classify import classify_nvr
@@ -81,7 +82,8 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
 
     is_camera, camera_reasons = classify_camera(open_ports, banners, onvif_info)
     is_nvr, nvr_reasons = classify_nvr(banners)
-    is_infra, infra_reasons = classify_network_device(ip, gateway_ip, device_vendor, banners)
+    is_infra, infra_subtype, infra_reasons = classify_network_device(ip, gateway_ip, device_vendor, banners)
+    host_label, host_reasons = classify_host(device_vendor, open_ports)
 
     # Se il dispositivo risponde a ONVIF, prova a interrogare
     # GetDeviceInformation per un vendor/model REALI invece di indovinarli
@@ -95,12 +97,22 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
         if info.get("manufacturer"):
             device_vendor = info["manufacturer"]
 
+    # Priorita': NVR e camera sono le classificazioni piu' specifiche e
+    # affidabili (segnali di protocollo dedicati). Poi l'apparato di rete
+    # (Router/Switch/Access Point, o generico se solo il vendor lo
+    # suggerisce). Poi l'hardware riconosciuto dal vendor o dalle porte
+    # tipiche (Raspberry Pi, PC, stampante). Altrimenti resta "Generico":
+    # un dispositivo senza nessuno di questi segnali (comune su telefoni e
+    # PC moderni con firewall di default) non e' identificabile oltre
+    # questo con uno scan passivo.
     if is_nvr:
         device_type = "NVR/DVR"
     elif is_camera:
         device_type = "Telecamera"
     elif is_infra:
-        device_type = "Apparato di rete"
+        device_type = infra_subtype or "Apparato di rete"
+    elif host_label:
+        device_type = host_label
     else:
         device_type = "Generico"
 
@@ -117,7 +129,7 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
         "is_nvr": is_nvr,
         "is_network_infra": is_infra,
         "device_type": device_type,
-        "camera_reasons": camera_reasons + nvr_reasons + infra_reasons,
+        "camera_reasons": camera_reasons + nvr_reasons + infra_reasons + host_reasons,
         "rtsp_url": guess_rtsp_url(ip, open_ports),
         "admin_url": guess_admin_url(ip, open_ports),
     }

@@ -5,6 +5,7 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
 ├── scanner/
 │   ├── config.py            Costanti condivise (classi preimpostate, porte, timeout)
 │   ├── vendor.py             Lookup vendor da OUI offline (data/oui.csv)
+│   ├── hosts.py                "e' un Raspberry Pi/PC/stampante?" (vendor o porte tipiche)
 │   ├── scan_engine.py         Orchestrazione: discovery -> fingerprint -> classify -> stato
 │   │
 │   ├── discovery/            Scoperta host su una subnet
@@ -46,11 +47,18 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
 3. Per ciascun host trovato: `fingerprint.scan_ports()` + `grab_http_banner()`
    raccolgono porte aperte e banner; se il dispositivo risponde a ONVIF si
    tenta `cameras.onvif.get_device_info()` per un vendor/model reali.
-4. Il dispositivo viene classificato da tre classificatori indipendenti
+4. Il dispositivo viene classificato da quattro classificatori indipendenti
    (`cameras.classify_camera`, `nvr.classify_nvr`,
-   `network.infra.classify_network_device`) che non si escludono a vicenda:
-   scan_engine decide l'etichetta finale (NVR/DVR ha precedenza su
-   Telecamera, che ha precedenza su Apparato di rete).
+   `network.infra.classify_network_device`, `hosts.classify_host`) che non
+   si escludono a vicenda: scan_engine decide l'etichetta finale in ordine
+   di specificita' — NVR/DVR, poi Telecamera, poi apparato di rete (Router
+   se e' il gateway, altrimenti Switch/Access Point se un banner lo
+   suggerisce, altrimenti il generico "Apparato di rete"), poi hardware
+   riconosciuto dal vendor o da porte tipiche (Raspberry Pi, PC via
+   SMB/RDP, stampante via IPP/JetDirect), infine "Generico" se nessun
+   segnale e' disponibile — limite strutturale di uno scan passivo (un
+   dispositivo senza porte aperte, comune su telefoni/PC moderni, non e'
+   identificabile oltre questo).
 5. Il risultato aggregato e' consultabile via dashboard (polling HTTP,
    CSV/JSON) o tramite `scanner.reporting.assessment.generate_all()`, che
    raggruppa per rete e produce il report testuale "NETWORK ASSESSMENT" con

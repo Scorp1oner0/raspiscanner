@@ -56,6 +56,12 @@ PORTS_OF_INTEREST = {
     37777: "Dahua-DVRIP",
     34567: "Dahua-Legacy",
     5000: "UPnP/HTTP-Alt",
+    135: "MSRPC",
+    139: "NetBIOS",
+    445: "SMB",
+    3389: "RDP",
+    631: "IPP",
+    9100: "JetDirect",
 }
 
 # Porte usate come segnale forte di "questo e' quasi certamente un dispositivo video"
