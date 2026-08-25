@@ -58,6 +58,7 @@
       <button class="tab-btn active" data-tab="all">Tutti i dispositivi (<span id="count-all">0</span>)</button>
       <button class="tab-btn" data-tab="cameras">Solo camere (<span id="count-cameras">0</span>)</button>
       <button class="tab-btn" data-tab="report">Report</button>
+      <button class="tab-btn" data-tab="settings">⚙️ Impostazioni</button>
     </div>
 
     <div class="tab-panel" id="panel-all">
@@ -97,6 +98,33 @@
         <button class="btn small" id="btn-refresh-report">🔄 Aggiorna report</button>
       </div>
       <pre id="report-text" class="report-text">Nessun dato: avvia una scansione, poi apri questa scheda.</pre>
+    </div>
+
+    <div class="tab-panel hidden" id="panel-settings">
+      <p class="modal-desc">
+        Utenti con accesso alla dashboard (HTTP Basic Auth: il browser chiede
+        utente/password una volta e li ricorda per la sessione). L'utente di
+        default creato al primo avvio e' <strong>RaspiScanner</strong> /
+        <strong>RaspiPass</strong>: cambia la password appena possibile.
+      </p>
+
+      <div id="settings-user-list" class="user-list"></div>
+
+      <h3 class="settings-subtitle">Aggiungi utente</h3>
+      <div class="modal-row">
+        <input type="text" id="new-user-username" class="modal-input" placeholder="Nome utente">
+        <input type="text" id="new-user-password" class="modal-input" placeholder="Password (min. 6 caratteri)">
+        <button class="btn small" id="btn-add-user">➕ Aggiungi</button>
+      </div>
+      <span id="add-user-msg" class="msg"></span>
+
+      <h3 class="settings-subtitle">Cambia password</h3>
+      <div class="modal-row">
+        <select id="change-pass-username" class="modal-input"></select>
+        <input type="text" id="change-pass-password" class="modal-input" placeholder="Nuova password">
+        <button class="btn small" id="btn-change-password">🔑 Cambia</button>
+      </div>
+      <span id="change-pass-msg" class="msg"></span>
     </div>
   </section>
 </main>

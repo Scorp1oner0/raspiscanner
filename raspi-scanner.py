@@ -24,7 +24,7 @@ import time
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from scanner import scan_engine
+from scanner import auth, scan_engine
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -33,9 +33,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("raspiscanner.app")
 
 app = Flask(__name__)
+auth.ensure_default_user()
 
 _startup_lock = threading.Lock()
 _started = False
+
+
+@app.before_request
+def _require_auth():
+    creds = request.authorization
+    if not creds or not auth.verify(creds.username, creds.password):
+        return Response(
+            "Accesso non autorizzato.", 401,
+            {"WWW-Authenticate": 'Basic realm="RaspiScanner"'},
+        )
 
 
 def _ensure_startup():
@@ -199,6 +210,31 @@ def api_export():
         json.dumps(devices, indent=2, ensure_ascii=False), mimetype="application/json",
         headers={"Content-Disposition": f"attachment; filename=raspiscanner_{kind}.json"},
     )
+
+
+@app.route("/api/settings/users")
+def api_settings_users():
+    return jsonify({"users": auth.list_usernames()})
+
+
+@app.route("/api/settings/users", methods=["POST"])
+def api_settings_add_user():
+    data = request.get_json(silent=True) or {}
+    ok, message = auth.add_user(data.get("username"), data.get("password"))
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+
+@app.route("/api/settings/users/password", methods=["POST"])
+def api_settings_change_password():
+    data = request.get_json(silent=True) or {}
+    ok, message = auth.set_password(data.get("username"), data.get("password"))
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+
+@app.route("/api/settings/users/<username>", methods=["DELETE"])
+def api_settings_delete_user(username):
+    ok, message = auth.remove_user(username)
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 
 def run_dashboard(port=7332):

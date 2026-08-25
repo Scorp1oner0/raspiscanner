@@ -188,9 +188,93 @@ function setupTabs() {
       $("panel-all").classList.toggle("hidden", tab !== "all");
       $("panel-cameras").classList.toggle("hidden", tab !== "cameras");
       $("panel-report").classList.toggle("hidden", tab !== "report");
+      $("panel-settings").classList.toggle("hidden", tab !== "settings");
       if (tab === "report") refreshReport();
+      if (tab === "settings") refreshUsers();
     });
   });
+}
+
+async function refreshUsers() {
+  const list = $("settings-user-list");
+  const select = $("change-pass-username");
+  try {
+    const res = await fetch("/api/settings/users");
+    const data = await res.json();
+    const users = data.users || [];
+
+    list.innerHTML = users.map((u) => `
+      <div class="user-row">
+        <span>👤 ${escapeHtml(u)}</span>
+        <button class="btn small btn-remove-user" data-username="${escapeHtml(u)}" ${users.length <= 1 ? "disabled" : ""}>🗑 Rimuovi</button>
+      </div>
+    `).join("");
+
+    const current = select.value;
+    select.innerHTML = users.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
+    if (users.includes(current)) select.value = current;
+  } catch (e) {
+    list.innerHTML = "Errore nel recupero degli utenti.";
+  }
+}
+
+async function addUser() {
+  const username = $("new-user-username").value.trim();
+  const password = $("new-user-password").value;
+  const msg = $("add-user-msg");
+  msg.textContent = "Aggiunta in corso...";
+  try {
+    const res = await fetch("/api/settings/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    msg.textContent = data.message || "";
+    if (data.ok) {
+      $("new-user-username").value = "";
+      $("new-user-password").value = "";
+      refreshUsers();
+    }
+  } catch (e) {
+    msg.textContent = "Errore di rete.";
+  }
+}
+
+async function changePassword() {
+  const username = $("change-pass-username").value;
+  const password = $("change-pass-password").value;
+  const msg = $("change-pass-msg");
+  if (!username) {
+    msg.textContent = "Nessun utente selezionato.";
+    return;
+  }
+  msg.textContent = "Aggiornamento in corso...";
+  try {
+    const res = await fetch("/api/settings/users/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    msg.textContent = data.message || "";
+    if (data.ok) $("change-pass-password").value = "";
+  } catch (e) {
+    msg.textContent = "Errore di rete.";
+  }
+}
+
+async function removeUser(username) {
+  try {
+    const res = await fetch(`/api/settings/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!data.ok) {
+      $("add-user-msg").textContent = data.message || "";
+    }
+    refreshUsers();
+  } catch (e) {
+    $("add-user-msg").textContent = "Errore di rete.";
+  }
 }
 
 async function startScan() {
@@ -349,6 +433,12 @@ function init() {
   $("btn-hotspot-generate").addEventListener("click", generateHotspotPassword);
   $("btn-hotspot-start").addEventListener("click", startHotspot);
   $("btn-hotspot-stop").addEventListener("click", stopHotspot);
+  $("btn-add-user").addEventListener("click", addUser);
+  $("btn-change-password").addEventListener("click", changePassword);
+  $("settings-user-list").addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".btn-remove-user");
+    if (btn) removeUser(btn.dataset.username);
+  });
   $("hotspot-iface").addEventListener("change", () => {
     $("hotspot-ssid").value = "";
     refreshHotspotStatus();

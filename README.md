@@ -74,10 +74,12 @@ meccanismi di discovery, orientato a un caso d'uso preciso.
    da riga di comando (`--report`).
 
 4. **Dashboard web** (porta `7332`, polling HTTP, nessuna dipendenza da
-   CDN esterni — funziona anche offline): stato di rete, una card per
-   **ciascuna** scheda Wi-Fi rilevata con elenco/connessione indipendenti,
-   tabella "Tutti i dispositivi", tabella "Solo camere" (include anche gli
-   NVR/DVR), scheda "Report", esportazione **CSV/JSON**.
+   CDN esterni — funziona anche offline; protetta da login, vedi
+   [Autenticazione dashboard](#autenticazione-dashboard)): stato di rete,
+   una card per **ciascuna** scheda Wi-Fi rilevata con elenco/connessione
+   indipendenti, tabella "Tutti i dispositivi", tabella "Solo camere"
+   (include anche gli NVR/DVR), scheda "Report", scheda "⚙️ Impostazioni"
+   per gestire gli utenti, esportazione **CSV/JSON**.
 
 5. **Hotspot Wi-Fi** (popup "📡 Hotspot" sulla card della scheda Wi-Fi
    scelta): trasforma quella scheda da client (connessa a una rete
@@ -220,12 +222,39 @@ multicast), quindi non sono "passivi" in senso stretto, ma non fanno mai
 login, test di credenziali di default o tentativi di sfruttamento — e
 generano comunque traffico visibile sulla rete target.
 
+### Autenticazione dashboard
+
+La dashboard ascolta su `0.0.0.0:7332` ed espone l'inventario completo dei
+dispositivi scansionati (IP, MAC, vendor, **URL RTSP/admin delle
+telecamere**) oltre ai controlli di rete/hotspot: è protetta da **HTTP
+Basic Auth** cosi' chi e' semplicemente sulla stessa rete/hotspot durante
+lo scan non ci accede senza credenziali.
+
+Al primo avvio, se `data/users.json` non esiste ancora, viene creato
+l'utente di default:
+
+```
+Utente:   RaspiScanner
+Password: RaspiPass
+```
+
+**Cambia la password appena possibile** dalla scheda "⚙️ Impostazioni"
+della dashboard, dove puoi anche aggiungere altri utenti o rimuoverli. Le
+credenziali sono persistite (hashate, mai in chiaro) in `data/users.json` e
+sopravvivono ai riavvii del servizio — non serve rifare nulla a ogni
+accensione. Il browser chiede utente/password una volta sola e li ricorda
+per la sessione di navigazione.
+
+`data/users.json` è in `.gitignore`: non va committato (contiene gli hash
+delle password del deployment specifico).
+
 ## Struttura del progetto
 
 ```
 raspi-scanner.py            Entry point: dashboard Flask (default) o CLI --report
 scanner/
   config.py                  Costanti condivise (classi preimpostate, porte, timeout)
+  auth.py                     Utenti dashboard (Basic Auth, persistiti in data/users.json)
   vendor.py                   Lookup vendor da OUI offline
   hosts.py                     Classificazione "e' un Raspberry Pi/PC/stampante?"
   scan_engine.py                Orchestrazione scan + stato per la dashboard
@@ -251,6 +280,7 @@ docs/ARCHITECTURE.md         Panoramica architetturale piu' in dettaglio
 examples/                    Esempi di report e uso programmatico dei classificatori
 scripts/update_oui.py        Aggiorna oui.csv dal registro IEEE (richiede internet)
 data/oui.csv                 Database OUI offline (best effort)
+data/users.json              Utenti dashboard (hash password, generato al primo avvio, gitignored)
 templates/, static/          Dashboard (HTML/CSS/JS, no CDN esterni: funziona offline)
 install.sh                   Installer (venv + systemd)
 raspiscanner.service         Unit file systemd

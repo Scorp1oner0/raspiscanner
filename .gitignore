@@ -13,3 +13,6 @@ Thumbs.db
 # Log/stato runtime locali
 *.log
 *.log.*
+
+# Credenziali dashboard (hash utenti), generate al primo avvio
+data/users.json

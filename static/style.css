@@ -184,6 +184,14 @@ a.link { color: #00ccff; }
 
 .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
 
+.settings-subtitle { font-size: 13px; color: var(--accent); margin: 18px 0 8px; }
+.user-list { margin-bottom: 4px; }
+.user-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.user-row .btn.small { margin: 0; }
+
 .hotspot-status {
   background: #0c0f14;
   border: 1px solid var(--border);
