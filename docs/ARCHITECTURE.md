@@ -64,7 +64,13 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
    CSV/JSON) o tramite `scanner.reporting.assessment.generate_all()`, che
    raggruppa per rete e produce il report testuale "NETWORK ASSESSMENT" con
    i findings di sicurezza (`reporting.security`) e il riepilogo rischio
-   (`reporting.risk`).
+   (`reporting.risk`). Ogni dispositivo con un tipo riconosciuto compare
+   in qualche sezione (CAMERAS/NVR/NETWORK/OTHER DEVICES): un Raspberry
+   Pi o un PC non finiscono piu' in nessuna sezione pur essendo contati in
+   "N devices discovered", come succedeva prima di introdurre "OTHER
+   DEVICES". Se lo scan e' ancora in corso quando il report viene
+   richiesto (`/api/report`), la risposta lo segnala esplicitamente
+   invece di presentare un'istantanea parziale come se fosse definitiva.
 
 ## Limiti noti (per scelta, non per dimenticanza)
 

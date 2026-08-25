@@ -6,7 +6,7 @@ NETWORK ASSESSMENT
 
 Network: 192.168.10.0/24
 
-3 devices discovered
+4 devices discovered
 
 CAMERAS
   Hikvision camera
@@ -21,6 +21,11 @@ NVR
 NETWORK
   TP-Link Technologies network device
   192.168.10.1
+
+OTHER DEVICES
+  Raspberry Pi — Raspberry Pi Foundation
+  192.168.10.30
+  SSH
 
 SECURITY
   ⚠ Telnet exposed — 192.168.10.10 (Hikvision NVR)

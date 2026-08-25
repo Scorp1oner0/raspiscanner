@@ -14,6 +14,11 @@ scansionate, nel formato:
       HTTP / HTTPS / RTSP
     ...
 
+    OTHER DEVICES
+      PC (Windows/SMB) — Dell
+      192.168.10.30
+      RDP
+
     SECURITY
       ⚠ Telnet exposed — 192.168.10.1 (MikroTik network device)
       ⚠ HTTP enabled — 192.168.10.21 (Hikvision camera)
@@ -70,6 +75,17 @@ def _services_label(device):
     return " / ".join(labels) if labels else "-"
 
 
+def _other_device_label(device):
+    """Etichetta per la sezione OTHER DEVICES: qui mostriamo il device_type
+    gia' calcolato da scan_engine (Raspberry Pi, PC (Windows/SMB), Stampante
+    di rete, ...) invece del fallback generico di _device_label, che non
+    conosce questi tipi e mostrerebbe solo il vendor."""
+    vendor = device.get("vendor")
+    vendor = vendor if vendor and vendor != "Sconosciuto" else None
+    device_type = device.get("device_type") or "Unknown device"
+    return f"{device_type} — {vendor}" if vendor else device_type
+
+
 def _device_findings(device):
     return security_module.find_security_issues(device)
 
@@ -81,6 +97,19 @@ def generate(network_cidr, devices):
     cameras = [d for d in devices if d.get("is_camera") and not d.get("is_nvr")]
     nvrs = [d for d in devices if d.get("is_nvr")]
     infra = [d for d in devices if d.get("is_network_infra")]
+    shown_ips = {d["ip"] for d in cameras + nvrs + infra}
+    # Dispositivi con un tipo specifico riconosciuto (Raspberry Pi, PC,
+    # stampante, ...) che non sono ne' camera/NVR ne' apparato di rete:
+    # senza questa sezione sparivano dal report pur essendo contati in
+    # "N devices discovered" — restavano visibili solo nella tabella della
+    # dashboard, non nel testo del report. I dispositivi davvero "Generico"
+    # (nessun segnale, es. telefoni con firewall di default) restano fuori
+    # per non appesantire un report pensato per il sopralluogo CCTV/rete,
+    # non per un inventario completo di ogni host.
+    other = [
+        d for d in devices
+        if d["ip"] not in shown_ips and d.get("device_type") not in (None, "Generico")
+    ]
 
     all_findings = []  # per il riepilogo rischio: ogni finding, non deduplicato
     device_findings = []  # per la lista leggibile: (severity, ip, label, message)
@@ -115,6 +144,14 @@ def generate(network_cidr, devices):
     _section("CAMERAS", cameras)
     _section("NVR", nvrs)
     _section("NETWORK", infra, with_services=False)
+
+    if other:
+        lines.append("OTHER DEVICES")
+        for d in other:
+            lines.append(f"  {_other_device_label(d)}")
+            lines.append(f"  {d['ip']}")
+            lines.append(f"  {_services_label(d)}")
+        lines.append("")
 
     if device_findings:
         lines.append("SECURITY")

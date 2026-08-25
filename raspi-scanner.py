@@ -147,7 +147,20 @@ def api_devices_cameras():
 
 @app.route("/api/report")
 def api_report():
-    return jsonify({"text": assessment.generate_all(scan_engine.devices_all())})
+    state = scan_engine.get_state()
+    text = assessment.generate_all(state["devices"])
+    if state["running"]:
+        # Lo scan processa le reti una alla volta e, dentro ciascuna, un
+        # host alla volta: un report generato a meta' scan e' un'istantanea
+        # reale ma incompleta (es. una rete gia' scansionata per intero,
+        # un'altra ancora a meta'), non un errore di conteggio.
+        text = (
+            "⚠ Scansione ancora in corso: questo report e' un'istantanea "
+            "parziale (alcune reti possono essere gia' complete, altre no "
+            "ancora), i conteggi aumenteranno. Riprova dopo che lo scan e' "
+            "terminato.\n\n" + text
+        )
+    return jsonify({"text": text, "scan_running": state["running"]})
 
 
 @app.route("/api/export")

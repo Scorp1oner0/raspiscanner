@@ -3,7 +3,8 @@ import unittest
 from scanner.reporting import assessment, risk, security
 
 
-def _device(ip, vendor, open_ports, banners=None, is_camera=False, is_nvr=False, is_infra=False, model=None):
+def _device(ip, vendor, open_ports, banners=None, is_camera=False, is_nvr=False,
+            is_infra=False, model=None, device_type="Generico"):
     return {
         "ip": ip,
         "mac": "AA:BB:CC:00:00:01",
@@ -15,6 +16,7 @@ def _device(ip, vendor, open_ports, banners=None, is_camera=False, is_nvr=False,
         "is_camera": is_camera or is_nvr,
         "is_nvr": is_nvr,
         "is_network_infra": is_infra,
+        "device_type": device_type,
         "network": "192.168.10.0/24",
     }
 
@@ -34,6 +36,17 @@ SWITCH = _device(
     [{"port": 80, "service": "HTTP"}],
     is_infra=True,
 )
+RASPBERRY = _device(
+    "192.168.10.30", "Raspberry Pi Foundation",
+    [{"port": 22, "service": "SSH"}],
+    device_type="Raspberry Pi",
+)
+PC = _device(
+    "192.168.10.31", "Sconosciuto",
+    [{"port": 3389, "service": "RDP"}],
+    device_type="PC (Windows/SMB)",
+)
+GENERIC_HOST = _device("192.168.10.99", "Sconosciuto", [])
 
 
 class TestSecurityFindings(unittest.TestCase):
@@ -88,6 +101,36 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("High:     0", report)
         self.assertIn("Medium:   2", report)
         self.assertIn("Low:      0", report)
+
+    def test_other_devices_section_lists_recognized_types(self):
+        """Bug reale: un Raspberry Pi o un PC (Windows/SMB) non finivano in
+        NESSUNA sezione del report pur essendo contati in "N devices
+        discovered" — restavano visibili solo nella tabella della
+        dashboard, invisibili leggendo solo il report testuale."""
+        report = assessment.generate("192.168.10.0/24", [CAMERA, RASPBERRY, PC])
+        self.assertIn("OTHER DEVICES", report)
+        self.assertIn("Raspberry Pi — Raspberry Pi Foundation", report)
+        self.assertIn("192.168.10.30", report)
+        self.assertIn("PC (Windows/SMB)", report)
+        self.assertIn("192.168.10.31", report)
+
+    def test_generic_device_without_findings_excluded_from_other_section(self):
+        """Un host davvero "Generico" (nessun segnale) non compare come
+        riga propria in OTHER DEVICES (report pensato per CCTV/rete, non
+        un inventario di ogni host) ma resta contato nel totale."""
+        report = assessment.generate("192.168.10.0/24", [CAMERA, GENERIC_HOST])
+        self.assertIn("2 devices discovered", report)
+        self.assertNotIn("192.168.10.99", report)
+
+    def test_camera_nvr_infra_not_duplicated_in_other_section(self):
+        report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH, RASPBERRY])
+        # ognuno dei 4 IP deve comparire su una riga propria una volta sola
+        # (match esatto di riga, non substring: "192.168.10.1" e'
+        # prefisso di "192.168.10.10", un semplice count() darebbe un falso
+        # positivo).
+        ip_lines = [line.strip() for line in report.splitlines()]
+        for d in (CAMERA, NVR, SWITCH, RASPBERRY):
+            self.assertEqual(ip_lines.count(d["ip"]), 1, f"{d['ip']} duplicato o mancante")
 
     def test_security_findings_attributed_to_device_ip(self):
         """Bug reale: la versione precedente deduplicava i finding SOLO per

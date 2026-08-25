@@ -58,10 +58,15 @@ meccanismi di discovery, orientato a un caso d'uso preciso.
    attivo dello stack TCP/IP in stile `nmap -O`.
 
 3. **Report "NETWORK ASSESSMENT"**: per ogni rete scansionata, un report
-   testuale con dispositivi trovati per categoria (camere/NVR/rete),
-   findings di sicurezza rilevati con probe attivi ma non intrusivi (Telnet esposto, HTTP
-   abilitato, servizio con banner di default) e un riepilogo del rischio
-   (Critical/High/Medium/Low). Vedi `examples/sample_report.txt` per un
+   testuale con dispositivi trovati per categoria (camere/NVR/rete/altro —
+   Raspberry Pi, PC, stampanti compaiono in "OTHER DEVICES", cosi' nessun
+   dispositivo trovato resta invisibile nel testo del report pur essendo
+   contato in "N devices discovered"), findings di sicurezza rilevati con
+   probe attivi ma non intrusivi (Telnet esposto, HTTP abilitato, servizio
+   con banner di default) e un riepilogo del rischio (Critical/High/
+   Medium/Low). Se richiesto mentre uno scan e' ancora in corso, il report
+   lo segnala esplicitamente (e' un'istantanea parziale, i conteggi
+   aumenteranno). Vedi `examples/sample_report.txt` per un
    esempio completo. Disponibile sia dalla dashboard (scheda "Report") sia
    da riga di comando (`--report`).
 
