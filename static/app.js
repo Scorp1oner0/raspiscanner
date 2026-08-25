@@ -141,7 +141,7 @@ function renderCameraTable(devices) {
       <td>${renderPorts(d.open_ports)}</td>
       <td>${d.rtsp_url ? '<a class="link" href="' + escapeHtml(d.rtsp_url) + '">' + escapeHtml(d.rtsp_url) + "</a>" : "-"}</td>
       <td>${d.admin_url ? '<a class="link" target="_blank" href="' + escapeHtml(d.admin_url) + '">apri</a>' : "-"}</td>
-      <td>${escapeHtml((d.camera_reasons || []).join("; "))}</td>
+      <td>${escapeHtml((d.reasons || []).join("; "))}</td>
     </tr>
   `).join("");
 }

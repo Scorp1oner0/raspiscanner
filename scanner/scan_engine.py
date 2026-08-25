@@ -111,16 +111,28 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
     # PC moderni con firewall di default) non espone nulla da leggere, e
     # non si va oltre con fingerprint attivo dello stack TCP/IP in stile
     # `nmap -O`.
+    # "reasons" segue la STESSA priorita' usata per device_type qui sopra:
+    # mostra solo i motivi del classificatore che ha vinto, mai un mix di
+    # tutti e quattro. Un gateway con anche la porta 631 (IPP) aperta e'
+    # comunque "Router" con motivo "e' il gateway di default": mischiare
+    # dentro anche "porta tipica stampante" (segnale di un classificatore
+    # perdente, non del tipo mostrato) confonderebbe chi legge il report,
+    # anche se la classificazione finale resta corretta.
     if is_nvr:
         device_type = "NVR/DVR"
+        reasons = nvr_reasons
     elif is_camera:
         device_type = "Telecamera"
+        reasons = camera_reasons
     elif is_infra:
         device_type = infra_subtype or "Apparato di rete"
+        reasons = infra_reasons
     elif host_label:
         device_type = host_label
+        reasons = host_reasons
     else:
         device_type = "Generico"
+        reasons = []
 
     return {
         "ip": ip,
@@ -135,7 +147,16 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
         "is_nvr": is_nvr,
         "is_network_infra": is_infra,
         "device_type": device_type,
-        "camera_reasons": camera_reasons + nvr_reasons + infra_reasons + host_reasons,
+        "reasons": reasons,
+        # Scomposizione completa per classificatore (debug/trasparenza):
+        # NON usarla per mostrare "il motivo" di un device_type, usa
+        # "reasons" sopra, gia' allineata al tipo mostrato.
+        "classification_reasons": {
+            "camera": camera_reasons,
+            "nvr": nvr_reasons,
+            "network": infra_reasons,
+            "host": host_reasons,
+        },
         "rtsp_url": guess_rtsp_url(ip, open_ports),
         "admin_url": guess_admin_url(ip, open_ports),
     }
