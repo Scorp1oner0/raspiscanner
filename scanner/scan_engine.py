@@ -53,13 +53,18 @@ def _set_device(ip, device):
 
 def _active_networks():
     """Ritorna [(iface, cidr, local_ip), ...], uno per OGNI indirizzo IPv4
-    attivo su eth e wifi (un'interfaccia puo' averne piu' di uno, es. IP
-    secondari configurati a mano per raggiungere piu' subnet sullo stesso
-    cavo: vanno scansionate tutte, non solo la prima)."""
+    attivo su eth e su TUTTE le schede wifi (un'interfaccia puo' averne piu'
+    di uno, es. IP secondari configurati a mano per raggiungere piu' subnet
+    sullo stesso cavo, e un dispositivo puo' avere piu' schede Wi-Fi: vanno
+    scansionate tutte, non solo la prima)."""
     status = network_setup.get_status()
     nets = []
-    for key in ("eth", "wifi"):
-        info = status.get(key, {})
+    eth = status.get("eth", {})
+    if eth.get("up"):
+        for addr in eth.get("addresses") or []:
+            if addr.get("ip") and addr.get("cidr"):
+                nets.append((eth["iface"], addr["cidr"], addr["ip"]))
+    for info in (status.get("wifi") or {}).values():
         if not info.get("up"):
             continue
         for addr in info.get("addresses") or []:

@@ -17,6 +17,10 @@ function formatAgo(ts) {
 
 function renderAddressList(elId, addresses) {
   const box = $(elId);
+  renderAddressListInto(box, addresses);
+}
+
+function renderAddressListInto(box, addresses) {
   if (!addresses || addresses.length === 0) {
     box.innerHTML = '<div class="addr-empty">-</div>';
     return;
@@ -24,6 +28,47 @@ function renderAddressList(elId, addresses) {
   box.innerHTML = addresses.map((a) => `
     <div class="addr-row"><span>${escapeHtml(a.ip)}</span><span class="iface-name">${escapeHtml(a.cidr)}</span></div>
   `).join("");
+}
+
+// Interfacce Wi-Fi note dall'ultimo refresh: usate per precompilare la
+// select dell'hotspot senza una chiamata di rete separata.
+let lastWifiIfaces = [];
+
+function renderWifiBoxes(wifiByIface) {
+  const container = $("wifi-boxes");
+  const ifaces = Object.keys(wifiByIface || {}).sort();
+  lastWifiIfaces = ifaces;
+
+  if (ifaces.length === 0) {
+    container.innerHTML = '<div class="net-box net-box-empty">📶 Nessuna scheda Wi-Fi rilevata</div>';
+    return;
+  }
+
+  // Ricrea i box solo se il set di interfacce e' cambiato, cosi' non si
+  // perde lo stato aperto/chiuso del pannello "reti visibili" a ogni poll.
+  const existingIfaces = Array.from(container.querySelectorAll(".net-box[data-iface]")).map((b) => b.dataset.iface);
+  const sameSet = existingIfaces.length === ifaces.length && existingIfaces.every((v, i) => v === ifaces[i]);
+  if (!sameSet) {
+    container.innerHTML = ifaces.map((iface) => `
+      <div class="net-box" id="net-wifi-${escapeHtml(iface)}" data-iface="${escapeHtml(iface)}">
+        <div class="net-title">📶 Wi-Fi <span class="iface-name">(${escapeHtml(iface)})</span></div>
+        <div class="net-line">SSID: <span class="wifi-ssid">-</span></div>
+        <div class="net-line">Indirizzi:</div>
+        <div class="addr-list wifi-addresses"><div class="addr-empty">-</div></div>
+        <button class="btn small btn-wifi-list" data-iface="${escapeHtml(iface)}">Reti visibili</button>
+        <button class="btn small btn-open-hotspot" data-iface="${escapeHtml(iface)}">📡 Hotspot</button>
+        <div class="wifi-list hidden wifi-networks-panel"></div>
+      </div>
+    `).join("");
+  }
+
+  for (const iface of ifaces) {
+    const info = wifiByIface[iface];
+    const box = document.getElementById(`net-wifi-${iface}`);
+    if (!box) continue;
+    box.querySelector(".wifi-ssid").textContent = info.ssid || "-";
+    renderAddressListInto(box.querySelector(".wifi-addresses"), info.addresses);
+  }
 }
 
 async function refreshNetwork() {
@@ -47,9 +92,7 @@ async function refreshNetwork() {
       errLine.classList.add("hidden");
     }
 
-    $("wifi-iface").textContent = data.wifi.iface ? `(${data.wifi.iface})` : "";
-    $("wifi-ssid").textContent = data.wifi.ssid || "-";
-    renderAddressList("wifi-addresses", data.wifi.addresses);
+    renderWifiBoxes(data.wifi);
 
     return data;
   } catch (e) {
@@ -187,35 +230,45 @@ async function rescanNetwork() {
   $("btn-rescan-net").disabled = false;
 }
 
-async function toggleWifiList() {
-  const box = $("wifi-networks");
-  if (!box.classList.contains("hidden")) {
-    box.classList.add("hidden");
+async function toggleWifiListFor(iface, panel) {
+  if (!panel.classList.contains("hidden")) {
+    panel.classList.add("hidden");
     return;
   }
-  box.classList.remove("hidden");
-  box.innerHTML = "Ricerca reti...";
+  panel.classList.remove("hidden");
+  panel.innerHTML = "Ricerca reti...";
   try {
-    const res = await fetch("/api/wifi/networks");
+    const res = await fetch(`/api/wifi/networks?iface=${encodeURIComponent(iface)}`);
     const nets = await res.json();
     if (nets.length === 0) {
-      box.innerHTML = "Nessuna rete trovata (o nmcli non disponibile).";
+      panel.innerHTML = "Nessuna rete trovata (o nmcli non disponibile).";
       return;
     }
-    box.innerHTML = nets.map((n) => `
+    panel.innerHTML = nets.map((n) => `
       <div class="wifi-net-row">
         <span>${escapeHtml(n.ssid)} ${n.security ? "🔒" : ""}</span>
         <span>${escapeHtml(n.signal)}%</span>
       </div>
     `).join("");
   } catch (e) {
-    box.innerHTML = "Errore nel recupero delle reti.";
+    panel.innerHTML = "Errore nel recupero delle reti.";
   }
 }
 
-async function openHotspotModal() {
+function populateHotspotIfaceSelect(preferredIface) {
+  const select = $("hotspot-iface");
+  const ifaces = lastWifiIfaces.length > 0 ? lastWifiIfaces : (preferredIface ? [preferredIface] : []);
+  select.innerHTML = ifaces.map((i) => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join("");
+  if (preferredIface && ifaces.includes(preferredIface)) {
+    select.value = preferredIface;
+  }
+}
+
+async function openHotspotModal(iface) {
   $("hotspot-modal").classList.remove("hidden");
   $("hotspot-msg").textContent = "";
+  $("hotspot-ssid").value = "";
+  populateHotspotIfaceSelect(iface);
   await refreshHotspotStatus();
 }
 
@@ -225,12 +278,13 @@ function closeHotspotModal() {
 
 async function refreshHotspotStatus() {
   const box = $("hotspot-status-box");
+  const iface = $("hotspot-iface").value;
   box.textContent = "Verifica stato...";
   try {
-    const res = await fetch("/api/hotspot/status");
+    const res = await fetch(`/api/hotspot/status${iface ? `?iface=${encodeURIComponent(iface)}` : ""}`);
     const data = await res.json();
     if (data.active) {
-      box.innerHTML = `🟢 Attivo — SSID <strong>${escapeHtml(data.ssid)}</strong>, raggiungibile su <strong>${escapeHtml(data.ip)}:7332</strong>`;
+      box.innerHTML = `🟢 Attivo su <strong>${escapeHtml(data.iface)}</strong> — SSID <strong>${escapeHtml(data.ssid)}</strong>, raggiungibile su <strong>${escapeHtml(data.ip)}:7332</strong>`;
     } else {
       box.textContent = "⚪ Non attivo";
     }
@@ -255,12 +309,13 @@ async function generateHotspotPassword() {
 async function startHotspot() {
   const ssid = $("hotspot-ssid").value.trim();
   const password = $("hotspot-password").value;
+  const iface = $("hotspot-iface").value;
   $("hotspot-msg").textContent = "Attivazione in corso...";
   try {
     const res = await fetch("/api/hotspot/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ssid, password }),
+      body: JSON.stringify({ ssid, password, iface }),
     });
     const data = await res.json();
     $("hotspot-msg").textContent = data.message || "";
@@ -289,15 +344,34 @@ function init() {
   $("btn-scan-start").addEventListener("click", startScan);
   $("btn-scan-stop").addEventListener("click", stopScan);
   $("btn-rescan-net").addEventListener("click", rescanNetwork);
-  $("btn-wifi-list").addEventListener("click", toggleWifiList);
   $("btn-refresh-report").addEventListener("click", refreshReport);
-  $("btn-open-hotspot").addEventListener("click", openHotspotModal);
   $("btn-close-hotspot").addEventListener("click", closeHotspotModal);
   $("btn-hotspot-generate").addEventListener("click", generateHotspotPassword);
   $("btn-hotspot-start").addEventListener("click", startHotspot);
   $("btn-hotspot-stop").addEventListener("click", stopHotspot);
+  $("hotspot-iface").addEventListener("change", () => {
+    $("hotspot-ssid").value = "";
+    refreshHotspotStatus();
+  });
   $("hotspot-modal").addEventListener("click", (ev) => {
     if (ev.target.id === "hotspot-modal") closeHotspotModal();
+  });
+
+  // I box Wi-Fi (uno per scheda) sono generati dinamicamente da
+  // renderWifiBoxes: i loro pulsanti "Reti visibili"/"Hotspot" si
+  // agganciano qui per delega invece che per id, dato che possono essere
+  // ricreati o essere in numero variabile (0, 1, piu' schede).
+  $("wifi-boxes").addEventListener("click", (ev) => {
+    const listBtn = ev.target.closest(".btn-wifi-list");
+    if (listBtn) {
+      const panel = listBtn.closest(".net-box").querySelector(".wifi-networks-panel");
+      toggleWifiListFor(listBtn.dataset.iface, panel);
+      return;
+    }
+    const hotspotBtn = ev.target.closest(".btn-open-hotspot");
+    if (hotspotBtn) {
+      openHotspotModal(hotspotBtn.dataset.iface);
+    }
   });
 
   refreshNetwork();

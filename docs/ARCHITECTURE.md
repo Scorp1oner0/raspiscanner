@@ -40,7 +40,9 @@ raspi-scanner.py           Entry point: dashboard Flask (default) o CLI --report
 ## Flusso di uno scan
 
 1. `scan_engine._active_networks()` legge da `network.setup.get_status()` ogni
-   indirizzo IPv4 attivo su eth/wifi (un'interfaccia puo' averne piu' di uno).
+   indirizzo IPv4 attivo su eth e su **ogni** scheda Wi-Fi presente (un
+   dispositivo puo' averne piu' di una, e un'interfaccia puo' averne piu'
+   di un indirizzo).
 2. Per ciascuna subnet: `discovery.arp_scan()` trova IP+MAC via ARP, piu' un
    probe `cameras.onvif.onvif_probe()` via WS-Discovery e la lettura del
    gateway di default (`network.infra.get_default_gateway()`).

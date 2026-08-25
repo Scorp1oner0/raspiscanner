@@ -73,7 +73,8 @@ def api_network_rescan():
 
 @app.route("/api/wifi/networks")
 def api_wifi_networks():
-    return jsonify(network_setup.wifi_scan_networks())
+    iface = request.args.get("iface") or None
+    return jsonify(network_setup.wifi_scan_networks(iface=iface))
 
 
 @app.route("/api/wifi/connect", methods=["POST"])
@@ -81,16 +82,22 @@ def api_wifi_connect():
     data = request.get_json(silent=True) or {}
     ssid = data.get("ssid")
     password = data.get("password")
+    iface = data.get("iface") or None
     if not ssid:
         return jsonify({"error": "ssid obbligatorio"}), 400
-    ok, message = network_setup.wifi_connect(ssid, password)
+    ok, message = network_setup.wifi_connect(ssid, password, iface=iface)
     return jsonify({"ok": ok, "message": message}), (200 if ok else 502)
+
+
+@app.route("/api/wifi/interfaces")
+def api_wifi_interfaces():
+    return jsonify(network_setup.list_wifi_ifaces())
 
 
 @app.route("/api/hotspot/status")
 def api_hotspot_status():
     status = hotspot.get_hotspot_status()
-    wifi_iface = network_setup.find_default_wifi_iface() or "wlan0"
+    wifi_iface = request.args.get("iface") or network_setup.find_default_wifi_iface() or "wlan0"
     status["default_ssid"] = hotspot.default_ssid(iface=wifi_iface)
     return jsonify(status)
 
@@ -105,7 +112,7 @@ def api_hotspot_start():
     data = request.get_json(silent=True) or {}
     ssid = data.get("ssid") or ""
     password = data.get("password") or ""
-    iface = network_setup.find_default_wifi_iface()
+    iface = data.get("iface") or network_setup.find_default_wifi_iface()
     if not iface:
         return jsonify({"ok": False, "message": "Nessuna interfaccia Wi-Fi trovata"}), 400
     ok, message = hotspot.start_hotspot(iface, ssid, password)

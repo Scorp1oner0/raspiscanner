@@ -52,6 +52,102 @@ class TestMultiAddressDetection(unittest.TestCase):
         self.assertIn("172.16.0.0/16", cidrs)
 
 
+class TestMultiWifiInterfaces(unittest.TestCase):
+    """Bug reale: con piu' schede Wi-Fi fisiche, il tool ne rilevava e
+    mostrava solo una (find_default_wifi_iface prendeva sempre la prima e
+    _status["wifi"] era un unico dict, non uno per interfaccia)."""
+
+    def setUp(self):
+        self._orig_run = network_setup._run
+        self._orig_list_ifaces = network_setup.list_interfaces
+        network_setup._status["wifi"] = {}
+
+    def tearDown(self):
+        network_setup._run = self._orig_run
+        network_setup.list_interfaces = self._orig_list_ifaces
+        network_setup._status["wifi"] = {}
+
+    def test_list_wifi_ifaces_returns_all_not_just_first(self):
+        network_setup.list_interfaces = lambda: ["eth0", "wlan0", "wlan1"]
+        self.assertEqual(network_setup.list_wifi_ifaces(), ["wlan0", "wlan1"])
+
+    def test_find_default_wifi_iface_still_returns_one_for_callers_that_want_a_single_default(self):
+        network_setup.list_interfaces = lambda: ["wlan1", "wlan0"]
+        self.assertEqual(network_setup.find_default_wifi_iface(), "wlan0")
+
+    def test_refresh_wifi_status_tracks_every_interface(self):
+        network_setup.list_interfaces = lambda: ["eth0", "wlan0", "wlan1"]
+
+        def fake_run(cmd, timeout=15):
+            if cmd[0] == "ip":
+                iface = cmd[-1]
+                if iface == "wlan0":
+                    return _FakeResult("2: wlan0    inet 192.168.1.5/24 scope global wlan0")
+                return _FakeResult("")
+            if cmd[0] == "iwgetid":
+                iface = cmd[2]
+                return _FakeResult("CasaWifi") if iface == "wlan0" else _FakeResult("", returncode=1)
+            return _FakeResult()
+
+        network_setup._run = fake_run
+        network_setup.refresh_wifi_status()
+        status = network_setup.get_status()
+
+        self.assertEqual(set(status["wifi"].keys()), {"wlan0", "wlan1"})
+        self.assertTrue(status["wifi"]["wlan0"]["up"])
+        self.assertEqual(status["wifi"]["wlan0"]["ssid"], "CasaWifi")
+        self.assertEqual(status["wifi"]["wlan0"]["ip"], "192.168.1.5")
+        self.assertFalse(status["wifi"]["wlan1"]["up"])
+
+    def test_refresh_wifi_status_drops_interfaces_no_longer_present(self):
+        """Una scheda USB scollegata non deve restare "fantasma" nello stato."""
+        network_setup._status["wifi"] = {
+            "wlanUSB": {"iface": "wlanUSB", "up": True, "ssid": None, "ip": None, "cidr": None, "addresses": []},
+        }
+        network_setup.list_interfaces = lambda: ["eth0"]
+        network_setup._run = lambda cmd, timeout=15: _FakeResult()
+
+        network_setup.refresh_wifi_status()
+        status = network_setup.get_status()
+        self.assertNotIn("wlanUSB", status["wifi"])
+
+    def test_wifi_scan_networks_targets_the_given_interface(self):
+        captured = {}
+
+        def fake_run(cmd, timeout=15):
+            captured["cmd"] = cmd
+            return _FakeResult("CasaWifi:80:WPA2\n")
+
+        network_setup._run = fake_run
+        network_setup.wifi_scan_networks(iface="wlan1")
+        self.assertIn("ifname", captured["cmd"])
+        self.assertIn("wlan1", captured["cmd"])
+
+    def test_wifi_scan_networks_without_iface_omits_ifname(self):
+        captured = {}
+
+        def fake_run(cmd, timeout=15):
+            captured["cmd"] = cmd
+            return _FakeResult("")
+
+        network_setup._run = fake_run
+        network_setup.wifi_scan_networks()
+        self.assertNotIn("ifname", captured["cmd"])
+
+    def test_wifi_connect_targets_the_given_interface(self):
+        captured = {}
+
+        def fake_run(cmd, timeout=15):
+            captured["cmd"] = cmd
+            return _FakeResult("", returncode=0)
+
+        network_setup._run = fake_run
+        network_setup.list_interfaces = lambda: []
+        network_setup.wifi_connect("CasaWifi", "password123", iface="wlan1")
+        self.assertIn("ifname", captured["cmd"])
+        self.assertIn("wlan1", captured["cmd"])
+
+
 class TestExistingConfigProtected(unittest.TestCase):
     """autoconfigure_ethernet non deve cancellare IP preesistenti che non
     ha assegnato lui stesso (es. IP secondari configurati a mano)."""

@@ -25,16 +25,8 @@
         <div class="net-line">Ultimo aggiornamento: <span id="eth-last-change">-</span></div>
         <div class="net-line net-error hidden" id="eth-error-line">Errore: <span id="eth-error"></span></div>
       </div>
-      <div class="net-box" id="net-wifi">
-        <div class="net-title">📶 Wi-Fi <span id="wifi-iface" class="iface-name"></span></div>
-        <div class="net-line">SSID: <span id="wifi-ssid">-</span></div>
-        <div class="net-line">Indirizzi:</div>
-        <div id="wifi-addresses" class="addr-list"><div class="addr-empty">-</div></div>
-        <button class="btn small" id="btn-wifi-list">Reti visibili</button>
-        <button class="btn small" id="btn-open-hotspot">📡 Hotspot</button>
-      </div>
+      <div id="wifi-boxes"></div>
     </div>
-    <div id="wifi-networks" class="wifi-list hidden"></div>
     <button class="btn" id="btn-rescan-net">🔄 Riconfigura rete</button>
     <label class="force-label">
       <input type="checkbox" id="chk-force-rescan">
@@ -124,6 +116,9 @@
     </p>
 
     <div id="hotspot-status-box" class="hotspot-status">Verifica stato...</div>
+
+    <label class="modal-label">Scheda Wi-Fi da usare come hotspot</label>
+    <select id="hotspot-iface" class="modal-input"></select>
 
     <label class="modal-label">SSID</label>
     <input type="text" id="hotspot-ssid" class="modal-input" placeholder="RaspiScanner-XXXX">

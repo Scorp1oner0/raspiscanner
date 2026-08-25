@@ -35,7 +35,12 @@ _status = {
         "iface": None, "up": False, "mode": None, "ip": None, "cidr": None, "addresses": [],
         "reconfiguring": False, "error": None, "last_change": None,
     },
-    "wifi": {"iface": None, "up": False, "ssid": None, "ip": None, "cidr": None, "addresses": []},
+    # Dizionario iface -> stato, NON un singolo stato: un dispositivo puo'
+    # avere piu' schede Wi-Fi (es. una usata come client per raggiungere la
+    # rete di casa, un'altra dedicata all'hotspot per la raggiungibilita'
+    # senza cavo), e vanno tracciate/mostrate/controllate tutte, non solo la
+    # prima trovata.
+    "wifi": {},
 }
 
 # Serializza autoconfigure_ethernet(): puo' essere chiamata sia dal monitor
@@ -48,7 +53,10 @@ _autoconfig_lock = threading.Lock()
 
 def get_status():
     with _state_lock:
-        return {"eth": dict(_status["eth"]), "wifi": dict(_status["wifi"])}
+        return {
+            "eth": dict(_status["eth"]),
+            "wifi": {iface: dict(info) for iface, info in _status["wifi"].items()},
+        }
 
 
 def _set_status(key, **kwargs):
@@ -85,11 +93,20 @@ def find_default_eth_iface():
     return None
 
 
+def list_wifi_ifaces():
+    """Ritorna TUTTE le interfacce Wi-Fi presenti (non solo la prima): un
+    dispositivo puo' avere piu' schede Wi-Fi, es. una usata come client per
+    raggiungere la rete esistente e un'altra dedicata all'hotspot."""
+    return sorted(n for n in list_interfaces() if classify_interface(n) == "wifi")
+
+
 def find_default_wifi_iface():
-    for name in sorted(list_interfaces()):
-        if classify_interface(name) == "wifi":
-            return name
-    return None
+    """Prima interfaccia Wi-Fi trovata: comoda dove serve UNA interfaccia
+    (es. SSID di default suggerito nella dashboard) quando il chiamante non
+    ne specifica una in particolare. NON usare per operazioni che devono
+    coprire tutte le schede presenti: qui serve list_wifi_ifaces()."""
+    ifaces = list_wifi_ifaces()
+    return ifaces[0] if ifaces else None
 
 
 def has_carrier(iface):
@@ -335,11 +352,7 @@ def refresh_eth_addresses(iface):
         _set_status("eth", addresses=[])
 
 
-def refresh_wifi_status():
-    iface = find_default_wifi_iface()
-    if not iface:
-        _set_status("wifi", iface=None, up=False, ssid=None, ip=None, cidr=None, addresses=[])
-        return
+def _refresh_one_wifi_iface(iface):
     addresses = _address_list(iface)
     ssid = None
     res = _run(["iwgetid", "-r", iface], timeout=3)
@@ -347,17 +360,44 @@ def refresh_wifi_status():
         ssid = res.stdout.strip() or None
     if addresses:
         primary = addresses[0]
-        _set_status(
-            "wifi", iface=iface, up=True, ssid=ssid,
-            ip=primary["ip"], cidr=primary["cidr"], addresses=addresses,
-        )
+        status = {
+            "iface": iface, "up": True, "ssid": ssid,
+            "ip": primary["ip"], "cidr": primary["cidr"], "addresses": addresses,
+        }
     else:
-        _set_status("wifi", iface=iface, up=bool(ssid), ssid=ssid, ip=None, cidr=None, addresses=[])
+        status = {
+            "iface": iface, "up": bool(ssid), "ssid": ssid,
+            "ip": None, "cidr": None, "addresses": [],
+        }
+    with _state_lock:
+        _status["wifi"][iface] = status
 
 
-def wifi_scan_networks():
-    """Elenca le reti Wi-Fi visibili (best-effort, richiede nmcli)."""
-    res = _run(["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list"], timeout=10)
+def refresh_wifi_status():
+    """Aggiorna lo stato di TUTTE le interfacce Wi-Fi presenti, non solo la
+    prima. Una scheda scomparsa (es. adattatore USB scollegato) viene
+    rimossa dallo stato invece di restare "fantasma"."""
+    ifaces = list_wifi_ifaces()
+    for iface in ifaces:
+        _refresh_one_wifi_iface(iface)
+    with _state_lock:
+        for stale in list(_status["wifi"]):
+            if stale not in ifaces:
+                del _status["wifi"][stale]
+
+
+def wifi_scan_networks(iface=None):
+    """Elenca le reti Wi-Fi visibili (best-effort, richiede nmcli).
+
+    Senza `iface` nmcli usa la prima scheda Wi-Fi disponibile: va bene per
+    il caso con una sola scheda, ma con piu' schede va specificata quella su
+    cui si vuole cercare (es. quella NON in uso come hotspot in quel
+    momento).
+    """
+    cmd = ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list"]
+    if iface:
+        cmd += ["ifname", iface]
+    res = _run(cmd, timeout=10)
     if not res or res.returncode != 0:
         return []
     networks = []
@@ -378,11 +418,15 @@ def wifi_scan_networks():
     return networks
 
 
-def wifi_connect(ssid, password=None):
-    """Connette il Wi-Fi tramite nmcli, se disponibile."""
+def wifi_connect(ssid, password=None, iface=None):
+    """Connette il Wi-Fi tramite nmcli, se disponibile. Senza `iface` nmcli
+    sceglie da solo la scheda Wi-Fi da usare (comodo con una sola scheda,
+    ambiguo con piu' di una)."""
     cmd = ["nmcli", "device", "wifi", "connect", ssid]
     if password:
         cmd += ["password", password]
+    if iface:
+        cmd += ["ifname", iface]
     res = _run(cmd, timeout=25)
     ok = bool(res and res.returncode == 0)
     if ok:

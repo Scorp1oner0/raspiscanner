@@ -40,8 +40,11 @@ meccanismi di discovery, orientato a un caso d'uso preciso.
    pulsante "Riconfigura rete" ha un'opzione "forza" per azzerare comunque
    tutto e far ripartire DHCP/fallback da zero.
 
-2. **Scan dispositivi** su **tutte** le subnet attive di eth e Wi-Fi (ogni
-   indirizzo IPv4 configurato, non solo il primo): ARP scan per IP/MAC,
+2. **Scan dispositivi** su **tutte** le subnet attive di eth e di **ogni**
+   scheda Wi-Fi presente (un dispositivo puo' averne piu' di una — es. una
+   usata come client per raggiungere la rete esistente, un'altra dedicata
+   all'hotspot — e vengono tracciate/scansionate tutte, non solo la prima
+   trovata; ogni indirizzo IPv4 configurato, non solo il primo): ARP scan per IP/MAC,
    port scan mirato + banner HTTP, probe **ONVIF WS-Discovery** (con
    `GetDeviceInformation` per vendor/model reali quando disponibile),
    lookup vendor da OUI offline. Ogni dispositivo viene classificato, in
@@ -71,21 +74,24 @@ meccanismi di discovery, orientato a un caso d'uso preciso.
    da riga di comando (`--report`).
 
 4. **Dashboard web** (porta `7332`, polling HTTP, nessuna dipendenza da
-   CDN esterni — funziona anche offline): stato di rete, elenco/connessione
-   Wi-Fi, tabella "Tutti i dispositivi", tabella "Solo camere" (include
-   anche gli NVR/DVR), scheda "Report", esportazione **CSV/JSON**.
+   CDN esterni — funziona anche offline): stato di rete, una card per
+   **ciascuna** scheda Wi-Fi rilevata con elenco/connessione indipendenti,
+   tabella "Tutti i dispositivi", tabella "Solo camere" (include anche gli
+   NVR/DVR), scheda "Report", esportazione **CSV/JSON**.
 
-5. **Hotspot Wi-Fi** (popup "📡 Hotspot" sulla card Wi-Fi): trasforma il
-   Wi-Fi da client (connesso a una rete esistente) ad access point,
-   utile per raggiungere la dashboard senza cavo quando il dispositivo e'
-   installato in un punto scomodo da cablare (es. dentro una scatola in
-   quota). SSID/password configurabili dal popup (password generabile
-   automaticamente); una volta attivo il profilo resta salvato e si
-   riattiva da solo ai riavvii successivi, cosi' il dispositivo torna
-   raggiungibile via Wi-Fi anche dopo un'interruzione di corrente.
-   **Attivarlo scollega il Wi-Fi da qualunque rete a cui era connesso**:
-   la stessa antenna non puo' fare contemporaneamente client e access
-   point. Richiede NetworkManager (`nmcli`), gia' usato per la
+5. **Hotspot Wi-Fi** (popup "📡 Hotspot" sulla card della scheda Wi-Fi
+   scelta): trasforma quella scheda da client (connessa a una rete
+   esistente) ad access point, utile per raggiungere la dashboard senza
+   cavo quando il dispositivo e' installato in un punto scomodo da cablare
+   (es. dentro una scatola in quota). SSID/password configurabili dal
+   popup (password generabile automaticamente); una volta attivo il
+   profilo resta salvato e si riattiva da solo ai riavvii successivi, cosi'
+   il dispositivo torna raggiungibile via Wi-Fi anche dopo un'interruzione
+   di corrente. **Attivarlo scollega quella scheda da qualunque rete a cui
+   era connessa**: la stessa antenna non puo' fare contemporaneamente
+   client e access point — con **due schede Wi-Fi** questo si aggira
+   dedicandone una all'hotspot e lasciando l'altra come client verso la
+   rete esistente. Richiede NetworkManager (`nmcli`), gia' usato per la
    connessione Wi-Fi client.
 
 ## Uso
