@@ -113,23 +113,14 @@ def generate(network_cidr, devices):
 
     findings_by_ip = {d["ip"]: _device_findings(d) for d in devices}
 
-    # Dispositivi con un tipo specifico riconosciuto (Raspberry Pi, PC,
-    # stampante, ...) che non sono ne' camera/NVR ne' apparato di rete:
-    # senza questa sezione sparivano dal report pur essendo contati in
-    # "N devices discovered" — restavano visibili solo nella tabella della
-    # dashboard, non nel testo del report. I dispositivi davvero "Generico"
-    # E senza alcun finding di sicurezza (nessun segnale, es. telefoni con
-    # firewall di default) restano comunque fuori per non appesantire un
-    # report pensato per il sopralluogo CCTV/rete, non un inventario di
-    # ogni host — ma un "Generico" CON un finding (es. porta HTTP esposta)
-    # va incluso comunque: altrimenti la sezione SECURITY qui sotto cita un
-    # IP che il report non ha mai introdotto da nessuna parte.
-    other = [
-        d for d in devices
-        if d["ip"] not in shown_ips and (
-            d.get("device_type") not in (None, "Generic") or findings_by_ip[d["ip"]]
-        )
-    ]
+    # OGNI dispositivo non gia' mostrato in CAMERAS/NVR/NETWORK finisce qui,
+    # "Generico" senza alcun segnale incluso: "N devices discovered" deve
+    # sempre corrispondere al numero di righe elencate nel report, mai un
+    # conteggio piu' alto di cio' che il testo mostra davvero — versioni
+    # precedenti escludevano i "Generico" senza finding per non appesantire
+    # il report, ma il risultato ("N trovati" con solo M elencati) si e'
+    # rivelato piu' confuso che utile.
+    other = [d for d in devices if d["ip"] not in shown_ips]
 
     all_findings = []  # per il riepilogo rischio: ogni finding, non deduplicato
     device_findings = []  # per la lista leggibile: (severity, ip, label, message)

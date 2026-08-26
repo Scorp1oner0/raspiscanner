@@ -128,13 +128,26 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("PC (Windows/SMB)", report)
         self.assertIn("192.168.10.31", report)
 
-    def test_generic_device_without_findings_excluded_from_other_section(self):
-        """Un host davvero "Generico" (nessun segnale) non compare come
-        riga propria in OTHER DEVICES (report pensato per CCTV/rete, non
-        un inventario di ogni host) ma resta contato nel totale."""
+    def test_generic_device_without_findings_still_listed_in_other_section(self):
+        """"N devices discovered" deve sempre corrispondere al numero di
+        righe elencate nel report: un host davvero "Generico" (nessun
+        segnale) resta comunque contato E deve comparire in OTHER DEVICES,
+        anche senza altro da dire su di lui — nasconderlo produceva un
+        conteggio piu' alto di quanto il testo mostrasse davvero."""
         report = assessment.generate("192.168.10.0/24", [CAMERA, GENERIC_HOST])
         self.assertIn("2 devices discovered", report)
-        self.assertNotIn("192.168.10.99", report)
+        self.assertIn("192.168.10.99", report)
+        self.assertIn("OTHER DEVICES", report)
+
+    def test_every_device_appears_somewhere_in_the_report(self):
+        """Invariante generale (bug segnalato piu' volte): ogni device
+        passato a generate() deve comparire in almeno una sezione, mai
+        contato in "N devices discovered" senza mai essere elencato."""
+        devices = [CAMERA, NVR, SWITCH, RASPBERRY, PC, GENERIC_HOST]
+        report = assessment.generate("192.168.10.0/24", devices)
+        self.assertIn(f"{len(devices)} devices discovered", report)
+        for d in devices:
+            self.assertIn(d["ip"], report, f"{d['ip']} never listed in the report")
 
     def test_generic_device_with_findings_included_in_other_section(self):
         """Bug reale: un dispositivo "Generico" con una porta HTTP esposta
