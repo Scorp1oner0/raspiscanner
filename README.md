@@ -206,14 +206,23 @@ internet** sul campo. Il riconoscimento delle telecamere non dipende da
 questo file (si basa su porte/protocollo), quindi un vendor mancante è solo
 un'etichetta informativa in meno, non un problema di accuratezza dello scan.
 
-Per un database vendor più completo, da una macchina **con** accesso a
-internet (es. prima di portare il Pi sul campo):
+`install.sh` prova già a scaricare il registro IEEE completo (~35.000
+prefissi) automaticamente durante l'installazione, quando il dispositivo è
+ancora connesso a internet: se va a buon fine non serve fare altro. Se
+l'installazione è avvenuta offline, o vuoi aggiornare una copia già
+installata, rilancia lo script manualmente (da una macchina **con**
+accesso a internet — non deve necessariamente essere il Pi stesso, se poi
+copi tu il risultato in `data/oui.csv`):
 
 ```bash
 python3 scripts/update_oui.py
 ```
 
-Scarica il registro ufficiale IEEE e sovrascrive `data/oui.csv`.
+Nota per chi reinstalla: `install.sh` sovrascrive `data/oui.csv` con la
+versione minimale del repo a ogni `rsync`, quindi su un'istanza già
+aggiornata va rilanciato **dopo** ogni reinstallazione, non solo la prima
+volta (a meno che tu non abbia internet in quel momento, nel qual caso lo
+fa già da solo).
 
 ## Note di sicurezza
 

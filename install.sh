@@ -27,6 +27,15 @@ python3 -m venv "$DEST_DIR/venv"
 "$DEST_DIR/venv/bin/pip" install --upgrade pip
 "$DEST_DIR/venv/bin/pip" install -r "$DEST_DIR/requirements.txt"
 
+echo "==> Aggiorno il database vendor (OUI) dal registro IEEE (richiede internet)"
+echo "    Il repo include solo una versione minimale (~100 voci): questo e' il"
+echo "    momento buono per scaricare quella completa (~35.000), di solito"
+echo "    l'unico in cui il dispositivo e' ancora connesso a internet prima di"
+echo "    essere portato sul campo. Se non c'e' rete, resta quella minimale:"
+echo "    va bene lo stesso, non e' richiesta per il funzionamento dello scan."
+"$DEST_DIR/venv/bin/python3" "$DEST_DIR/scripts/update_oui.py" || \
+  echo "    Download fallito (nessuna connessione?): resta il database minimale incluso nel repo."
+
 echo "==> Installo il servizio systemd"
 cp "$DEST_DIR/raspiscanner.service" /etc/systemd/system/raspiscanner.service
 systemctl daemon-reload
