@@ -127,14 +127,6 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     return [{"ip": ip, "mac": mac} for ip, mac in results.items()]
 
 
-def quick_subnet_probe(iface, cidr, timeout=config.CLASS_PROBE_TIMEOUT, psrc=None):
-    """True se almeno un host risponde su quella subnet (usato durante
-    l'autoconfigurazione per capire se una classe preimpostata e' quella giusta).
-    """
-    hosts = arp_scan(cidr, iface, timeout=timeout, psrc=psrc)
-    return len(hosts) > 0
-
-
 def resolve_hostname(ip, timeout=config.HOSTNAME_TIMEOUT):
     """Reverse DNS best-effort, non blocca a lungo se non c'e' un DNS server."""
     old_timeout = socket.getdefaulttimeout()

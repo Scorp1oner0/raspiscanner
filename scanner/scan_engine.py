@@ -12,7 +12,7 @@ import time
 from . import vendor
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url
 from .cameras.onvif import get_device_info, onvif_probe
-from .discovery import arp_scan, resolve_hostname
+from .discovery import arp_scan, mdns_probe, resolve_hostname
 from .fingerprint import grab_http_banner, scan_ports
 from .hosts import classify_host
 from .network import setup as network_setup
@@ -74,7 +74,7 @@ def _active_networks():
     return nets
 
 
-def _scan_host(ip, mac, onvif_results, gateway_ip):
+def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
     open_ports = scan_ports(ip)
     banners = {}
     for p in open_ports:
@@ -84,8 +84,14 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
             banners[p["port"]] = grab_http_banner(ip, p["port"], use_https=True)
 
     onvif_info = onvif_results.get(ip)
+    mdns_info = mdns_results.get(ip)
     device_vendor = vendor.lookup_vendor(mac) if mac else "Unknown"
-    hostname = resolve_hostname(ip)
+    # Reverse DNS prima (dipende dal DNS locale, spesso assente per
+    # dispositivi personali su reti domestiche); il nome amichevole
+    # annunciato via mDNS/Bonjour (es. "Marios-iPhone") come fallback,
+    # spesso l'unico disponibile proprio per i device che il reverse DNS
+    # non risolve mai.
+    hostname = resolve_hostname(ip) or (mdns_info.get("hostname") if mdns_info else None)
 
     is_camera, camera_reasons = classify_camera(open_ports, banners, onvif_info)
     is_nvr, nvr_reasons = classify_nvr(banners)
@@ -95,7 +101,10 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
     # Se il dispositivo risponde a ONVIF, prova a interrogare
     # GetDeviceInformation per un vendor/model REALI invece di indovinarli
     # dal banner: non sempre riesce (spesso richiede autenticazione), in
-    # quel caso restano i valori da OUI/banner.
+    # quel caso restano i valori da OUI/banner. Il TXT "model=" di mDNS
+    # (tipicamente _device-info, dispositivi Apple) e' un fallback quando
+    # ONVIF non risponde affatto — comune perche' ONVIF e' una cosa da
+    # telecamere, non da telefoni/computer.
     model = None
     if onvif_info and onvif_info.get("xaddrs"):
         info = get_device_info(onvif_info["xaddrs"][0])
@@ -103,6 +112,8 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
             model = info["model"]
         if info.get("manufacturer"):
             device_vendor = info["manufacturer"]
+    if not model and mdns_info and mdns_info.get("model"):
+        model = mdns_info["model"]
 
     # Priorita': NVR e camera sono le classificazioni piu' specifiche e
     # affidabili (segnali di protocollo dedicati). Poi l'apparato di rete
@@ -145,6 +156,7 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
         "open_ports": open_ports,
         "http_banners": banners,
         "onvif": onvif_info,
+        "mdns": mdns_info,
         "is_camera": is_camera or is_nvr,
         "is_nvr": is_nvr,
         "is_network_infra": is_infra,
@@ -256,6 +268,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
         "open_ports": [],
         "http_banners": {},
         "onvif": onvif_info,
+        "mdns": None,
         "is_camera": True,
         "is_nvr": False,
         "is_network_infra": False,
@@ -294,6 +307,7 @@ def _run_scan_thread(networks):
     try:
         all_hosts = []  # (ip, mac, iface, cidr)
         onvif_results = {}
+        mdns_results = {}
         gateways = {}
         for iface, cidr, iface_ip in networks:
             if _stop_flag.is_set():
@@ -309,8 +323,21 @@ def _run_scan_thread(networks):
                 # di ritorno: senza questo, la macchina su cui gira lo
                 # scanner non comparirebbe mai da sola nei risultati.
                 all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, cidr))
-            for onvif_ip, info in onvif_probe(iface_ip=iface_ip, timeout=3).items():
+
+            # ONVIF e mDNS sono probe multicast indipendenti: in thread
+            # separati invece che in sequenza, cosi' la loro attesa (3s +
+            # 2.5s) si sovrappone invece di sommarsi per ogni rete attiva.
+            onvif_partial, mdns_partial = {}, {}
+            t_onvif = threading.Thread(target=lambda: onvif_partial.update(onvif_probe(iface_ip=iface_ip, timeout=3)))
+            t_mdns = threading.Thread(target=lambda: mdns_partial.update(mdns_probe(iface_ip=iface_ip, timeout=2.5)))
+            t_onvif.start()
+            t_mdns.start()
+            t_onvif.join()
+            t_mdns.join()
+            for onvif_ip, info in onvif_partial.items():
                 onvif_results[onvif_ip] = {**info, "_iface": iface}
+            mdns_results.update(mdns_partial)
+
             if iface not in gateways:
                 gateways[iface] = get_default_gateway(iface)
 
@@ -330,7 +357,7 @@ def _run_scan_thread(networks):
             if _stop_flag.is_set():
                 break
             _update(progress=idx, current_ip=ip)
-            device = _scan_host(ip, mac, onvif_results, gateways.get(iface))
+            device = _scan_host(ip, mac, onvif_results, mdns_results, gateways.get(iface))
             device["iface"] = iface
             device["network"] = cidr
             _set_device(ip, device)

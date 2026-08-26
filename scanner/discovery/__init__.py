@@ -1,3 +1,4 @@
-from .arp import arp_scan, quick_subnet_probe, resolve_hostname
+from .arp import arp_scan, resolve_hostname
+from .mdns import mdns_probe
 
-__all__ = ["arp_scan", "quick_subnet_probe", "resolve_hostname"]
+__all__ = ["arp_scan", "resolve_hostname", "mdns_probe"]

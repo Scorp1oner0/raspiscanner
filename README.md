@@ -53,25 +53,28 @@ of its own discovery mechanisms, aimed at one specific use case.
    found; every configured IPv4 address, not just the first): ARP scan for
    IP/MAC, targeted port scan + HTTP banners, **ONVIF WS-Discovery** probe
    (with `GetDeviceInformation` for real vendor/model when available),
-   offline OUI vendor lookup, reverse DNS hostname. Each device is
-   classified, in order of specificity: **Camera**/**NVR-DVR** (protocol
-   signals — ONVIF, typical ports RTSP 554/Hikvision 8000/Dahua
-   37777/34567, HTTP banners — not on the MAC vendor, unreliable offline),
-   **Router**/**Switch**/**Access Point** (IP == default gateway, or
-   banner/vendor), **Raspberry Pi**/other IoT hardware recognized by
-   vendor, **Phone**/**Tablet**/**Mac**/**PC (Windows)** recognized from
-   hostname patterns (e.g. "iPhone-di-Mario", "Galaxy-A34-5G",
-   "MacBook-Pro", "DESKTOP-7K2N9QP" — useful mainly for Apple devices,
-   whose shared OUI can't otherwise distinguish a Mac from an iPhone from
-   an iPad), **PC (Windows/SMB)**/**Network printer** (typical
-   SMB/RDP/IPP/JetDirect ports) as a fallback when no hostname is
+   **mDNS/Bonjour** probe (`_device-info._tcp.local` and other common
+   service types — gives a friendly name and, for Apple devices, the real
+   hardware model straight from a TXT record, e.g. "iPhone14,2"), offline
+   OUI vendor lookup, reverse DNS hostname (mDNS name as fallback when
+   reverse DNS resolves nothing, common for personal devices on home
+   networks). Each device is classified, in order of specificity:
+   **Camera**/**NVR-DVR** (protocol signals — ONVIF, typical ports RTSP
+   554/Hikvision 8000/Dahua 37777/34567, HTTP banners — not on the MAC
+   vendor, unreliable offline), **Router**/**Switch**/**Access Point** (IP
+   == default gateway, or banner/vendor), **Raspberry Pi**/other IoT
+   hardware recognized by vendor, **Phone**/**Tablet**/**Mac**/**PC
+   (Windows)** recognized from hostname patterns (e.g. "iPhone-di-Mario",
+   "Galaxy-A34-5G", "MacBook-Pro", "DESKTOP-7K2N9QP" — useful mainly for
+   Apple devices, whose shared OUI can't otherwise distinguish a Mac from
+   an iPhone from an iPad), **PC (Windows/SMB)**/**Network printer**
+   (typical SMB/RDP/IPP/JetDirect ports) as a fallback when no hostname is
    resolved, or **Generic** if none of these signals is available — a
    structural limit, not a bug: a device with no open ports, no
-   distinctive vendor and no resolvable hostname (common on phones and
-   modern PCs with a default firewall, on networks whose DHCP server
-   doesn't register local DNS names) exposes nothing to read, and this
-   tool doesn't go as far as active TCP/IP stack fingerprinting
-   `nmap -O`-style or mDNS/Bonjour probing (not implemented yet).
+   distinctive vendor, no mDNS reply and no resolvable hostname (rare in
+   practice once mDNS is in the mix, but still possible for locked-down
+   devices) exposes nothing to read, and this tool doesn't go as far as
+   active TCP/IP stack fingerprinting `nmap -O`-style.
 
 3. **"NETWORK ASSESSMENT" report**: for each scanned network, a text
    report with devices found by category (cameras/NVR/network/other —
@@ -299,6 +302,7 @@ scanner/
   scan_engine.py                Scan orchestration + state for the dashboard
   discovery/
     arp.py                       ARP scan (scapy) + reverse DNS
+    mdns.py                       mDNS/Bonjour probe (friendly name + Apple model)
   fingerprint/
     ports.py                      TCP port scan + HTTP banners
   cameras/

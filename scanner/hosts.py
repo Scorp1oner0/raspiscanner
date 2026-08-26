@@ -1,7 +1,10 @@
 """Classificazione leggera di host "generici" (non camera/NVR/apparato di
 rete): telefoni/tablet/PC, stampanti, hardware dedicato riconoscibile dal
 vendor OUI (Raspberry Pi, moduli IoT, speaker/hub smart-home) o dal nome
-host risolto via reverse DNS.
+host — risolto via reverse DNS o, quando quello non risponde (comune per
+dispositivi personali su reti domestiche), via il nome amichevole
+annunciato in mDNS/Bonjour (vedi scanner.discovery.mdns), gia' passato qui
+da scan_engine come fallback.
 
 Come le altre classificazioni del progetto, sono euristiche basate su cosa
 il dispositivo espone o annuncia volontariamente (porte aperte, vendor
@@ -10,13 +13,9 @@ attivo in stile `nmap -O` (nessun pacchetto crafted per analizzare lo
 stack TCP/IP).
 
 Limite strutturale, non un bug: un dispositivo che non espone NESSUNA
-porta, non ha un vendor OUI distintivo E non ha un hostname risolvibile
-(comune su telefoni e computer moderni con firewall attivo di default, se
-il router/DHCP locale non registra un nome DNS) non puo' essere
-identificato oltre "Generico" — non c'e' nulla da leggere. Un
-riconoscimento ancora piu' affidabile richiederebbe mDNS/Bonjour (molti
-dispositivi annunciano li' nome/modello reali), non ancora implementato
-qui.
+porta, non ha un vendor OUI distintivo, non risponde a mDNS E non ha un
+hostname risolvibile via reverse DNS non puo' essere identificato oltre
+"Generico" — non c'e' nulla da leggere.
 """
 WINDOWS_HOST_PORTS = {135, 139, 445, 3389}
 PRINTER_PORTS = {631, 9100}
