@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,57 +8,90 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">📡 RaspiScanner</div>
-  <div class="subtitle">Scanner di rete, telecamere IP/NVR e apparati — con report di sicurezza</div>
+  <div class="brand-row">
+    <div class="brand"><span class="brand-mark">📡</span> RaspiScanner</div>
+    <div class="subtitle">Network &amp; IP camera scanner — with automated security assessment</div>
+  </div>
 </header>
 
 <main>
+  <section class="stat-bar" id="stat-bar">
+    <div class="stat-tile" id="tile-devices">
+      <div class="stat-label">Devices</div>
+      <div class="stat-value" id="stat-devices">0</div>
+    </div>
+    <div class="stat-tile" id="tile-cameras">
+      <div class="stat-label">Cameras</div>
+      <div class="stat-value" id="stat-cameras">0</div>
+    </div>
+    <div class="stat-tile stat-tile-warn" id="tile-mismatch">
+      <div class="stat-label">Out of network</div>
+      <div class="stat-value" id="stat-mismatch">0</div>
+    </div>
+    <div class="stat-tile" id="tile-infra">
+      <div class="stat-label">Network gear</div>
+      <div class="stat-value" id="stat-infra">0</div>
+    </div>
+    <div class="stat-tile stat-tile-critical" id="tile-critical">
+      <div class="stat-label">Critical</div>
+      <div class="stat-value" id="stat-critical">0</div>
+    </div>
+    <div class="stat-tile stat-tile-high" id="tile-high">
+      <div class="stat-label">High</div>
+      <div class="stat-value" id="stat-high">0</div>
+    </div>
+    <div class="stat-tile stat-tile-medium" id="tile-medium">
+      <div class="stat-label">Medium</div>
+      <div class="stat-value" id="stat-medium">0</div>
+    </div>
+  </section>
+
   <section class="card" id="network-card">
-    <h2>Stato rete</h2>
+    <h2>Network status</h2>
     <div class="net-grid">
       <div class="net-box" id="net-eth">
         <div class="net-title">🔌 Ethernet <span id="eth-iface" class="iface-name"></span></div>
-        <div class="net-line">Stato: <span id="eth-up">-</span></div>
-        <div class="net-line">Modalita': <span id="eth-mode">-</span></div>
-        <div class="net-line">Indirizzi:</div>
+        <div class="net-line">Status: <span id="eth-up">-</span></div>
+        <div class="net-line">Mode: <span id="eth-mode">-</span></div>
+        <div class="net-line">Addresses:</div>
         <div id="eth-addresses" class="addr-list"><div class="addr-empty">-</div></div>
-        <div class="net-line">Ultimo aggiornamento: <span id="eth-last-change">-</span></div>
-        <div class="net-line net-error hidden" id="eth-error-line">Errore: <span id="eth-error"></span></div>
+        <div class="net-line">Last updated: <span id="eth-last-change">-</span></div>
+        <div class="net-line net-error hidden" id="eth-error-line">Error: <span id="eth-error"></span></div>
       </div>
       <div id="wifi-boxes"></div>
     </div>
-    <button class="btn" id="btn-rescan-net">🔄 Riconfigura rete</button>
+    <button class="btn" id="btn-rescan-net">🔄 Reconfigure network</button>
     <label class="force-label">
       <input type="checkbox" id="chk-force-rescan">
-      forza DHCP/fallback (cancella gli IP attuali)
+      force DHCP/fallback (clears current IPs)
     </label>
     <span id="net-msg" class="msg"></span>
   </section>
 
   <section class="card">
-    <h2>Scansione dispositivi</h2>
+    <h2>Device scan</h2>
     <div class="scan-controls">
-      <button class="btn primary" id="btn-scan-start">▶️ Avvia scan</button>
-      <button class="btn" id="btn-scan-stop">⏹️ Ferma</button>
+      <button class="btn primary" id="btn-scan-start">▶️ Start scan</button>
+      <button class="btn" id="btn-scan-stop">⏹️ Stop</button>
       <span id="scan-status" class="msg"></span>
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div id="progress-label" class="progress-label"></div>
     <p class="security-note">
-      ⚠ Probe di rete <strong>attivi ma non intrusivi</strong> (ARP request,
-      tentativi di connessione TCP, richieste HTTP, WS-Discovery multicast):
-      generano traffico reale verso i dispositivi target. Nessun login, test
-      di credenziali o tentativo di sfruttamento. Usa solo su reti che sei
-      autorizzato a scansionare.
+      ⚠ <strong>Active but non-intrusive</strong> network probes (ARP
+      requests, TCP connection attempts, HTTP requests, WS-Discovery
+      multicast): they generate real traffic toward target devices. No
+      login, credential testing, or exploitation attempts. Use only on
+      networks you are authorized to scan.
     </p>
   </section>
 
   <section class="card">
     <div class="tabs">
-      <button class="tab-btn active" data-tab="all">Tutti i dispositivi (<span id="count-all">0</span>)</button>
-      <button class="tab-btn" data-tab="cameras">Solo camere (<span id="count-cameras">0</span>)</button>
+      <button class="tab-btn active" data-tab="all">Devices (<span id="count-all">0</span>)</button>
+      <button class="tab-btn" data-tab="cameras">Cameras (<span id="count-cameras">0</span>)</button>
       <button class="tab-btn" data-tab="report">Report</button>
-      <button class="tab-btn" data-tab="settings">⚙️ Impostazioni</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
     </div>
 
     <div class="tab-panel" id="panel-all">
@@ -69,10 +102,10 @@
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>IP</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Interfaccia</th><th>Rete</th>
-            <th>Porte aperte</th><th>Tipo</th>
+            <th>IP</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Interface</th><th>Network</th>
+            <th>Open ports</th><th>Type</th>
           </tr></thead>
-          <tbody id="table-all"><tr><td colspan="8" class="empty">Nessun dato: avvia una scansione</td></tr></tbody>
+          <tbody id="table-all"><tr><td colspan="8" class="empty">No data yet — start a scan</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -82,47 +115,71 @@
         <a class="btn small" href="/api/export?type=cameras&format=csv">⬇ CSV</a>
         <a class="btn small" href="/api/export?type=cameras&format=json">⬇ JSON</a>
       </div>
+
+      <h3 class="camera-group-title">📹 On network (<span id="count-cameras-ok">0</span>)</h3>
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>IP</th><th>MAC</th><th>Vendor</th><th>Porte aperte</th>
-            <th>RTSP</th><th>Admin</th><th>Motivo rilevamento</th>
+            <th>IP</th><th>MAC</th><th>Vendor</th><th>Open ports</th>
+            <th>RTSP</th><th>Admin</th><th>Detection reason</th>
           </tr></thead>
-          <tbody id="table-cameras"><tr><td colspan="7" class="empty">Nessuna telecamera trovata</td></tr></tbody>
+          <tbody id="table-cameras-ok"><tr><td colspan="7" class="empty">No cameras found</td></tr></tbody>
+        </table>
+      </div>
+
+      <h3 class="camera-group-title hidden" id="mismatch-group-title">
+        ⚠️ Out of network — detected via ONVIF only (<span id="count-cameras-mismatch">0</span>)
+      </h3>
+      <p class="camera-group-note hidden" id="mismatch-group-note">
+        These cameras replied to the ONVIF multicast probe, but their IP
+        does not belong to any network the device is currently reaching:
+        they are physically connected to the same segment but likely
+        configured with the wrong IP address (e.g. left over from a
+        previous installation). Check/fix the IP configuration directly on
+        the camera — no MAC or ports are available, the IP is not
+        reachable over unicast on this network.
+      </p>
+      <div class="table-wrap hidden" id="table-mismatch-wrap">
+        <table>
+          <thead><tr>
+            <th>Declared IP</th><th>Vendor</th><th>Model</th><th>Interface</th><th>ONVIF evidence</th>
+          </tr></thead>
+          <tbody id="table-cameras-mismatch"></tbody>
         </table>
       </div>
     </div>
 
     <div class="tab-panel hidden" id="panel-report">
       <div class="export-row">
-        <button class="btn small" id="btn-refresh-report">🔄 Aggiorna report</button>
+        <button class="btn small" id="btn-refresh-report">🔄 Refresh report</button>
       </div>
-      <pre id="report-text" class="report-text">Nessun dato: avvia una scansione, poi apri questa scheda.</pre>
+      <pre id="report-text" class="report-text">No data yet — start a scan, then open this tab.</pre>
     </div>
 
     <div class="tab-panel hidden" id="panel-settings">
       <p class="modal-desc">
-        Utenti con accesso alla dashboard (HTTP Basic Auth: il browser chiede
-        utente/password una volta e li ricorda per la sessione). L'utente di
-        default creato al primo avvio e' <strong>RaspiScanner</strong> /
-        <strong>RaspiPass</strong>: cambia la password appena possibile.
+        Users with dashboard access (HTTP Basic Auth: the browser asks for
+        a username/password once and remembers it for the session). The
+        default user created on first launch is
+        <strong>RaspiScanner</strong> / <strong>RaspiPass</strong> —
+        change the password as soon as possible.
       </p>
 
       <div id="settings-user-list" class="user-list"></div>
 
-      <h3 class="settings-subtitle">Aggiungi utente</h3>
+      <h3 class="settings-subtitle">Add user</h3>
       <div class="modal-row">
-        <input type="text" id="new-user-username" class="modal-input" placeholder="Nome utente">
-        <input type="text" id="new-user-password" class="modal-input" placeholder="Password (min. 6 caratteri)">
-        <button class="btn small" id="btn-add-user">➕ Aggiungi</button>
+        <input type="text" id="new-user-username" class="modal-input" placeholder="Username">
+        <input type="text" id="new-user-password" class="modal-input" placeholder="Password (min. 6 characters)">
+        <button class="btn small" id="btn-add-user">➕ Add</button>
       </div>
       <span id="add-user-msg" class="msg"></span>
 
-      <h3 class="settings-subtitle">Cambia password</h3>
+      <h3 class="settings-subtitle">Change password</h3>
       <div class="modal-row">
         <select id="change-pass-username" class="modal-input"></select>
-        <input type="text" id="change-pass-password" class="modal-input" placeholder="Nuova password">
-        <button class="btn small" id="btn-change-password">🔑 Cambia</button>
+        <input type="text" id="change-pass-password" class="modal-input" placeholder="New password">
+        <button class="btn small" id="btn-change-password">🔑 Change</button>
       </div>
       <span id="change-pass-msg" class="msg"></span>
     </div>
@@ -132,34 +189,34 @@
 <div class="modal-overlay hidden" id="hotspot-modal">
   <div class="modal-box">
     <div class="modal-header">
-      <span>📡 Hotspot Wi-Fi</span>
+      <span>📡 Wi-Fi Hotspot</span>
       <button class="modal-close" id="btn-close-hotspot">✕</button>
     </div>
     <p class="modal-desc">
-      Trasforma il Wi-Fi del dispositivo da client a punto di accesso: utile
-      per raggiungere la dashboard senza cavo quando il dispositivo e'
-      installato in un punto scomodo (es. in quota). <strong>Attivarlo
-      scollega il Wi-Fi da qualunque rete a cui e' collegato adesso</strong> —
-      la stessa antenna non puo' fare le due cose insieme.
+      Turns this device's Wi-Fi from a client into an access point: useful
+      for reaching the dashboard without a cable when the device is
+      installed somewhere hard to wire (e.g. up high). <strong>Activating
+      it disconnects the Wi-Fi from whatever network it's currently
+      on</strong> — the same radio can't do both at once.
     </p>
 
-    <div id="hotspot-status-box" class="hotspot-status">Verifica stato...</div>
+    <div id="hotspot-status-box" class="hotspot-status">Checking status...</div>
 
-    <label class="modal-label">Scheda Wi-Fi da usare come hotspot</label>
+    <label class="modal-label">Wi-Fi adapter to use as hotspot</label>
     <select id="hotspot-iface" class="modal-input"></select>
 
     <label class="modal-label">SSID</label>
     <input type="text" id="hotspot-ssid" class="modal-input" placeholder="RaspiScanner-XXXX">
 
-    <label class="modal-label">Password (minimo 8 caratteri, WPA2)</label>
+    <label class="modal-label">Password (minimum 8 characters, WPA2)</label>
     <div class="modal-row">
       <input type="text" id="hotspot-password" class="modal-input" placeholder="password">
-      <button class="btn small" id="btn-hotspot-generate">🎲 Genera</button>
+      <button class="btn small" id="btn-hotspot-generate">🎲 Generate</button>
     </div>
 
     <div class="modal-actions">
-      <button class="btn primary" id="btn-hotspot-start">▶️ Attiva hotspot</button>
-      <button class="btn" id="btn-hotspot-stop">⏹️ Disattiva</button>
+      <button class="btn primary" id="btn-hotspot-start">▶️ Activate hotspot</button>
+      <button class="btn" id="btn-hotspot-stop">⏹️ Deactivate</button>
     </div>
     <span id="hotspot-msg" class="msg"></span>
   </div>

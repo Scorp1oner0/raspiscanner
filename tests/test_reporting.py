@@ -4,7 +4,7 @@ from scanner.reporting import assessment, risk, security
 
 
 def _device(ip, vendor, open_ports, banners=None, is_camera=False, is_nvr=False,
-            is_infra=False, model=None, device_type="Generico"):
+            is_infra=False, model=None, device_type="Generic"):
     return {
         "ip": ip,
         "mac": "AA:BB:CC:00:00:01",
@@ -42,11 +42,19 @@ RASPBERRY = _device(
     device_type="Raspberry Pi",
 )
 PC = _device(
-    "192.168.10.31", "Sconosciuto",
+    "192.168.10.31", "Unknown",
     [{"port": 3389, "service": "RDP"}],
     device_type="PC (Windows/SMB)",
 )
-GENERIC_HOST = _device("192.168.10.99", "Sconosciuto", [])
+GENERIC_HOST = _device("192.168.10.99", "Unknown", [])
+
+ORPHAN_CAMERA = _device(
+    "192.168.10.64", "Hikvision", [], is_camera=True, device_type="Camera",
+)
+ORPHAN_CAMERA["mac"] = None
+ORPHAN_CAMERA["network_mismatch"] = True
+ORPHAN_CAMERA["onvif_xaddr"] = "http://192.168.10.64/onvif/device_service"
+ORPHAN_CAMERA["network"] = None
 
 
 class TestSecurityFindings(unittest.TestCase):
@@ -57,7 +65,7 @@ class TestSecurityFindings(unittest.TestCase):
         self.assertEqual(telnet[0]["severity"], "critical")
 
     def test_telnet_on_generic_host_is_high(self):
-        generic = _device("192.168.10.99", "Sconosciuto", [{"port": 23, "service": "Telnet"}])
+        generic = _device("192.168.10.99", "Unknown", [{"port": 23, "service": "Telnet"}])
         findings = security.find_security_issues(generic)
         self.assertEqual(findings[0]["severity"], "high")
 
@@ -70,6 +78,12 @@ class TestSecurityFindings(unittest.TestCase):
     def test_no_open_ports_no_findings(self):
         clean = _device("192.168.10.50", "Apple", [])
         self.assertEqual(security.find_security_issues(clean), [])
+
+    def test_network_mismatch_flagged_as_medium(self):
+        findings = security.find_security_issues(ORPHAN_CAMERA)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["id"], "network_mismatch")
+        self.assertEqual(findings[0]["severity"], "medium")
 
 
 class TestRiskSummary(unittest.TestCase):
@@ -122,6 +136,34 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("2 devices discovered", report)
         self.assertNotIn("192.168.10.99", report)
 
+    def test_generic_device_with_findings_included_in_other_section(self):
+        """Bug reale: un dispositivo "Generico" con una porta HTTP esposta
+        (quindi con un finding in SECURITY) non compariva in NESSUNA
+        sezione del report: SECURITY citava un IP mai introdotto prima,
+        mentre "N devices discovered" lo contava comunque — risultato
+        confuso ("6 dispositivi trovati" ma il testo ne descrive 2)."""
+        generic_with_http = _device(
+            "192.168.10.77", "Hon Hai Precision Ind.",
+            [{"port": 80, "service": "HTTP"}],
+        )
+        report = assessment.generate("192.168.10.0/24", [CAMERA, generic_with_http])
+        self.assertIn("OTHER DEVICES", report)
+        self.assertIn("192.168.10.77", report)
+        self.assertIn("⚠ HTTP enabled — 192.168.10.77", report)
+
+    def test_orphan_onvif_camera_labeled_as_ip_misconfigured(self):
+        """Bug che questa feature risolve: una telecamera rilevata SOLO via
+        ONVIF multicast (IP fuori da qualunque rete attiva, probabile
+        errore di configurazione) deve comparire in CAMERAS con
+        un'etichetta che lo dica esplicitamente, non silenziosamente come
+        se fosse una camera normale raggiungibile."""
+        report = assessment.generate("192.168.10.0/24", [ORPHAN_CAMERA])
+        self.assertIn("CAMERAS", report)
+        self.assertIn("[IP MISCONFIGURED", report)
+        self.assertIn("192.168.10.64", report)
+        self.assertIn("ONVIF (multicast): http://192.168.10.64/onvif/device_service", report)
+        self.assertIn("⚠ Camera IP misconfigured", report)
+
     def test_camera_nvr_infra_not_duplicated_in_other_section(self):
         report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH, RASPBERRY])
         # ognuno dei 4 IP deve comparire su una riga propria una volta sola
@@ -168,7 +210,7 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertNotIn("SECURITY", report)
 
     def test_generate_all_groups_by_network(self):
-        other_net_device = _device("10.0.0.5", "Sconosciuto", [])
+        other_net_device = _device("10.0.0.5", "Unknown", [])
         other_net_device["network"] = "10.0.0.0/24"
         text = assessment.generate_all([CAMERA, other_net_device])
         self.assertIn("192.168.10.0/24", text)

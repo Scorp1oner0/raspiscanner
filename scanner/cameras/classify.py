@@ -35,7 +35,7 @@ def classify_camera(open_ports, http_banners, onvif_info):
     if strong_ports:
         is_camera = True
         labels = ", ".join(config.PORTS_OF_INTEREST.get(p, str(p)) for p in sorted(strong_ports))
-        reasons.append(f"porta tipica video ({labels})")
+        reasons.append(f"typical video port ({labels})")
 
     for port, banner in (http_banners or {}).items():
         text = " ".join(filter(None, [banner.get("server"), banner.get("title")])).lower()
@@ -44,7 +44,7 @@ def classify_camera(open_ports, http_banners, onvif_info):
         for kw in _CAMERA_KEYWORDS:
             if kw in text:
                 is_camera = True
-                reasons.append(f"banner HTTP:{port} contiene '{kw}'")
+                reasons.append(f"HTTP banner on port {port} contains '{kw}'")
                 break
 
     return is_camera, reasons

@@ -76,40 +76,40 @@ def verify(username, password):
 def add_user(username, password):
     username = (username or "").strip()
     if not username:
-        return False, "Nome utente obbligatorio"
+        return False, "Username is required"
     if not password or len(password) < MIN_PASSWORD_LENGTH:
-        return False, f"Password di almeno {MIN_PASSWORD_LENGTH} caratteri obbligatoria"
+        return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
     with _lock:
         users = _load()
         if username in users:
-            return False, "Utente gia' esistente"
+            return False, "User already exists"
         users[username] = generate_password_hash(password)
         _save(users)
     log.info("utente aggiunto: %s", username)
-    return True, "Utente aggiunto"
+    return True, "User added"
 
 
 def set_password(username, password):
     if not password or len(password) < MIN_PASSWORD_LENGTH:
-        return False, f"Password di almeno {MIN_PASSWORD_LENGTH} caratteri obbligatoria"
+        return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
     with _lock:
         users = _load()
         if username not in users:
-            return False, "Utente inesistente"
+            return False, "User does not exist"
         users[username] = generate_password_hash(password)
         _save(users)
     log.info("password aggiornata per: %s", username)
-    return True, "Password aggiornata"
+    return True, "Password updated"
 
 
 def remove_user(username):
     with _lock:
         users = _load()
         if username not in users:
-            return False, "Utente inesistente"
+            return False, "User does not exist"
         if len(users) <= 1:
-            return False, "Non puoi rimuovere l'unico utente rimasto"
+            return False, "Cannot remove the only remaining user"
         del users[username]
         _save(users)
     log.info("utente rimosso: %s", username)
-    return True, "Utente rimosso"
+    return True, "User removed"

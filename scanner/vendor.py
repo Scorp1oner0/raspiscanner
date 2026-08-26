@@ -48,7 +48,7 @@ def lookup_vendor(mac):
     if not _loaded:
         _load()
     prefix = _normalize_prefix(mac)
-    return _oui_table.get(prefix, "Sconosciuto")
+    return _oui_table.get(prefix, "Unknown")
 
 
 def reload():

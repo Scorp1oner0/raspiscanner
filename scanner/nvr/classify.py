@@ -27,6 +27,6 @@ def classify_nvr(http_banners):
         for kw in _NVR_KEYWORDS:
             if kw in text:
                 is_nvr = True
-                reasons.append(f"banner HTTP:{port} contiene '{kw}'")
+                reasons.append(f"HTTP banner on port {port} contains '{kw}'")
                 break
     return is_nvr, reasons

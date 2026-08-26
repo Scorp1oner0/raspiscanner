@@ -294,7 +294,7 @@ def autoconfigure_ethernet(iface=None, force=False):
             if existing and not owns_current_config:
                 primary = existing[0]
                 _set_status(
-                    "eth", iface=iface, up=True, mode="manuale",
+                    "eth", iface=iface, up=True, mode="manual",
                     ip=primary["ip"], cidr=primary["cidr"], addresses=existing,
                     reconfiguring=False, error=None, last_change=time.time(),
                 )
@@ -327,7 +327,7 @@ def autoconfigure_ethernet(iface=None, force=False):
 
             flush_addresses(iface)
             _set_status(
-                "eth", iface=iface, up=True, mode="nessuna-rete", ip=None, cidr=None, addresses=[],
+                "eth", iface=iface, up=True, mode="no-network", ip=None, cidr=None, addresses=[],
                 reconfiguring=False, error=None, last_change=time.time(),
             )
             log.warning("nessuna classe preimpostata ha risposto su %s", iface)
@@ -431,7 +431,7 @@ def wifi_connect(ssid, password=None, iface=None):
     ok = bool(res and res.returncode == 0)
     if ok:
         refresh_wifi_status()
-    return ok, (res.stdout + res.stderr) if res else "nmcli non disponibile"
+    return ok, (res.stdout + res.stderr) if res else "nmcli not available"
 
 
 def _monitor_loop(stop_event):

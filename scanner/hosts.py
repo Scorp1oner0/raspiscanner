@@ -23,7 +23,7 @@ PRINTER_PORTS = {631, 9100}
 # sottostringa case-insensitive sul nome vendor gia' risolto da vendor.py.
 _VENDOR_HINTS = (
     ("raspberry pi", "Raspberry Pi"),
-    ("espressif", "Dispositivo IoT (ESP8266/ESP32)"),
+    ("espressif", "IoT device (ESP8266/ESP32)"),
     ("sonos", "Sonos (audio)"),
     ("philips", "Philips Hue (smart home)"),
     ("amazon", "Amazon (Echo/Fire/Ring)"),
@@ -42,7 +42,7 @@ def classify_by_vendor(vendor):
     vendor_lower = vendor.lower()
     for hint, label in _VENDOR_HINTS:
         if hint in vendor_lower:
-            return label, [f"vendor hardware dedicato ({vendor})"]
+            return label, [f"dedicated hardware vendor ({vendor})"]
     return None, []
 
 
@@ -53,12 +53,12 @@ def classify_by_ports(open_ports):
     printer_hit = ports_open & PRINTER_PORTS
     if printer_hit:
         labels = ", ".join(str(p) for p in sorted(printer_hit))
-        return "Stampante di rete", [f"porta tipica stampante ({labels})"]
+        return "Network printer", [f"typical printer port ({labels})"]
 
     windows_hit = ports_open & WINDOWS_HOST_PORTS
     if windows_hit:
         labels = ", ".join(str(p) for p in sorted(windows_hit))
-        return "PC (Windows/SMB)", [f"porta tipica Windows/SMB ({labels})"]
+        return "PC (Windows/SMB)", [f"typical Windows/SMB port ({labels})"]
 
     return None, []
 

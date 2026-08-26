@@ -65,9 +65,9 @@ def start_hotspot(iface, ssid, password):
     """
     ssid = (ssid or "").strip()
     if not ssid:
-        return False, "SSID obbligatorio"
+        return False, "SSID is required"
     if not password or len(password) < MIN_PASSWORD_LENGTH:
-        return False, f"Password di almeno {MIN_PASSWORD_LENGTH} caratteri obbligatoria (WPA2)"
+        return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters (WPA2)"
 
     # rimuove un eventuale profilo hotspot precedente, altrimenti nmcli ne
     # accumula uno nuovo (con nome incrementale) a ogni riconfigurazione
@@ -82,12 +82,12 @@ def start_hotspot(iface, ssid, password):
     ], timeout=30)
 
     if not res or res.returncode != 0:
-        message = (res.stderr.strip() or res.stdout.strip()) if res else "nmcli non disponibile"
+        message = (res.stderr.strip() or res.stdout.strip()) if res else "nmcli not available"
         log.error("attivazione hotspot fallita su %s: %s", iface, message)
-        return False, message or "attivazione hotspot fallita"
+        return False, message or "failed to activate hotspot"
 
     log.info("hotspot attivato su %s (SSID %s)", iface, ssid)
-    return True, "Hotspot attivato"
+    return True, "Hotspot activated"
 
 
 def stop_hotspot():
@@ -96,10 +96,10 @@ def stop_hotspot():
     `nmcli connection delete raspiscanner-hotspot`)."""
     res = _run(["nmcli", "connection", "down", HOTSPOT_CONNECTION_NAME], timeout=15)
     if not res:
-        return False, "nmcli non disponibile"
+        return False, "nmcli not available"
     ok = res.returncode == 0
     message = (res.stdout.strip() or res.stderr.strip()) if ok else (res.stderr.strip() or res.stdout.strip())
-    return ok, message or ("Hotspot disattivato" if ok else "disattivazione fallita")
+    return ok, message or ("Hotspot deactivated" if ok else "failed to deactivate hotspot")
 
 
 def get_hotspot_status():

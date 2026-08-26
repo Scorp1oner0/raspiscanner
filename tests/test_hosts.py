@@ -14,7 +14,7 @@ class TestClassifyByVendor(unittest.TestCase):
         self.assertIn("IoT", label)
 
     def test_unknown_vendor_no_hint(self):
-        label, reasons = classify_by_vendor("Sconosciuto")
+        label, reasons = classify_by_vendor("Unknown")
         self.assertIsNone(label)
         self.assertEqual(reasons, [])
 
@@ -32,11 +32,11 @@ class TestClassifyByVendor(unittest.TestCase):
 class TestClassifyByPorts(unittest.TestCase):
     def test_printer_port_9100(self):
         label, reasons = classify_by_ports([{"port": 9100, "service": "JetDirect"}])
-        self.assertEqual(label, "Stampante di rete")
+        self.assertEqual(label, "Network printer")
 
     def test_printer_port_631_ipp(self):
         label, _ = classify_by_ports([{"port": 631, "service": "IPP"}])
-        self.assertEqual(label, "Stampante di rete")
+        self.assertEqual(label, "Network printer")
 
     def test_windows_smb(self):
         label, reasons = classify_by_ports([{"port": 445, "service": "SMB"}])
@@ -60,7 +60,7 @@ class TestClassifyByPorts(unittest.TestCase):
     def test_printer_takes_priority_over_windows(self):
         ports = [{"port": 9100, "service": "JetDirect"}, {"port": 445, "service": "SMB"}]
         label, _ = classify_by_ports(ports)
-        self.assertEqual(label, "Stampante di rete")
+        self.assertEqual(label, "Network printer")
 
 
 class TestClassifyHost(unittest.TestCase):
@@ -71,11 +71,11 @@ class TestClassifyHost(unittest.TestCase):
         self.assertEqual(label, "Raspberry Pi")
 
     def test_falls_back_to_ports_when_no_vendor_hint(self):
-        label, _ = classify_host("Sconosciuto", [{"port": 9100, "service": "JetDirect"}])
-        self.assertEqual(label, "Stampante di rete")
+        label, _ = classify_host("Unknown", [{"port": 9100, "service": "JetDirect"}])
+        self.assertEqual(label, "Network printer")
 
     def test_nothing_recognized_returns_none(self):
-        label, reasons = classify_host("Sconosciuto", [])
+        label, reasons = classify_host("Unknown", [])
         self.assertIsNone(label)
         self.assertEqual(reasons, [])
 

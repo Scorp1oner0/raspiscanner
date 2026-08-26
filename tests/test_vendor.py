@@ -11,7 +11,7 @@ class TestVendorLookup(unittest.TestCase):
         self.assertEqual(vendor.lookup_vendor("4C:BD:8F:AA:BB:CC"), "Hikvision")
 
     def test_unknown_prefix(self):
-        self.assertEqual(vendor.lookup_vendor("FF:FF:FF:00:00:00"), "Sconosciuto")
+        self.assertEqual(vendor.lookup_vendor("FF:FF:FF:00:00:00"), "Unknown")
 
     def test_lowercase_and_no_separators(self):
         self.assertEqual(vendor.lookup_vendor("b827eb112233"), "Raspberry Pi Foundation")

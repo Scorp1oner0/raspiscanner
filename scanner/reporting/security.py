@@ -24,6 +24,20 @@ def find_security_issues(device):
     banners = device.get("http_banners") or {}
     findings = []
 
+    if device.get("network_mismatch"):
+        # Non e' una porta/servizio esposto come gli altri finding: e' una
+        # telecamera rilevata solo via multicast ONVIF, con un IP che non
+        # appartiene a nessuna rete attiva (probabile errore di
+        # configurazione). Rilevante per un assessment CCTV perche' una
+        # telecamera irraggiungibile e' de facto fuori dal sistema di
+        # sorveglianza monitorato, anche se fisicamente installata.
+        findings.append({
+            "id": "network_mismatch",
+            "message": "Camera IP misconfigured (unreachable on this network)",
+            "severity": "medium",
+        })
+        return findings
+
     if TELNET_PORT in ports_open:
         # Telnet su una telecamera/NVR e' il caso storicamente piu' sfruttato
         # (botnet IoT tipo Mirai): lo trattiamo come critico specificamente

@@ -71,7 +71,7 @@ class TestAddUser(AuthTestCase):
         auth.add_user("tecnico", "password123")
         ok, message = auth.add_user("tecnico", "altrapassword")
         self.assertFalse(ok)
-        self.assertIn("esistente", message)
+        self.assertIn("exists", message)
 
     def test_reject_empty_username(self):
         ok, _ = auth.add_user("", "password123")
@@ -97,7 +97,7 @@ class TestSetPassword(AuthTestCase):
     def test_rejects_unknown_user(self):
         ok, message = auth.set_password("nessuno", "nuovapassword")
         self.assertFalse(ok)
-        self.assertIn("inesistente", message)
+        self.assertIn("exist", message)
 
     def test_rejects_short_password(self):
         ok, _ = auth.set_password(auth.DEFAULT_USERNAME, "abc")
@@ -119,12 +119,12 @@ class TestRemoveUser(AuthTestCase):
         auth.remove_user("tecnico")
         ok, message = auth.remove_user(auth.DEFAULT_USERNAME)
         self.assertFalse(ok)
-        self.assertIn("unico", message)
+        self.assertIn("only", message)
 
     def test_rejects_unknown_user(self):
         ok, message = auth.remove_user("nessuno")
         self.assertFalse(ok)
-        self.assertIn("inesistente", message)
+        self.assertIn("exist", message)
 
 
 if __name__ == "__main__":

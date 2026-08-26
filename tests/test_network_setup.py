@@ -172,7 +172,7 @@ class TestExistingConfigProtected(unittest.TestCase):
     def test_preexisting_addresses_marked_manual_and_untouched(self):
         network_setup.autoconfigure_ethernet("eth0")
         status = network_setup.get_status()
-        self.assertEqual(status["eth"]["mode"], "manuale")
+        self.assertEqual(status["eth"]["mode"], "manual")
         self.assertEqual(len(status["eth"]["addresses"]), 3)
 
 

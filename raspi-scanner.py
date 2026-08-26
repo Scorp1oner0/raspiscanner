@@ -28,6 +28,8 @@ from scanner import auth, scan_engine, tls
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
+from scanner.reporting import risk as risk_module
+from scanner.reporting import security as security_module
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("raspiscanner.app")
@@ -79,7 +81,7 @@ def api_network_rescan():
         network_setup.autoconfigure_ethernet(force=force)
         network_setup.refresh_wifi_status()
     threading.Thread(target=_do, daemon=True).start()
-    return jsonify({"status": "avviato", "force": force})
+    return jsonify({"status": "started", "force": force})
 
 
 @app.route("/api/wifi/networks")
@@ -95,7 +97,7 @@ def api_wifi_connect():
     password = data.get("password")
     iface = data.get("iface") or None
     if not ssid:
-        return jsonify({"error": "ssid obbligatorio"}), 400
+        return jsonify({"error": "ssid is required"}), 400
     ok, message = network_setup.wifi_connect(ssid, password, iface=iface)
     return jsonify({"ok": ok, "message": message}), (200 if ok else 502)
 
@@ -125,7 +127,7 @@ def api_hotspot_start():
     password = data.get("password") or ""
     iface = data.get("iface") or network_setup.find_default_wifi_iface()
     if not iface:
-        return jsonify({"ok": False, "message": "Nessuna interfaccia Wi-Fi trovata"}), 400
+        return jsonify({"ok": False, "message": "No Wi-Fi interface found"}), 400
     ok, message = hotspot.start_hotspot(iface, ssid, password)
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
@@ -163,6 +165,18 @@ def api_devices_cameras():
     return jsonify(scan_engine.devices_cameras())
 
 
+@app.route("/api/security/summary")
+def api_security_summary():
+    """Riepilogo compatto per la barra KPI della dashboard: riusa la stessa
+    logica del report testuale (security.find_security_issues + risk.summarize)
+    invece di ricalcolare severita' lato client."""
+    devices = scan_engine.devices_all()
+    all_findings = []
+    for d in devices:
+        all_findings.extend(security_module.find_security_issues(d))
+    return jsonify(risk_module.summarize(all_findings))
+
+
 @app.route("/api/report")
 def api_report():
     state = scan_engine.get_state()
@@ -173,10 +187,9 @@ def api_report():
         # reale ma incompleta (es. una rete gia' scansionata per intero,
         # un'altra ancora a meta'), non un errore di conteggio.
         text = (
-            "⚠ Scansione ancora in corso: questo report e' un'istantanea "
-            "parziale (alcune reti possono essere gia' complete, altre no "
-            "ancora), i conteggi aumenteranno. Riprova dopo che lo scan e' "
-            "terminato.\n\n" + text
+            "⚠ Scan still in progress: this report is a partial snapshot "
+            "(some networks may already be complete, others not yet) — "
+            "counts will increase. Retry once the scan has finished.\n\n" + text
         )
     return jsonify({"text": text, "scan_running": state["running"]})
 

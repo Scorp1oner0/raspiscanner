@@ -65,12 +65,12 @@ def classify_network_device(ip, gateway_ip, vendor_name, http_banners):
     if gateway_ip and ip == gateway_ip:
         is_infra = True
         subtype = "Router"
-        reasons.append("e' il gateway di default della rete")
+        reasons.append("is the network's default gateway")
 
     vendor_lower = (vendor_name or "").lower()
     if any(hint in vendor_lower for hint in _INFRA_VENDOR_HINTS):
         is_infra = True
-        reasons.append(f"vendor di rete ({vendor_name})")
+        reasons.append(f"network vendor ({vendor_name})")
 
     for port, banner in (http_banners or {}).items():
         text = " ".join(filter(None, [banner.get("server"), banner.get("title")])).lower()
@@ -81,7 +81,7 @@ def classify_network_device(ip, gateway_ip, vendor_name, http_banners):
                 is_infra = True
                 if subtype is None:
                     subtype = kw_subtype
-                reasons.append(f"banner HTTP:{port} contiene '{kw}'")
+                reasons.append(f"HTTP banner on port {port} contains '{kw}'")
                 break
 
     return is_infra, subtype, reasons

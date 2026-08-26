@@ -4,6 +4,7 @@ NVR/DVR, apparato di rete) per host. Mantiene uno stato condiviso in
 memoria che la dashboard interroga via polling HTTP (niente websocket/CDN
 esterni: deve funzionare anche su reti isolate senza accesso a internet).
 """
+import ipaddress
 import logging
 import threading
 import time
@@ -83,7 +84,7 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
             banners[p["port"]] = grab_http_banner(ip, p["port"], use_https=True)
 
     onvif_info = onvif_results.get(ip)
-    device_vendor = vendor.lookup_vendor(mac) if mac else "Sconosciuto"
+    device_vendor = vendor.lookup_vendor(mac) if mac else "Unknown"
 
     is_camera, camera_reasons = classify_camera(open_ports, banners, onvif_info)
     is_nvr, nvr_reasons = classify_nvr(banners)
@@ -122,16 +123,16 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
         device_type = "NVR/DVR"
         reasons = nvr_reasons
     elif is_camera:
-        device_type = "Telecamera"
+        device_type = "Camera"
         reasons = camera_reasons
     elif is_infra:
-        device_type = infra_subtype or "Apparato di rete"
+        device_type = infra_subtype or "Network device"
         reasons = infra_reasons
     elif host_label:
         device_type = host_label
         reasons = host_reasons
     else:
-        device_type = "Generico"
+        device_type = "Generic"
         reasons = []
 
     return {
@@ -159,16 +160,125 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
         },
         "rtsp_url": guess_rtsp_url(ip, open_ports),
         "admin_url": guess_admin_url(ip, open_ports),
+        "network_mismatch": False,
+    }
+
+
+ORPHAN_ONVIF_REASON = (
+    "responds to ONVIF WS-Discovery, but its IP does not belong to any "
+    "currently active network: likely a misconfigured static IP on the "
+    "camera (e.g. left over from a previous installation)"
+)
+
+
+def _orphan_onvif_ips(onvif_results, known_ips):
+    """IP che hanno risposto al probe ONVIF ma non sono stati trovati
+    dall'ARP scan su nessuna rete attiva: il probe ONVIF e' multicast e non
+    filtra per subnet come l'ARP scan (vedi discovery.arp.parse_arp_reply),
+    quindi puo' ricevere risposta anche da una telecamera fisicamente
+    collegata allo stesso segmento ma con un IP unicast "sbagliato" per la
+    rete attuale — un caso che l'ARP scan da solo non potrebbe mai vedere.
+    Estratta a parte per essere testabile senza rete reale.
+    """
+    return [ip for ip in onvif_results if ip not in known_ips]
+
+
+def _match_active_network(ip, networks):
+    """Ritorna (iface, cidr) della prima rete attiva a cui `ip` appartiene,
+    o None se non rientra in nessuna. `networks`: stessa lista [(iface,
+    cidr, local_ip), ...] usata per l'ARP scan."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    for iface, cidr, _ in networks:
+        try:
+            if addr in ipaddress.ip_network(cidr, strict=False):
+                return iface, cidr
+        except ValueError:
+            continue
+    return None
+
+
+def _classify_orphan_ips(orphan_ips, networks):
+    """Un IP "orfano" (visto solo via ONVIF, mai dall'ARP scan) NON e'
+    automaticamente "fuori rete": se rientra comunque in una subnet gia'
+    attiva, l'ARP scan puo' semplicemente averlo mancato in questo giro
+    (host lento a rispondere, porta switch STP che ritarda, pacchetto
+    perso — casi gia' noti, vedi README) — non e' detto sia mal
+    configurato. In quel caso va trattato come un host normale (mac
+    ignoto), non etichettato erroneamente come "IP fuori rete": e'
+    fisicamente indistinguibile da un device ARP-trovato una volta che ci
+    proviamo a connettere via IP, quindi merita la stessa pipeline di port
+    scan invece di restare un fantasma senza porte.
+
+    Solo un IP che non appartiene a NESSUNA rete attiva e' strutturalmente
+    non raggiungibile in unicast da qui: quello si' e' un probabile errore
+    di configurazione IP sulla telecamera.
+
+    Ritorna (in_range: list[(ip, iface, cidr)], out_of_range: list[ip]).
+    """
+    in_range = []
+    out_of_range = []
+    for ip in orphan_ips:
+        match = _match_active_network(ip, networks)
+        if match:
+            iface, cidr = match
+            in_range.append((ip, iface, cidr))
+        else:
+            out_of_range.append(ip)
+    return in_range, out_of_range
+
+
+def _build_orphan_onvif_device(ip, onvif_info, iface):
+    """Device "fantasma": conosciamo solo cio' che il probe ONVIF ci ha
+    detto (IP, XAddrs, eventuale vendor/model reali) — niente MAC (l'ARP
+    non l'ha mai visto) ne' porte (non ha senso scansionarle: l'IP non e'
+    raggiungibile in unicast su questa rete, e' arrivato solo il multicast).
+    """
+    xaddrs = onvif_info.get("xaddrs") or []
+    model = None
+    device_vendor = "Unknown"
+    if xaddrs:
+        info = get_device_info(xaddrs[0])
+        if info.get("model"):
+            model = info["model"]
+        if info.get("manufacturer"):
+            device_vendor = info["manufacturer"]
+
+    return {
+        "ip": ip,
+        "mac": None,
+        "vendor": device_vendor,
+        "model": model,
+        "hostname": None,
+        "open_ports": [],
+        "http_banners": {},
+        "onvif": onvif_info,
+        "is_camera": True,
+        "is_nvr": False,
+        "is_network_infra": False,
+        "device_type": "Camera",
+        "reasons": [ORPHAN_ONVIF_REASON],
+        "classification_reasons": {
+            "camera": [ORPHAN_ONVIF_REASON], "nvr": [], "network": [], "host": [],
+        },
+        "rtsp_url": None,
+        "admin_url": None,
+        "onvif_xaddr": xaddrs[0] if xaddrs else None,
+        "network_mismatch": True,
+        "iface": iface,
+        "network": None,
     }
 
 
 def run_scan():
     if _state["running"]:
-        return False, "Scansione gia' in corso"
+        return False, "Scan already in progress"
 
     networks = _active_networks()
     if not networks:
-        return False, "Nessuna rete attiva (eth/wifi) su cui scansionare"
+        return False, "No active network (eth/wifi) to scan"
 
     _stop_flag.clear()
     _update(running=True, progress=0, total=0, current_ip=None,
@@ -176,7 +286,7 @@ def run_scan():
 
     t = threading.Thread(target=_run_scan_thread, args=(networks,), daemon=True)
     t.start()
-    return True, "Scansione avviata"
+    return True, "Scan started"
 
 
 def _run_scan_thread(networks):
@@ -198,11 +308,21 @@ def _run_scan_thread(networks):
                 # di ritorno: senza questo, la macchina su cui gira lo
                 # scanner non comparirebbe mai da sola nei risultati.
                 all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, cidr))
-            onvif_results.update(onvif_probe(iface_ip=iface_ip, timeout=3))
+            for onvif_ip, info in onvif_probe(iface_ip=iface_ip, timeout=3).items():
+                onvif_results[onvif_ip] = {**info, "_iface": iface}
             if iface not in gateways:
                 gateways[iface] = get_default_gateway(iface)
 
-        total = len(all_hosts)
+        known_ips = {h[0] for h in all_hosts}
+        orphan_ips = _orphan_onvif_ips(onvif_results, known_ips)
+        in_range_orphans, out_of_range_ips = _classify_orphan_ips(orphan_ips, networks)
+        # In-range: probabile solo un miss dell'ARP sweep, non un IP mal
+        # configurato — trattalo come un host normale (mac ignoto, ma
+        # port scan/classificazione completi), non come un fantasma.
+        for ip, iface, cidr in in_range_orphans:
+            all_hosts.append((ip, None, iface, cidr))
+
+        total = len(all_hosts) + len(out_of_range_ips)
         _update(total=total)
 
         for idx, (ip, mac, iface, cidr) in enumerate(all_hosts):
@@ -212,6 +332,14 @@ def _run_scan_thread(networks):
             device = _scan_host(ip, mac, onvif_results, gateways.get(iface))
             device["iface"] = iface
             device["network"] = cidr
+            _set_device(ip, device)
+
+        for idx, ip in enumerate(out_of_range_ips):
+            if _stop_flag.is_set():
+                break
+            _update(progress=len(all_hosts) + idx, current_ip=ip)
+            onvif_info = onvif_results[ip]
+            device = _build_orphan_onvif_device(ip, onvif_info, onvif_info.get("_iface"))
             _set_device(ip, device)
 
         _update(progress=total, current_ip=None)

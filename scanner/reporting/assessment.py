@@ -49,18 +49,23 @@ _PROTOCOL_LABELS = {
 
 def _device_label(device):
     vendor = device.get("vendor")
-    vendor = vendor if vendor and vendor != "Sconosciuto" else None
+    vendor = vendor if vendor and vendor != "Unknown" else None
     model = device.get("model")
 
     if vendor and model:
-        return f"{vendor} {model}"
-    if device.get("is_nvr"):
-        return f"{vendor} NVR" if vendor else "NVR (vendor unknown)"
-    if device.get("is_camera"):
-        return f"{vendor} camera" if vendor else "IP camera (vendor unknown)"
-    if device.get("is_network_infra"):
-        return f"{vendor} network device" if vendor else "Network device"
-    return vendor or "Unknown device"
+        label = f"{vendor} {model}"
+    elif device.get("is_nvr"):
+        label = f"{vendor} NVR" if vendor else "NVR (vendor unknown)"
+    elif device.get("is_camera"):
+        label = f"{vendor} camera" if vendor else "IP camera (vendor unknown)"
+    elif device.get("is_network_infra"):
+        label = f"{vendor} network device" if vendor else "Network device"
+    else:
+        label = vendor or "Unknown device"
+
+    if device.get("network_mismatch"):
+        label += " [IP MISCONFIGURED]"
+    return label
 
 
 def _services_label(device):
@@ -72,7 +77,14 @@ def _services_label(device):
         if label not in seen:
             seen.add(label)
             labels.append(label)
-    return " / ".join(labels) if labels else "-"
+    if labels:
+        return " / ".join(labels)
+    if device.get("onvif_xaddr"):
+        # Nessuna porta scansionata (l'IP non e' raggiungibile in unicast
+        # su questa rete): l'unica evidenza che abbiamo e' la risposta
+        # multicast ONVIF, mostrarla e' piu' utile di un "-" muto.
+        return f"ONVIF (multicast): {device['onvif_xaddr']}"
+    return "-"
 
 
 def _other_device_label(device):
@@ -81,7 +93,7 @@ def _other_device_label(device):
     di rete, ...) invece del fallback generico di _device_label, che non
     conosce questi tipi e mostrerebbe solo il vendor."""
     vendor = device.get("vendor")
-    vendor = vendor if vendor and vendor != "Sconosciuto" else None
+    vendor = vendor if vendor and vendor != "Unknown" else None
     device_type = device.get("device_type") or "Unknown device"
     return f"{device_type} — {vendor}" if vendor else device_type
 
@@ -98,17 +110,25 @@ def generate(network_cidr, devices):
     nvrs = [d for d in devices if d.get("is_nvr")]
     infra = [d for d in devices if d.get("is_network_infra")]
     shown_ips = {d["ip"] for d in cameras + nvrs + infra}
+
+    findings_by_ip = {d["ip"]: _device_findings(d) for d in devices}
+
     # Dispositivi con un tipo specifico riconosciuto (Raspberry Pi, PC,
     # stampante, ...) che non sono ne' camera/NVR ne' apparato di rete:
     # senza questa sezione sparivano dal report pur essendo contati in
     # "N devices discovered" — restavano visibili solo nella tabella della
     # dashboard, non nel testo del report. I dispositivi davvero "Generico"
-    # (nessun segnale, es. telefoni con firewall di default) restano fuori
-    # per non appesantire un report pensato per il sopralluogo CCTV/rete,
-    # non per un inventario completo di ogni host.
+    # E senza alcun finding di sicurezza (nessun segnale, es. telefoni con
+    # firewall di default) restano comunque fuori per non appesantire un
+    # report pensato per il sopralluogo CCTV/rete, non un inventario di
+    # ogni host — ma un "Generico" CON un finding (es. porta HTTP esposta)
+    # va incluso comunque: altrimenti la sezione SECURITY qui sotto cita un
+    # IP che il report non ha mai introdotto da nessuna parte.
     other = [
         d for d in devices
-        if d["ip"] not in shown_ips and d.get("device_type") not in (None, "Generico")
+        if d["ip"] not in shown_ips and (
+            d.get("device_type") not in (None, "Generic") or findings_by_ip[d["ip"]]
+        )
     ]
 
     all_findings = []  # per il riepilogo rischio: ogni finding, non deduplicato
@@ -116,7 +136,7 @@ def generate(network_cidr, devices):
     seen = set()
     for d in devices:
         label = _device_label(d)
-        for f in _device_findings(d):
+        for f in findings_by_ip[d["ip"]]:
             all_findings.append(f)
             key = (d["ip"], f["message"])
             if key in seen:
