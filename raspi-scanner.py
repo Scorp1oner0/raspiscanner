@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""RaspiScanner - network + IP camera/NVR scanner per Raspberry Pi.
+"""RaspiScanner - network + IP camera/NVR scanner for Raspberry Pi.
 
-Auto-configura l'interfaccia ethernet (DHCP, con fallback su classi
-private preimpostate) e offre due modalita' d'uso:
+Auto-configures the ethernet interface (DHCP, with fallback to preset
+private classes) and offers two modes of use:
 
-- **Dashboard web** (default): scan interattivo di dispositivi/telecamere
-  sulle reti eth/wifi attive, con esportazione CSV/JSON.
+- **Web dashboard** (default): interactive scan of devices/cameras on the
+  active eth/wifi networks, with CSV/JSON export.
       sudo python3 raspi-scanner.py
 
-- **Report da riga di comando**: esegue uno scan completo e stampa un
-  report testuale "NETWORK ASSESSMENT" (dispositivi, telecamere, NVR,
-  apparati di rete, security findings, riepilogo rischio), poi esce.
+- **Command-line report**: runs a full scan and prints a "NETWORK
+  ASSESSMENT" text report (devices, cameras, NVRs, network gear, security
+  findings, risk summary), then exits.
       sudo python3 raspi-scanner.py --report
 """
 import argparse
@@ -272,10 +272,10 @@ def run_cli_report(timeout=180):
 
     ok, message = scan_engine.run_scan()
     if not ok:
-        print(f"Impossibile avviare lo scan: {message}", file=sys.stderr)
+        print(f"Could not start the scan: {message}", file=sys.stderr)
         return 1
 
-    print("Scan in corso...", file=sys.stderr)
+    print("Scanning...", file=sys.stderr)
     deadline = time.time() + timeout
     while time.time() < deadline:
         state = scan_engine.get_state()
@@ -283,7 +283,7 @@ def run_cli_report(timeout=180):
             break
         time.sleep(1)
     else:
-        print("Timeout raggiunto, stampo i risultati parziali.", file=sys.stderr)
+        print("Timeout reached, printing partial results.", file=sys.stderr)
         scan_engine.stop_scan()
 
     print(assessment.generate_all(scan_engine.devices_all()))
@@ -292,9 +292,9 @@ def run_cli_report(timeout=180):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--report", action="store_true", help="esegue uno scan e stampa il report testuale, senza avviare la dashboard")
-    parser.add_argument("--port", type=int, default=7332, help="porta della dashboard web (default 7332)")
-    parser.add_argument("--timeout", type=int, default=180, help="timeout in secondi per --report (default 180)")
+    parser.add_argument("--report", action="store_true", help="run a scan and print the text report, without starting the dashboard")
+    parser.add_argument("--port", type=int, default=7332, help="web dashboard port (default 7332)")
+    parser.add_argument("--timeout", type=int, default=180, help="timeout in seconds for --report (default 180)")
     args = parser.parse_args()
 
     if args.report:

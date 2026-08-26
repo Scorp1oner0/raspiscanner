@@ -217,7 +217,7 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("10.0.0.0/24", text)
 
     def test_generate_all_empty(self):
-        self.assertIn("Nessun dato", assessment.generate_all([]))
+        self.assertIn("No data yet", assessment.generate_all([]))
 
 
 if __name__ == "__main__":

@@ -195,11 +195,11 @@ def generate_all(devices):
     messaggio se non ci sono dati.
     """
     if not devices:
-        return "Nessun dato: esegui prima uno scan."
+        return "No data yet — run a scan first."
 
     by_network = {}
     for d in devices:
-        cidr = d.get("network") or "rete sconosciuta"
+        cidr = d.get("network") or "unknown network"
         by_network.setdefault(cidr, []).append(d)
 
     reports = [generate(cidr, devs) for cidr, devs in sorted(by_network.items())]
