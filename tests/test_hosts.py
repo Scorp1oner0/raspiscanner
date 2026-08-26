@@ -87,6 +87,20 @@ class TestClassifyByHostname(unittest.TestCase):
         label, _ = classify_by_hostname("Galaxy-Tab-S9")
         self.assertEqual(label, "Tablet (Android)")
 
+    def test_bare_android_hostname_not_assumed_to_be_a_phone(self):
+        """Bug reale trovato su uno scan vero: una Sony BRAVIA (Android TV)
+        con hostname "Android.local" (via reverse mDNS) veniva etichettata
+        "Phone (Android)" solo perche' il nome conteneva "android" — un
+        hostname cosi' generico dice solo "e' un dispositivo Android",
+        niente di piu' specifico su che TIPO di dispositivo sia."""
+        label, _ = classify_by_hostname("Android.local")
+        self.assertEqual(label, "Android device")
+        self.assertNotIn("Phone", label)
+
+    def test_android_tv_hostname_recognized_specifically(self):
+        label, _ = classify_by_hostname("My-Android-TV")
+        self.assertEqual(label, "Android TV")
+
     def test_windows_auto_generated_desktop_name(self):
         label, _ = classify_by_hostname("DESKTOP-7K2N9QP")
         self.assertEqual(label, "PC (Windows)")

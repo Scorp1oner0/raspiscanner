@@ -60,7 +60,13 @@ _HOSTNAME_KEYWORDS = (
     ("oneplus", "Phone (Android)"),
     ("xiaomi", "Phone (Android)"),
     ("android-tv", "Android TV"),
-    ("android", "Phone (Android)"),
+    # "android" da solo (es. il generico "Android.local" restituito da
+    # molte reverse mDNS/DNS su TV, tablet, telefoni indistintamente — visto
+    # in scan reali su una Sony BRAVIA) NON basta a dire "e' un telefono":
+    # dice solo "e' un dispositivo Android", niente di piu' specifico.
+    # Bug reale corretto qui: una Android TV veniva etichettata "Phone
+    # (Android)" solo perche' il suo hostname conteneva "android".
+    ("android", "Android device"),
 )
 # Prefisso del nome host (non sottostringa: sono pattern generati in
 # automatico da Windows quando non rinominato manualmente, es.
