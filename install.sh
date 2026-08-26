@@ -43,9 +43,28 @@ systemctl enable raspiscanner.service
 systemctl restart raspiscanner.service
 
 echo ""
+echo "==> Checking service status and looking for first-login credentials..."
+sleep 3
+BOOTSTRAP_LINE="$(journalctl -u raspiscanner.service --no-pager 2>/dev/null | grep -i "utente di bootstrap creato" | tail -1 || true)"
+
+echo ""
 echo "✅ Installed. Service: systemctl status raspiscanner"
 echo "   Dashboard: https://<raspberry-ip>:7332 (self-signed certificate,"
 echo "   the browser will show a warning to accept on first visit)"
+echo ""
+if [ -n "$BOOTSTRAP_LINE" ]; then
+  BOOTSTRAP_USER="$(echo "$BOOTSTRAP_LINE" | grep -oP '(?<=utente: )\S+')"
+  BOOTSTRAP_PASS="$(echo "$BOOTSTRAP_LINE" | grep -oP '(?<=password iniziale: )\S+')"
+  echo "🔑 FIRST LOGIN — shown only once, copy it now:"
+  echo "   Username: ${BOOTSTRAP_USER:-RaspiScanner}"
+  echo "   Password: ${BOOTSTRAP_PASS:-<see: sudo journalctl -u raspiscanner | grep -i bootstrap>}"
+  echo "   You will be required to change it on first login (Settings tab)."
+else
+  echo "ℹ️  No new bootstrap account was created (data/users.json already existed"
+  echo "   from a previous install). If you don't have credentials for it, reset"
+  echo "   with: sudo rm /opt/raspiscanner/data/users.json && sudo systemctl restart raspiscanner"
+  echo "   then: sudo journalctl -u raspiscanner --no-pager | grep -i bootstrap"
+fi
 echo ""
 echo "NOTE: if NetworkManager or dhcpcd already manage eth0, mark it as"
 echo "'unmanaged' to avoid conflicts with the scanner's autoconfiguration"
