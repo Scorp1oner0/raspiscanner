@@ -1,6 +1,57 @@
+import threading
 import unittest
 
 from scanner import scan_engine
+
+
+class TestRunScanRaceCondition(unittest.TestCase):
+    """P1: run_scan() leggeva _state["running"] senza lock prima di
+    deciderne il valore nuovo — due chiamate concorrenti a /api/scan/start
+    potevano entrambe leggere False prima che l'altra scrivesse True,
+    partendo entrambe in parallelo e accavallandosi sullo stesso
+    _state["devices"]. Check-then-set ora e' atomico sotto _lock."""
+
+    def setUp(self):
+        self._orig_run_thread = scan_engine._run_scan_thread
+        self._orig_active_networks = scan_engine._active_networks
+        # Nessuna vera scansione di rete nel test: il thread avviato da
+        # run_scan() deve solo esistere, non fare I/O reale.
+        scan_engine._run_scan_thread = lambda networks: None
+        scan_engine._active_networks = lambda: [("eth0", "192.168.1.0/24", "192.168.1.10")]
+        scan_engine._state.update(running=False, devices={})
+
+    def tearDown(self):
+        scan_engine._run_scan_thread = self._orig_run_thread
+        scan_engine._active_networks = self._orig_active_networks
+        scan_engine._state.update(running=False, devices={})
+
+    def test_only_one_concurrent_scan_can_start(self):
+        n_threads = 20
+        results = []
+        results_lock = threading.Lock()
+        barrier = threading.Barrier(n_threads)
+
+        def attempt():
+            barrier.wait()  # massimizza la sovrapposizione, rende il test deterministico
+            result = scan_engine.run_scan()
+            with results_lock:
+                results.append(result)
+
+        threads = [threading.Thread(target=attempt) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        successes = [r for r in results if r[0]]
+        self.assertEqual(len(successes), 1, f"attese 1 scan avviata, trovate {len(successes)}: {results}")
+
+    def test_second_call_while_running_is_rejected(self):
+        ok1, _ = scan_engine.run_scan()
+        self.assertTrue(ok1)
+        ok2, message2 = scan_engine.run_scan()
+        self.assertFalse(ok2)
+        self.assertIn("already in progress", message2)
 
 
 class TestActiveNetworks(unittest.TestCase):

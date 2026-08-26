@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scanner import config
+from scanner import auth, config
 
 RASPI_SCANNER_PATH = Path(__file__).resolve().parent.parent / "raspi-scanner.py"
 
@@ -73,6 +73,175 @@ class TestDashboardRefusesHttpFallback(unittest.TestCase):
         _, kwargs = mock_run.call_args
         self.assertEqual(kwargs["ssl_context"], ("/fake/cert.pem", "/fake/key.pem"))
         self.assertFalse(kwargs["debug"])
+
+
+class RaspiScannerAppTestCase(unittest.TestCase):
+    """Base per i test che parlano con l'app Flask reale via test_client().
+    scanner.auth e' un modulo singleton condiviso: patchare config.DATA_DIR
+    prima di caricare raspi-scanner.py (che chiama auth.ensure_default_user()
+    a livello di modulo) basta a isolare ogni test dal vero data/users.json."""
+
+    def setUp(self):
+        self._tmp_dir = tempfile.mkdtemp()
+        self._orig_data_dir = config.DATA_DIR
+        self._orig_users_path = config.USERS_JSON_PATH
+        self._orig_tls_cert = config.TLS_CERT_PATH
+        self._orig_tls_key = config.TLS_KEY_PATH
+        self._orig_generate = auth.generate_initial_password
+        config.DATA_DIR = self._tmp_dir
+        config.USERS_JSON_PATH = str(Path(self._tmp_dir) / "users.json")
+        config.TLS_CERT_PATH = str(Path(self._tmp_dir) / "tls_cert.pem")
+        config.TLS_KEY_PATH = str(Path(self._tmp_dir) / "tls_key.pem")
+        auth.generate_initial_password = lambda: "BootstrapPassw0rd"
+
+        self.module = _load_raspi_scanner_module()
+        self.module.app.testing = True
+        self.client = self.module.app.test_client()
+
+        # L'utente di bootstrap nasce con must_change_password=True: lo
+        # cambiamo subito cosi' i test seguenti non restano bloccati da
+        # _PASSWORD_CHANGE_ALWAYS_ALLOWED su endpoint che non c'entrano.
+        auth.set_password(auth.DEFAULT_USERNAME, "AdminPassw0rd1")
+        auth.add_user("operator1", "OperatorPassw0rd1", role="operator")
+        auth.add_user("viewer1", "ViewerPassw0rd1", role="viewer")
+
+        self.admin_auth = (auth.DEFAULT_USERNAME, "AdminPassw0rd1")
+        self.operator_auth = ("operator1", "OperatorPassw0rd1")
+        self.viewer_auth = ("viewer1", "ViewerPassw0rd1")
+
+    def tearDown(self):
+        auth.generate_initial_password = self._orig_generate
+        config.DATA_DIR = self._orig_data_dir
+        config.USERS_JSON_PATH = self._orig_users_path
+        config.TLS_CERT_PATH = self._orig_tls_cert
+        config.TLS_KEY_PATH = self._orig_tls_key
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
+
+class TestOriginCsrfProtection(RaspiScannerAppTestCase):
+    """P1: senza controllo di Origin, un <form method="POST"> ospitato su
+    un sito malevolo potrebbe far ripartire uno scan (o peggio) sfruttando
+    le credenziali Basic Auth gia' salvate dal browser dell'operatore."""
+
+    def test_mutating_request_with_foreign_origin_is_blocked(self):
+        resp = self.client.post(
+            "/api/scan/stop", auth=self.operator_auth,
+            headers={"Origin": "http://evil.example.com"},
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.get_json()["error"], "forbidden_origin")
+
+    def test_mutating_request_with_matching_origin_is_allowed(self):
+        resp = self.client.post(
+            "/api/scan/stop", auth=self.operator_auth,
+            headers={"Origin": "http://localhost"},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_mutating_request_without_origin_header_is_allowed(self):
+        """Molti client (curl, richieste dirette same-origin di alcuni
+        browser) non mandano affatto l'header Origin: non va bloccata una
+        richiesta legittima solo perche' non lo manda."""
+        resp = self.client.post("/api/scan/stop", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_get_request_ignores_origin(self):
+        """Il controllo Origin si applica solo ai metodi mutanti: una GET
+        con Origin estraneo non deve mai essere bloccata da questo
+        meccanismo (non e' un attacco CSRF possibile su una GET idempotente)."""
+        resp = self.client.get(
+            "/api/network", auth=self.viewer_auth,
+            headers={"Origin": "http://evil.example.com"},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+
+class TestRoleBasedAccessControl(RaspiScannerAppTestCase):
+    def test_viewer_can_read_network_status(self):
+        resp = self.client.get("/api/network", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_viewer_cannot_start_scan(self):
+        resp = self.client.post("/api/scan/start", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.get_json()["error"], "forbidden")
+
+    def test_operator_can_start_scan(self):
+        resp = self.client.post("/api/scan/start", auth=self.operator_auth)
+        self.assertNotEqual(resp.status_code, 403)
+
+    def test_operator_cannot_start_hotspot(self):
+        """L'hotspot apre un nuovo punto di accesso non autenticato:
+        trattato come admin-only, non basta il ruolo operator."""
+        resp = self.client.post(
+            "/api/hotspot/start", auth=self.operator_auth,
+            json={"ssid": "test", "password": "password123"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_viewer_cannot_list_users(self):
+        resp = self.client.get("/api/settings/users", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_admin_can_list_users_with_roles(self):
+        resp = self.client.get("/api/settings/users", auth=self.admin_auth)
+        self.assertEqual(resp.status_code, 200)
+        by_name = {u["username"]: u["role"] for u in resp.get_json()["users"]}
+        self.assertEqual(by_name["operator1"], "operator")
+
+    def test_operator_cannot_add_user(self):
+        resp = self.client.post(
+            "/api/settings/users", auth=self.operator_auth,
+            json={"username": "nuovo", "password": "password123"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_admin_can_add_user_with_role(self):
+        resp = self.client.post(
+            "/api/settings/users", auth=self.admin_auth,
+            json={"username": "nuovo", "password": "password123", "role": "operator"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(auth.get_role("nuovo"), "operator")
+
+    def test_operator_cannot_delete_user(self):
+        resp = self.client.delete("/api/settings/users/viewer1", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 403)
+
+
+class TestSettingsMeIncludesRole(RaspiScannerAppTestCase):
+    def test_returns_own_role(self):
+        resp = self.client.get("/api/settings/me", auth=self.operator_auth)
+        self.assertEqual(resp.get_json()["role"], "operator")
+
+
+class TestPasswordChangeSelfOrAdmin(RaspiScannerAppTestCase):
+    """Ogni utente puo' sempre cambiare la PROPRIA password; cambiare
+    quella di un altro utente richiede il ruolo admin."""
+
+    def test_user_can_change_own_password(self):
+        resp = self.client.post(
+            "/api/settings/users/password", auth=self.viewer_auth,
+            json={"username": "viewer1", "password": "NuovaPassword123"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(auth.verify("viewer1", "NuovaPassword123"))
+
+    def test_non_admin_cannot_change_others_password(self):
+        resp = self.client.post(
+            "/api/settings/users/password", auth=self.viewer_auth,
+            json={"username": "operator1", "password": "NuovaPassword123"},
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(auth.verify("operator1", "NuovaPassword123"))
+
+    def test_admin_can_change_others_password(self):
+        resp = self.client.post(
+            "/api/settings/users/password", auth=self.admin_auth,
+            json={"username": "operator1", "password": "NuovaPassword123"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(auth.verify("operator1", "NuovaPassword123"))
 
 
 if __name__ == "__main__":

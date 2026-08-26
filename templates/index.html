@@ -188,15 +188,24 @@
         printed once to the service log — no fixed default.
       </p>
 
-      <div id="settings-user-list" class="user-list"></div>
+      <p class="modal-desc" id="settings-my-account"></p>
 
-      <h3 class="settings-subtitle">Add user</h3>
-      <div class="modal-row">
-        <input type="text" id="new-user-username" class="modal-input" placeholder="Username">
-        <input type="text" id="new-user-password" class="modal-input" placeholder="Password (min. 6 characters)">
-        <button class="btn small" id="btn-add-user">➕ Add</button>
+      <div id="settings-admin-section" class="hidden">
+        <div id="settings-user-list" class="user-list"></div>
+
+        <h3 class="settings-subtitle">Add user</h3>
+        <div class="modal-row">
+          <input type="text" id="new-user-username" class="modal-input" placeholder="Username">
+          <input type="text" id="new-user-password" class="modal-input" placeholder="Password (min. 6 characters)">
+          <select id="new-user-role" class="modal-input">
+            <option value="viewer">Viewer</option>
+            <option value="operator">Operator</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button class="btn small" id="btn-add-user">➕ Add</button>
+        </div>
+        <span id="add-user-msg" class="msg"></span>
       </div>
-      <span id="add-user-msg" class="msg"></span>
 
       <h3 class="settings-subtitle">Change password</h3>
       <div class="modal-row">

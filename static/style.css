@@ -320,12 +320,18 @@ a.link:hover { text-decoration: underline; }
 
 .settings-subtitle { font-size: 13px; font-weight: 700; color: var(--text); margin: 22px 0 10px; }
 .user-list { margin-bottom: 4px; }
+#settings-admin-section.hidden { display: none; }
 .user-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 9px 12px; border: 1px solid var(--border-soft); font-size: 13px;
   background: var(--panel-2); border-radius: 7px; margin-bottom: 6px;
 }
 .user-row .btn.small { margin: 0; }
+.role-badge {
+  display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 5px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+  background: var(--panel); color: var(--text-dim); border: 1px solid var(--border-soft);
+}
 
 .hotspot-status {
   background: var(--panel-2);

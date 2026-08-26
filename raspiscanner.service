@@ -12,5 +12,24 @@ ExecStart=/opt/raspiscanner/venv/bin/python3 /opt/raspiscanner/raspi-scanner.py
 Restart=on-failure
 RestartSec=5
 
+# Hardening (P1, conservativo): resta root — la scansione raw-socket e la
+# riconfigurazione di rete lo richiedono, una separazione dei privilegi
+# richiederebbe una riscrittura architetturale (processo helper separato)
+# non verificabile in modo affidabile senza un Raspberry Pi reale — ma si
+# tolgono i permessi non necessari a quel compito specifico.
+NoNewPrivileges=true
+# NON strict: strict rende /etc read-only, e dhclient deve poter scrivere
+# /etc/resolv.conf durante l'autoconfigurazione della rete.
+ProtectSystem=true
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+
 [Install]
 WantedBy=multi-user.target

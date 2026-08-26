@@ -1,5 +1,12 @@
 const $ = (id) => document.getElementById(id);
 
+// Popolato una volta in init() da /api/settings/me: la UI dei ruoli (sezione
+// gestione utenti visibile solo agli admin, dropdown cambio password) si basa
+// su questo, ma e' solo un aiuto visivo — l'enforcement vero e' lato server
+// (@require_role in raspi-scanner.py), qui serve solo a non mostrare
+// controlli che il backend rifiuterebbe comunque con 403.
+let CURRENT_USER = { username: null, role: null };
+
 function escapeHtml(s) {
   if (s === null || s === undefined) return "";
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -334,8 +341,25 @@ function setupTabs() {
 }
 
 async function refreshUsers() {
-  const list = $("settings-user-list");
+  $("settings-my-account").textContent = CURRENT_USER.username
+    ? `Signed in as ${CURRENT_USER.username} (role: ${CURRENT_USER.role}).`
+    : "";
+
+  const isAdmin = CURRENT_USER.role === "admin";
+  $("settings-admin-section").classList.toggle("hidden", !isAdmin);
+
   const select = $("change-pass-username");
+  if (!isAdmin) {
+    // Un utente non-admin puo' cambiare solo la propria password (vedi
+    // check self-or-admin lato server): niente dropdown, solo il proprio
+    // username, per non far credere che si possa scegliere altro.
+    select.innerHTML = `<option value="${escapeHtml(CURRENT_USER.username)}">${escapeHtml(CURRENT_USER.username)}</option>`;
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+
+  const list = $("settings-user-list");
   try {
     const res = await fetch("/api/settings/users");
     const data = await res.json();
@@ -343,14 +367,15 @@ async function refreshUsers() {
 
     list.innerHTML = users.map((u) => `
       <div class="user-row">
-        <span>👤 ${escapeHtml(u)}</span>
-        <button class="btn small btn-remove-user" data-username="${escapeHtml(u)}" ${users.length <= 1 ? "disabled" : ""}>🗑 Remove</button>
+        <span>👤 ${escapeHtml(u.username)} <span class="role-badge">${escapeHtml(u.role)}</span></span>
+        <button class="btn small btn-remove-user" data-username="${escapeHtml(u.username)}" ${users.length <= 1 ? "disabled" : ""}>🗑 Remove</button>
       </div>
     `).join("");
 
     const current = select.value;
-    select.innerHTML = users.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
-    if (users.includes(current)) select.value = current;
+    const usernames = users.map((u) => u.username);
+    select.innerHTML = usernames.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
+    if (usernames.includes(current)) select.value = current;
   } catch (e) {
     list.innerHTML = "Failed to fetch users.";
   }
@@ -359,13 +384,14 @@ async function refreshUsers() {
 async function addUser() {
   const username = $("new-user-username").value.trim();
   const password = $("new-user-password").value;
+  const role = $("new-user-role").value;
   const msg = $("add-user-msg");
   msg.textContent = "Adding...";
   try {
     const res = await fetch("/api/settings/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, role }),
     });
     const data = await res.json();
     msg.textContent = data.message || "";
@@ -605,6 +631,7 @@ async function checkForcedPasswordChange() {
     const res = await fetch("/api/settings/me");
     if (!res.ok) return false;
     const data = await res.json();
+    CURRENT_USER = { username: data.username, role: data.role };
     if (data.must_change_password) {
       $("forced-password-username").textContent = data.username;
       $("forced-password-overlay").dataset.username = data.username;

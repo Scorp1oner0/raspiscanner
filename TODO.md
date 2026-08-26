@@ -33,19 +33,45 @@ done — a small, solid, documented 1.0 beats an endlessly growing 0.x.
 
 ## 🟠 P1 — Security hardening
 
-- [ ] User roles: `admin` / `operator` / `viewer`.
-- [ ] Restrict `/api/settings/users` (create/delete/password/account
-      management) to admins only.
-- [ ] CSRF protection, especially on every dashboard POST.
-- [ ] Origin/Host checks to avoid unwanted cross-origin requests.
+- [x] User roles: `admin` / `operator` / `viewer`. *(`scanner.auth`: `ROLES`,
+      `ROLE_RANK`, `has_role_at_least`; every route tagged via
+      `@require_role(...)` in `raspi-scanner.py`; pre-existing users with no
+      role on disk default to `admin`, never silently downgraded.)*
+- [x] Restrict `/api/settings/users` (create/delete/password/account
+      management) to admins only. *(`GET`/`POST /api/settings/users` and
+      `DELETE /api/settings/users/<username>` are `@require_role("admin")`;
+      `POST /api/settings/users/password` allows self-or-admin: any user can
+      always change their own password, only an admin can change someone
+      else's.)*
+- [x] CSRF protection, especially on every dashboard POST. *(`_origin_is_trusted`
+      + Origin check in `_require_auth` for all mutating methods — see next
+      item, same mechanism covers both.)*
+- [x] Origin/Host checks to avoid unwanted cross-origin requests. *(HTTP Basic
+      Auth has no session/cookie, so a classic CSRF token doesn't apply
+      cleanly; validating the `Origin` header — when the browser sends one —
+      against `request.host_url` blocks the same cross-site-POST attack.)*
 - [ ] Privilege handling: evaluate running Flask as non-root, possibly a
       small privileged helper for ARP/raw sockets, DHCP, `ip`,
-      NetworkManager/hotspot.
-- [ ] systemd hardening: `NoNewPrivileges`, minimal capabilities,
-      `ProtectSystem`, `ProtectHome`, `PrivateTmp`, evaluate
-      `RestrictAddressFamilies`.
-- [ ] Fix the scan-start race condition: lock before checking
-      `_state["running"]`, guarantee only one concurrent scan.
+      NetworkManager/hotspot. *(Deliberately deferred: an architectural
+      rewrite that can't be reliably validated without real Raspberry Pi
+      hardware, given the tool's core scanning depends on exactly the
+      low-level socket operations this would restrict.)*
+- [x] systemd hardening: `NoNewPrivileges`, minimal capabilities,
+      `ProtectSystem`, `ProtectHome`, `PrivateTmp`. *(`raspiscanner.service`:
+      stays `User=root` — see privilege-separation item above — but adds
+      `NoNewPrivileges`, `ProtectSystem=true` (not `strict`: dhclient must
+      still write `/etc/resolv.conf`), `ProtectHome`, `PrivateTmp`,
+      `ProtectKernelModules/Logs/Clock/Hostname`, `RestrictSUIDSGID`,
+      `RestrictRealtime`, `CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW`.
+      Needs live validation on real hardware — network reconfig, hotspot,
+      DHCP fallback, Wi-Fi connect all spawn external commands as root.)*
+      `RestrictAddressFamilies` evaluated and deferred alongside privilege
+      separation above (same rewrite-risk reasoning).
+- [x] Fix the scan-start race condition: lock before checking
+      `_state["running"]`, guarantee only one concurrent scan. *(`run_scan()`
+      now does check-then-set atomically under one `with _lock:` block;
+      `TestRunScanRaceCondition` in `tests/test_scan_engine.py` reproduces
+      the race deterministically with a 20-thread barrier.)*
 
 ## 🟡 P2 — Networking robustness
 

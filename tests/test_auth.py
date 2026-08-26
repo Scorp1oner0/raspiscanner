@@ -188,6 +188,93 @@ class TestSetPassword(AuthTestCase):
         self.assertFalse(ok)
 
 
+class TestRoles(AuthTestCase):
+    def setUp(self):
+        super().setUp()
+        auth.ensure_default_user()
+
+    def test_bootstrap_user_is_admin(self):
+        self.assertEqual(auth.get_role(auth.DEFAULT_USERNAME), "admin")
+
+    def test_add_user_default_role_is_viewer(self):
+        """Principio del privilegio minimo: senza specificare un ruolo,
+        un nuovo utente non deve ereditare accesso pieno per omissione."""
+        auth.add_user("tecnico", "password123")
+        self.assertEqual(auth.get_role("tecnico"), "viewer")
+
+    def test_add_user_explicit_role(self):
+        auth.add_user("operatore", "password123", role="operator")
+        self.assertEqual(auth.get_role("operatore"), "operator")
+
+    def test_add_user_rejects_invalid_role(self):
+        ok, message = auth.add_user("tecnico", "password123", role="superadmin")
+        self.assertFalse(ok)
+        self.assertIn("Role", message)
+        self.assertIsNone(auth.get_role("tecnico"))
+
+    def test_get_role_unknown_user_returns_none(self):
+        self.assertIsNone(auth.get_role("nessuno"))
+
+    def test_has_role_at_least_respects_order(self):
+        auth.add_user("viewer1", "password123", role="viewer")
+        auth.add_user("operator1", "password123", role="operator")
+        self.assertTrue(auth.has_role_at_least("viewer1", "viewer"))
+        self.assertFalse(auth.has_role_at_least("viewer1", "operator"))
+        self.assertTrue(auth.has_role_at_least("operator1", "viewer"))
+        self.assertTrue(auth.has_role_at_least("operator1", "operator"))
+        self.assertFalse(auth.has_role_at_least("operator1", "admin"))
+        self.assertTrue(auth.has_role_at_least(auth.DEFAULT_USERNAME, "admin"))
+
+    def test_has_role_at_least_unknown_user_is_false(self):
+        self.assertFalse(auth.has_role_at_least("nessuno", "viewer"))
+
+    def test_set_password_preserves_role(self):
+        """Bug reale che questo fix evita: set_password riscriveva
+        l'intero record perdendo il ruolo assegnato, declassando in
+        silenzio qualunque utente non-default al primo cambio password."""
+        auth.add_user("operatore", "password123", role="operator")
+        auth.set_password("operatore", "nuovapassword")
+        self.assertEqual(auth.get_role("operatore"), "operator")
+        self.assertTrue(auth.verify("operatore", "nuovapassword"))
+
+    def test_list_users_includes_role(self):
+        auth.add_user("tecnico", "password123", role="operator")
+        users = auth.list_users()
+        by_name = {u["username"]: u["role"] for u in users}
+        self.assertEqual(by_name[auth.DEFAULT_USERNAME], "admin")
+        self.assertEqual(by_name["tecnico"], "operator")
+
+
+class TestRoleBackwardCompatibility(AuthTestCase):
+    """Utenti creati da versioni precedenti (senza il campo "role", sia in
+    formato stringa diretta sia in dict) devono risultare "admin": avevano
+    di fatto accesso pieno prima che i ruoli esistessero, un aggiornamento
+    non deve declassarli in silenzio."""
+
+    def test_old_flat_string_format_is_admin(self):
+        from werkzeug.security import generate_password_hash
+
+        Path(config.DATA_DIR).mkdir(parents=True, exist_ok=True)
+        with open(config.USERS_JSON_PATH, "w", encoding="utf-8") as fh:
+            json.dump({"RaspiScanner": generate_password_hash("OldPassword")}, fh)
+
+        self.assertEqual(auth.get_role("RaspiScanner"), "admin")
+
+    def test_dict_without_role_field_is_admin(self):
+        from werkzeug.security import generate_password_hash
+
+        Path(config.DATA_DIR).mkdir(parents=True, exist_ok=True)
+        with open(config.USERS_JSON_PATH, "w", encoding="utf-8") as fh:
+            json.dump({
+                "RaspiScanner": {
+                    "hash": generate_password_hash("P0Password"),
+                    "must_change_password": False,
+                },
+            }, fh)
+
+        self.assertEqual(auth.get_role("RaspiScanner"), "admin")
+
+
 class TestRemoveUser(AuthTestCase):
     def setUp(self):
         super().setUp()

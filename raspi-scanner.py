@@ -21,6 +21,7 @@ import logging
 import sys
 import threading
 import time
+from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request
 
@@ -47,12 +48,57 @@ _started = False
 # bootstrap ha una password casuale generata al primo avvio, vedi
 # scanner.auth — finche' non viene cambiata, nessun controllo di rete o
 # scan deve essere possibile, non solo "consigliato cambiarla appena puoi").
+# NON serve GET /api/settings/users qui: l'overlay di cambio forzato usa
+# solo /api/settings/me (sempre raggiungibile) per sapere il proprio
+# username, mai la lista completa utenti.
 _PASSWORD_CHANGE_ALWAYS_ALLOWED = {
     ("GET", "/"),
     ("GET", "/api/settings/me"),
-    ("GET", "/api/settings/users"),
     ("POST", "/api/settings/users/password"),
 }
+
+
+def require_role(min_role):
+    """Blocca l'endpoint con 403 se l'utente autenticato non ha almeno
+    `min_role` (viewer < operator < admin, vedi scanner.auth.ROLES). Va
+    applicato SOTTO @app.route (piu' vicino alla funzione), non sopra —
+    ordine standard dei decorator Flask."""
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            creds = request.authorization
+            if not creds or not auth.has_role_at_least(creds.username, min_role):
+                return jsonify({
+                    "error": "forbidden",
+                    "message": f"Requires the '{min_role}' role or higher.",
+                }), 403
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+_MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+
+def _origin_is_trusted():
+    """True se la richiesta non ha un header Origin (molti browser non lo
+    mandano per richieste dirette same-origin) o se ce l'ha e corrisponde
+    esattamente a questo host.
+
+    Serve sia da CSRF-protection sia da Origin/Host check con un solo
+    meccanismo: con HTTP Basic Auth non c'e' un cookie di sessione, ma il
+    browser RIATTACCA DA SOLO le credenziali gia' inserite a qualunque
+    richiesta verso la stessa origin — incluso un semplice <form
+    method="POST"> ospitato su un sito malevolo che punta a un endpoint
+    di questa dashboard. Un token CSRF classico richiederebbe uno stato
+    di sessione che qui non esiste; verificare Origin (quando presente)
+    e' il controllo standard per app stateless come questa e blocca
+    esattamente lo stesso attacco.
+    """
+    origin = request.headers.get("Origin")
+    if not origin:
+        return True
+    return origin.rstrip("/") == request.host_url.rstrip("/")
 
 
 @app.before_request
@@ -65,6 +111,11 @@ def _require_auth():
         )
     if request.path.startswith("/static/"):
         return
+    if request.method in _MUTATING_METHODS and not _origin_is_trusted():
+        return jsonify({
+            "error": "forbidden_origin",
+            "message": "Cross-origin request blocked.",
+        }), 403
     if auth.must_change_password(creds.username) and (request.method, request.path) not in _PASSWORD_CHANGE_ALWAYS_ALLOWED:
         return jsonify({
             "error": "password_change_required",
@@ -77,6 +128,7 @@ def api_settings_me():
     creds = request.authorization
     return jsonify({
         "username": creds.username,
+        "role": auth.get_role(creds.username),
         "must_change_password": auth.must_change_password(creds.username),
     })
 
@@ -98,11 +150,13 @@ def index():
 
 
 @app.route("/api/network")
+@require_role("viewer")
 def api_network():
     return jsonify(network_setup.get_status())
 
 
 @app.route("/api/network/rescan", methods=["POST"])
+@require_role("operator")
 def api_network_rescan():
     data = request.get_json(silent=True) or {}
     force = bool(data.get("force"))
@@ -115,6 +169,7 @@ def api_network_rescan():
 
 
 @app.route("/api/network/choose", methods=["POST"])
+@require_role("operator")
 def api_network_choose():
     data = request.get_json(silent=True) or {}
     cidr = data.get("cidr")
@@ -128,12 +183,14 @@ def api_network_choose():
 
 
 @app.route("/api/wifi/networks")
+@require_role("viewer")
 def api_wifi_networks():
     iface = request.args.get("iface") or None
     return jsonify(network_setup.wifi_scan_networks(iface=iface))
 
 
 @app.route("/api/wifi/connect", methods=["POST"])
+@require_role("operator")
 def api_wifi_connect():
     data = request.get_json(silent=True) or {}
     ssid = data.get("ssid")
@@ -146,11 +203,13 @@ def api_wifi_connect():
 
 
 @app.route("/api/wifi/interfaces")
+@require_role("viewer")
 def api_wifi_interfaces():
     return jsonify(network_setup.list_wifi_ifaces())
 
 
 @app.route("/api/hotspot/status")
+@require_role("viewer")
 def api_hotspot_status():
     status = hotspot.get_hotspot_status()
     wifi_iface = request.args.get("iface") or network_setup.find_default_wifi_iface() or "wlan0"
@@ -159,11 +218,13 @@ def api_hotspot_status():
 
 
 @app.route("/api/hotspot/generate-password")
+@require_role("operator")
 def api_hotspot_generate_password():
     return jsonify({"password": hotspot.generate_password()})
 
 
 @app.route("/api/hotspot/start", methods=["POST"])
+@require_role("admin")
 def api_hotspot_start():
     data = request.get_json(silent=True) or {}
     ssid = data.get("ssid") or ""
@@ -176,39 +237,46 @@ def api_hotspot_start():
 
 
 @app.route("/api/hotspot/stop", methods=["POST"])
+@require_role("admin")
 def api_hotspot_stop():
     ok, message = hotspot.stop_hotspot()
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 
 @app.route("/api/scan/start", methods=["POST"])
+@require_role("operator")
 def api_scan_start():
     ok, message = scan_engine.run_scan()
     return jsonify({"ok": ok, "message": message}), (200 if ok else 409)
 
 
 @app.route("/api/scan/stop", methods=["POST"])
+@require_role("operator")
 def api_scan_stop():
     scan_engine.stop_scan()
     return jsonify({"ok": True})
 
 
 @app.route("/api/scan/status")
+@require_role("viewer")
 def api_scan_status():
     return jsonify(scan_engine.get_state())
 
 
 @app.route("/api/devices")
+@require_role("viewer")
 def api_devices():
     return jsonify(scan_engine.devices_all())
 
 
 @app.route("/api/devices/cameras")
+@require_role("viewer")
 def api_devices_cameras():
     return jsonify(scan_engine.devices_cameras())
 
 
 @app.route("/api/security/summary")
+@require_role("viewer")
 def api_security_summary():
     """Riepilogo compatto per la barra KPI della dashboard: riusa la stessa
     logica del report testuale (security.find_security_issues + risk.summarize)
@@ -221,6 +289,7 @@ def api_security_summary():
 
 
 @app.route("/api/report")
+@require_role("viewer")
 def api_report():
     state = scan_engine.get_state()
     text = assessment.generate_all(state["devices"])
@@ -238,6 +307,7 @@ def api_report():
 
 
 @app.route("/api/export")
+@require_role("viewer")
 def api_export():
     kind = request.args.get("type", "all")
     fmt = request.args.get("format", "json")
@@ -269,25 +339,42 @@ def api_export():
 
 
 @app.route("/api/settings/users")
+@require_role("admin")
 def api_settings_users():
-    return jsonify({"users": auth.list_usernames()})
+    return jsonify({"users": auth.list_users()})
 
 
 @app.route("/api/settings/users", methods=["POST"])
+@require_role("admin")
 def api_settings_add_user():
     data = request.get_json(silent=True) or {}
-    ok, message = auth.add_user(data.get("username"), data.get("password"))
+    role = data.get("role") or auth.DEFAULT_ROLE
+    ok, message = auth.add_user(data.get("username"), data.get("password"), role=role)
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 
 @app.route("/api/settings/users/password", methods=["POST"])
 def api_settings_change_password():
+    # Eccezione al require_role standard: ogni utente autenticato puo'
+    # sempre cambiare la PROPRIA password (altrimenti un operator/viewer
+    # con must_change_password attivo resterebbe bloccato per sempre, vedi
+    # _PASSWORD_CHANGE_ALWAYS_ALLOWED sopra). Cambiare la password di UN
+    # ALTRO utente invece richiede admin.
     data = request.get_json(silent=True) or {}
-    ok, message = auth.set_password(data.get("username"), data.get("password"))
+    target_username = data.get("username")
+    creds = request.authorization
+    is_self = creds and creds.username == target_username
+    if not is_self and not auth.has_role_at_least(creds.username, "admin"):
+        return jsonify({
+            "error": "forbidden",
+            "message": "Only admins can change another user's password.",
+        }), 403
+    ok, message = auth.set_password(target_username, data.get("password"))
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 
 @app.route("/api/settings/users/<username>", methods=["DELETE"])
+@require_role("admin")
 def api_settings_delete_user(username):
     ok, message = auth.remove_user(username)
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)

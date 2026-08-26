@@ -294,16 +294,22 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
 
 
 def run_scan():
-    if _state["running"]:
-        return False, "Scan already in progress"
-
-    networks = _active_networks()
-    if not networks:
-        return False, "No active network (eth/wifi) to scan"
-
-    _stop_flag.clear()
-    _update(running=True, progress=0, total=0, current_ip=None,
-             started_at=time.time(), finished_at=None, error=None, devices={})
+    # Check-then-set atomico sotto lo stesso lock: senza tenerlo per tutto
+    # il blocco, due richieste /api/scan/start concorrenti potevano
+    # entrambe leggere running=False prima che l'altra lo mettesse a True,
+    # partendo entrambe (due scan paralleli che si accavallano sullo
+    # stesso _state["devices"]). _update() non va chiamata qui dentro:
+    # prende lo stesso lock e threading.Lock non e' rientrante, farebbe
+    # deadlock — si scrive _state direttamente, gia' dentro il blocco.
+    with _lock:
+        if _state["running"]:
+            return False, "Scan already in progress"
+        networks = _active_networks()
+        if not networks:
+            return False, "No active network (eth/wifi) to scan"
+        _stop_flag.clear()
+        _state.update(running=True, progress=0, total=0, current_ip=None,
+                       started_at=time.time(), finished_at=None, error=None, devices={})
 
     t = threading.Thread(target=_run_scan_thread, args=(networks,), daemon=True)
     t.start()
