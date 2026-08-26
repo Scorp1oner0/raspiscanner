@@ -1,170 +1,167 @@
 # RaspiScanner
 
-Progetto standalone: un Raspberry Pi (o qualunque Linux) che, collegato via
-ethernet a una rete sconosciuta, si autoconfigura per parlarci e offre una
-dashboard web **e** una modalita' da riga di comando per scansionare i
-dispositivi presenti — telecamere IP, NVR/DVR, apparati di rete — con un
-report di sicurezza in stile "assessment".
+Standalone project: a Raspberry Pi (or any Linux box) that, connected via
+ethernet to an unfamiliar network, auto-configures itself to talk to it and
+offers a web dashboard **and** a command-line mode to scan the devices
+present — IP cameras, NVR/DVR, network gear — with a security "assessment"
+style report.
 
-## Perché RaspiScanner?
+## Why RaspiScanner?
 
-Non è l'ennesimo ARP scanner o l'ennesimo client ONVIF: esistono già ottimi
-strumenti per la discovery di rete generica (Nmap, Netdiscover, arp-scan) e
-per collegarsi a singole telecamere via ONVIF/RTSP. RaspiScanner nasce per
-un caso d'uso più specifico che nessuno dei due copre da solo: mettere in un
-unico strumento portatile — un Raspberry Pi che si autoconfigura su una rete
-sconosciuta al volo, senza bisogno di sapere in anticipo classe/gateway —
-la discovery di rete, il fingerprinting via ARP/porte/ONVIF, la
-**distinzione tra telecamera, NVR/DVR e apparato di rete**, e un report di
-sicurezza (probe attivi ma non intrusivi) pensato per il sopralluogo su un impianto di
-videosorveglianza esistente, non per un audit di rete generico. Non
-reinventa Nmap: costruisce un livello sopra alcuni dei suoi stessi
-meccanismi di discovery, orientato a un caso d'uso preciso.
+It's not just another ARP scanner or another ONVIF client: great tools
+already exist for generic network discovery (Nmap, Netdiscover, arp-scan)
+and for connecting to individual cameras via ONVIF/RTSP. RaspiScanner
+exists for a more specific use case that neither covers on its own:
+bundling into a single portable tool — a Raspberry Pi that auto-configures
+itself on an unfamiliar network on the fly, without needing to know the
+subnet/gateway in advance — network discovery, ARP/port/ONVIF
+fingerprinting, **distinguishing between camera, NVR/DVR and network
+gear**, and a security report (active but non-intrusive probes) built for
+surveying an existing video surveillance installation, not for a generic
+network audit. It doesn't reinvent Nmap: it builds a layer on top of some
+of its own discovery mechanisms, aimed at one specific use case.
 
-## Cosa fa
+## What it does
 
-1. **Autoconfigurazione ethernet.** Quando l'interfaccia `eth0` rileva il
-   cavo collegato e non ha gia' un indirizzo, prova prima un lease **DHCP**.
-   Se non arriva entro il timeout, prova **tutte** le **classi private
-   preimpostate** (192.168.1.0/24, 192.168.0.0/24, 10.0.0.0/24, ecc. — vedi
-   `scanner/config.py`), non si ferma alla prima: per ciascuna si assegna
-   un IP statico "alto" e verifica con un probe ARP se ci sono host che
-   rispondono. Se e' viva una sola classe, viene assegnata direttamente.
-   Se ne sono vive **piu' di una** (es. piu' subnet private configurate
-   manualmente sullo stesso segmento), lo strumento non sceglie da solo
-   per un ordine di priorita' arbitrario: l'interfaccia resta senza
-   indirizzo e la dashboard mostra tutte le classi candidate trovate
-   (con quanti host ha visto ciascuna), chiedendo di sceglierne una da
-   scansionare. Il monitor gira in continuo: se scolleghi e ricolleghi il
-   cavo (magari su un'altra rete), rifà tutto da capo automaticamente.
+1. **Ethernet auto-configuration.** When the `eth0` interface detects the
+   cable plugged in and doesn't already have an address, it first tries a
+   **DHCP** lease. If none arrives within the timeout, it tries **all**
+   the **preset private classes** (192.168.1.0/24, 192.168.0.0/24,
+   10.0.0.0/24, etc. — see `scanner/config.py`), not just the first one:
+   for each, it assigns a "high" static IP and checks with an ARP probe
+   whether any hosts respond. If only one class turns out to be alive, it
+   gets assigned directly. If **more than one** is alive (e.g. several
+   private subnets manually configured on the same segment), the tool
+   does not pick one on its own based on an arbitrary priority order: the
+   interface stays without an address and the dashboard shows all the
+   candidate classes found (with how many hosts each one saw), asking you
+   to pick one to scan. The monitor runs continuously: if you unplug and
+   replug the cable (maybe on a different network), it redoes everything
+   automatically.
 
-   Se l'interfaccia ha **gia'** uno o piu' indirizzi IPv4 che il tool non
-   ha assegnato lui stesso (es. IP secondari configurati a mano per
-   raggiungere piu' subnet sullo stesso cavo), non li tocca: li rileva e
-   li usa cosi' come sono (modalita' "manuale" nella dashboard). Il
-   pulsante "Riconfigura rete" ha un'opzione "forza" per azzerare comunque
-   tutto e far ripartire DHCP/fallback da zero.
+   If the interface **already** has one or more IPv4 addresses that the
+   tool didn't assign itself (e.g. secondary IPs manually configured to
+   reach multiple subnets over the same cable), it leaves them alone: it
+   detects them and uses them as they are ("manual" mode in the
+   dashboard). The "Reconfigure network" button has a "force" option to
+   wipe everything anyway and restart DHCP/fallback from scratch.
 
-2. **Scan dispositivi** su **tutte** le subnet attive di eth e di **ogni**
-   scheda Wi-Fi presente (un dispositivo puo' averne piu' di una — es. una
-   usata come client per raggiungere la rete esistente, un'altra dedicata
-   all'hotspot — e vengono tracciate/scansionate tutte, non solo la prima
-   trovata; ogni indirizzo IPv4 configurato, non solo il primo): ARP scan per IP/MAC,
-   port scan mirato + banner HTTP, probe **ONVIF WS-Discovery** (con
-   `GetDeviceInformation` per vendor/model reali quando disponibile),
-   lookup vendor da OUI offline. Ogni dispositivo viene classificato, in
-   ordine di specificita': **Telecamera**/**NVR-DVR** (segnali di
-   protocollo — ONVIF, porte tipiche RTSP 554/Hikvision 8000/Dahua
-   37777/34567, banner HTTP — non sul vendor MAC, poco affidabile
-   offline), **Router**/**Switch**/**Access Point** (IP == gateway di
-   default, o banner/vendor), **Raspberry Pi**/altro hardware IoT
-   riconosciuto dal vendor, **PC**/**Stampante di rete** (porte tipiche
-   SMB/RDP/IPP/JetDirect), o **Generico** se nessuno di questi segnali e'
-   disponibile — limite strutturale, non un bug: un dispositivo senza
-   porte aperte (comune su telefoni e PC moderni con firewall attivo di
-   default) non espone nulla da leggere, e non si va oltre con fingerprint
-   attivo dello stack TCP/IP in stile `nmap -O`.
+2. **Device scan** across **all** active subnets on eth and on **every**
+   Wi-Fi adapter present (a device can have more than one — e.g. one used
+   as a client to reach an existing network, another dedicated to the
+   hotspot — and all of them are tracked/scanned, not just the first one
+   found; every configured IPv4 address, not just the first): ARP scan for
+   IP/MAC, targeted port scan + HTTP banners, **ONVIF WS-Discovery** probe
+   (with `GetDeviceInformation` for real vendor/model when available),
+   offline OUI vendor lookup. Each device is classified, in order of
+   specificity: **Camera**/**NVR-DVR** (protocol signals — ONVIF, typical
+   ports RTSP 554/Hikvision 8000/Dahua 37777/34567, HTTP banners — not on
+   the MAC vendor, unreliable offline), **Router**/**Switch**/**Access
+   Point** (IP == default gateway, or banner/vendor), **Raspberry
+   Pi**/other IoT hardware recognized by vendor, **PC**/**Network
+   printer** (typical SMB/RDP/IPP/JetDirect ports), or **Generic** if none
+   of these signals is available — a structural limit, not a bug: a
+   device with no open ports (common on phones and modern PCs with a
+   default firewall) exposes nothing to read, and this tool doesn't go as
+   far as active TCP/IP stack fingerprinting `nmap -O`-style.
 
-3. **Report "NETWORK ASSESSMENT"**: per ogni rete scansionata, un report
-   testuale con dispositivi trovati per categoria (camere/NVR/rete/altro —
-   Raspberry Pi, PC, stampanti compaiono in "OTHER DEVICES", cosi' nessun
-   dispositivo trovato resta invisibile nel testo del report pur essendo
-   contato in "N devices discovered"), findings di sicurezza rilevati con
-   probe attivi ma non intrusivi (Telnet esposto, HTTP abilitato, servizio
-   con banner di default) e un riepilogo del rischio (Critical/High/
-   Medium/Low). Se richiesto mentre uno scan e' ancora in corso, il report
-   lo segnala esplicitamente (e' un'istantanea parziale, i conteggi
-   aumenteranno). Vedi `examples/sample_report.txt` per un
-   esempio completo. Disponibile sia dalla dashboard (scheda "Report") sia
-   da riga di comando (`--report`).
+3. **"NETWORK ASSESSMENT" report**: for each scanned network, a text
+   report with devices found by category (cameras/NVR/network/other —
+   Raspberry Pi, PCs, printers show up under "OTHER DEVICES", so no
+   discovered device stays invisible in the report text while still being
+   counted in "N devices discovered"), security findings from active but
+   non-intrusive probes (Telnet exposed, HTTP enabled, default-looking
+   service) and a risk summary (Critical/High/Medium/Low). If requested
+   while a scan is still running, the report says so explicitly (it's a
+   partial snapshot, counts will increase). See `examples/sample_report.txt`
+   for a full example. Available both from the dashboard ("Report" tab)
+   and from the command line (`--report`).
 
-4. **Dashboard web** (porta `7332`, polling HTTP, nessuna dipendenza da
-   CDN esterni — funziona anche offline; protetta da login, vedi
-   [Autenticazione dashboard](#autenticazione-dashboard)): stato di rete,
-   una card per **ciascuna** scheda Wi-Fi rilevata con elenco/connessione
-   indipendenti, tabella "Tutti i dispositivi", tabella "Solo camere"
-   (include anche gli NVR/DVR), scheda "Report", scheda "⚙️ Impostazioni"
-   per gestire gli utenti, esportazione **CSV/JSON**.
+4. **Web dashboard** (port `7332`, HTTP polling, no external CDN
+   dependency — works offline too; protected by a login, see
+   [Dashboard authentication](#dashboard-authentication)): network status,
+   one card per **each** detected Wi-Fi adapter with independent
+   listing/connection, "Devices" table, "Cameras" table (also includes
+   NVR/DVR, split into on-network vs. out-of-network), "Report" tab,
+   "Settings" tab to manage users, **CSV/JSON** export.
 
-5. **Hotspot Wi-Fi** (popup "📡 Hotspot" sulla card della scheda Wi-Fi
-   scelta): trasforma quella scheda da client (connessa a una rete
-   esistente) ad access point, utile per raggiungere la dashboard senza
-   cavo quando il dispositivo e' installato in un punto scomodo da cablare
-   (es. dentro una scatola in quota). SSID/password configurabili dal
-   popup (password generabile automaticamente); una volta attivo il
-   profilo resta salvato e si riattiva da solo ai riavvii successivi, cosi'
-   il dispositivo torna raggiungibile via Wi-Fi anche dopo un'interruzione
-   di corrente. **Attivarlo scollega quella scheda da qualunque rete a cui
-   era connessa**: la stessa antenna non puo' fare contemporaneamente
-   client e access point — con **due schede Wi-Fi** questo si aggira
-   dedicandone una all'hotspot e lasciando l'altra come client verso la
-   rete esistente. Richiede NetworkManager (`nmcli`), gia' usato per la
-   connessione Wi-Fi client.
+5. **Wi-Fi hotspot** ("📡 Hotspot" popup on the chosen Wi-Fi adapter's
+   card): turns that adapter from a client (connected to an existing
+   network) into an access point, useful for reaching the dashboard
+   without a cable when the device is installed somewhere hard to wire
+   (e.g. inside a box up high). SSID/password configurable from the popup
+   (password can be auto-generated); once active the profile stays saved
+   and reactivates itself on subsequent reboots, so the device stays
+   reachable over Wi-Fi even after a power outage. **Activating it
+   disconnects that adapter from whatever network it was on** — the same
+   radio can't be a client and an access point at the same time — with
+   **two Wi-Fi adapters** this is worked around by dedicating one to the
+   hotspot and leaving the other as a client toward the existing network.
+   Requires NetworkManager (`nmcli`), already used for the Wi-Fi client
+   connection.
 
-## Uso
+## Usage
 
 ```bash
-# Dashboard web (default)
+# Web dashboard (default)
 sudo python3 raspi-scanner.py
 
-# Report da riga di comando: scan completo + stampa NETWORK ASSESSMENT, poi esce
+# Command-line report: full scan + print NETWORK ASSESSMENT, then exit
 sudo python3 raspi-scanner.py --report
 ```
 
-## Requisiti
+## Requirements
 
-- Linux (pensato per Raspberry Pi OS) con Python 3.9+.
-- Va lanciato come **root** (o con capability `cap_net_raw,cap_net_admin`):
-  servono per l'ARP scan raw e per riconfigurare l'interfaccia (`ip addr`,
-  `dhclient`).
-- Pacchetti di sistema: `python3-venv`, `isc-dhcp-client` (per `dhclient`).
-  `nmcli` (NetworkManager) è opzionale, usato solo per l'elenco/connessione
-  Wi-Fi.
+- Linux (built for Raspberry Pi OS) with Python 3.9+.
+- Must be run as **root** (or with `cap_net_raw,cap_net_admin`
+  capabilities): needed for the raw ARP scan and to reconfigure the
+  interface (`ip addr`, `dhclient`).
+- System packages: `python3-venv`, `isc-dhcp-client` (for `dhclient`).
+  `nmcli` (NetworkManager) is optional, used only for Wi-Fi
+  listing/connection.
 
-## Limiti dello scan ARP (leggere prima di segnalare "non trova un dispositivo")
+## ARP scan limits (read before reporting "can't find a device")
 
-Lo scan dispositivi si basa su ARP: trova solo host che hanno un IP nella
-subnet scansionata e rispondono entro il timeout. Alcuni casi che sembrano
-bug non lo sono:
+The device scan is ARP-based: it only finds hosts that have an IP in the
+scanned subnet and respond within the timeout. Some cases that look like
+bugs aren't:
 
-- **La macchina su cui gira lo scanner stesso** non riceverebbe mai la
-  propria richiesta ARP broadcast di ritorno (nessuno switch la rimanda
-  sulla porta da cui e' arrivata) — per questo il tool la aggiunge sempre
-  esplicitamente ai risultati, IP e MAC li conosce gia' senza bisogno di
-  interrogare la rete.
-- **Switch unmanaged** (molti modelli economici) non hanno nessun indirizzo
-  IP: sono pura elettronica L2 e sono invisibili a *qualsiasi* scan basato
-  su IP, non solo al nostro. Se un dispositivo di rete non compare mai,
-  verifica se ha davvero un'interfaccia di gestione IP.
-- **Un dispositivo su un'altra subnet/VLAN**, raggiungibile solo tramite
-  routing (es. il ping funziona ma passa dal gateway), non verra' mai
-  trovato dall'ARP scan: e' un limite del protocollo, non un bug — l'ARP
-  non attraversa un router. Va scansionato dal segmento L2 giusto.
-- **Un host appena collegato** puo' non rispondere ancora: se lo switch
-  a monte ha (R)STP attivo, la porta resta in stato "listening" per
-  qualche secondo prima di inoltrare traffico, oltre al tempo che il
-  dispositivo stesso impiega a fare DHCP al boot. Aspetta 20-30s dopo aver
-  collegato un cavo prima di lanciare lo scan, o rilancialo se il primo
-  giro non lo trova.
-- Per verificare in modo indipendente dal tool se un dispositivo e'
-  davvero raggiungibile sulla subnet: `sudo arp-scan --interface=eth0
-  --localnet` oppure `sudo nmap -sn <subnet>`, oppure controlla la tabella
-  dei lease DHCP del router/AP.
+- **The machine running the scanner itself** would never receive its own
+  broadcast ARP request back (no switch forwards it back out the port it
+  came in on) — that's why the tool always adds it explicitly to the
+  results, since it already knows its own IP and MAC without needing to
+  query the network.
+- **Unmanaged switches** (many cheap models) have no IP address at all:
+  they're pure L2 electronics and are invisible to *any* IP-based scan,
+  not just this one. If a network device never shows up, check whether it
+  actually has an IP management interface.
+- **A device on another subnet/VLAN**, reachable only through routing
+  (e.g. ping works but goes through the gateway), will never be found by
+  the ARP scan: it's a protocol limit, not a bug — ARP doesn't cross a
+  router. It needs to be scanned from the correct L2 segment.
+- **A just-connected host** may not respond yet: if the upstream switch
+  has (R)STP active, the port stays in "listening" state for a few
+  seconds before forwarding traffic, on top of the time the device itself
+  takes to do DHCP at boot. Wait 20-30s after plugging in a cable before
+  running the scan, or rerun it if the first pass doesn't find it.
+- To independently verify, outside this tool, whether a device is really
+  reachable on the subnet: `sudo arp-scan --interface=eth0 --localnet` or
+  `sudo nmap -sn <subnet>`, or check the router/AP's DHCP lease table.
 
-## Installazione
+## Installation
 
 ```bash
 sudo ./install.sh
 ```
 
-Installa il progetto in `/opt/raspiscanner`, crea un virtualenv, installa
-le dipendenze Python (`Flask`, `scapy`) e registra/avvia il servizio
-systemd `raspiscanner.service`. Dashboard su `https://<ip-raspberry>:7332`
-(certificato self-signed generato al primo avvio: il browser mostra un
-avviso "connessione non sicura" da accettare una volta — vedi
-[Autenticazione dashboard](#autenticazione-dashboard)).
+Installs the project into `/opt/raspiscanner`, creates a virtualenv,
+installs the Python dependencies (`Flask`, `scapy`) and
+registers/starts the `raspiscanner.service` systemd service. Dashboard at
+`https://<raspberry-ip>:7332` (self-signed certificate generated on first
+launch: the browser will show an "insecure connection" warning to accept
+once — see [Dashboard authentication](#dashboard-authentication)).
 
-Per eseguirlo senza installarlo come servizio, in sviluppo:
+To run it without installing it as a service, for development:
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
@@ -172,155 +169,155 @@ pip install -r requirements.txt
 sudo venv/bin/python3 raspi-scanner.py
 ```
 
-## Test
+## Tests
 
-Test unitari, tutti mockati (nessun hardware o accesso di rete richiesto):
+Unit tests, all mocked (no hardware or network access required):
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-## Conflitti con NetworkManager/dhcpcd
+## Conflicts with NetworkManager/dhcpcd
 
-Se `eth0` è già gestita da NetworkManager o `dhcpcd` (comportamento di
-default su Raspberry Pi OS), quei servizi possono rimuovere l'IP statico
-assegnato da RaspiScanner durante il fallback sulle classi preimpostate.
-Per evitare conflitti, marca `eth0` come "unmanaged":
+If `eth0` is already managed by NetworkManager or `dhcpcd` (default
+behavior on Raspberry Pi OS), those services may remove the static IP
+assigned by RaspiScanner during the preset-class fallback. To avoid
+conflicts, mark `eth0` as "unmanaged":
 
-- **NetworkManager**: aggiungi a `/etc/NetworkManager/conf.d/unmanaged.conf`
+- **NetworkManager**: add to `/etc/NetworkManager/conf.d/unmanaged.conf`
   ```ini
   [keyfile]
   unmanaged-devices=interface-name:eth0
   ```
-  poi `sudo systemctl restart NetworkManager`.
-- **dhcpcd**: aggiungi a `/etc/dhcpcd.conf`
+  then `sudo systemctl restart NetworkManager`.
+- **dhcpcd**: add to `/etc/dhcpcd.conf`
   ```
   denyinterfaces eth0
   ```
-  poi `sudo systemctl restart dhcpcd`.
+  then `sudo systemctl restart dhcpcd`.
 
-Il Wi-Fi (`wlan0`) può restare gestito normalmente da NetworkManager: lo
-scanner legge solo il suo stato, non lo tocca (a parte l'endpoint opzionale
-di connessione via `nmcli`).
+Wi-Fi (`wlan0`) can stay normally managed by NetworkManager: the scanner
+only reads its status, it doesn't touch it (aside from the optional
+connection endpoint via `nmcli`).
 
-## Database vendor (OUI) offline
+## Offline vendor (OUI) database
 
-`data/oui.csv` è un elenco ridotto e "best effort" dei vendor più comuni
-(reti, IoT, telecamere IP, Raspberry Pi) pensato per funzionare **senza
-internet** sul campo. Il riconoscimento delle telecamere non dipende da
-questo file (si basa su porte/protocollo), quindi un vendor mancante è solo
-un'etichetta informativa in meno, non un problema di accuratezza dello scan.
+`data/oui.csv` is a reduced, "best effort" list of the most common
+vendors (networking, IoT, IP cameras, Raspberry Pi) meant to work
+**without internet** in the field. Camera recognition doesn't depend on
+this file (it's based on ports/protocol), so a missing vendor is only a
+missing informational label, not a scan accuracy problem.
 
-`install.sh` prova già a scaricare il registro IEEE completo (~35.000
-prefissi) automaticamente durante l'installazione, quando il dispositivo è
-ancora connesso a internet: se va a buon fine non serve fare altro. Se
-l'installazione è avvenuta offline, o vuoi aggiornare una copia già
-installata, rilancia lo script manualmente (da una macchina **con**
-accesso a internet — non deve necessariamente essere il Pi stesso, se poi
-copi tu il risultato in `data/oui.csv`):
+`install.sh` already tries to download the full IEEE registry (~35,000
+prefixes) automatically during installation, while the device is still
+connected to the internet: if it succeeds, there's nothing else to do. If
+the installation happened offline, or you want to update an already
+installed copy, rerun the script manually (from a machine **with**
+internet access — it doesn't have to be the Pi itself, if you then copy
+the result into `data/oui.csv`):
 
 ```bash
 python3 scripts/update_oui.py
 ```
 
-Nota per chi reinstalla: `install.sh` sovrascrive `data/oui.csv` con la
-versione minimale del repo a ogni `rsync`, quindi su un'istanza già
-aggiornata va rilanciato **dopo** ogni reinstallazione, non solo la prima
-volta (a meno che tu non abbia internet in quel momento, nel qual caso lo
-fa già da solo).
+Note for reinstalls: `install.sh` overwrites `data/oui.csv` with the
+repo's minimal version on every `rsync`, so on an already-updated
+instance it needs to be rerun **after** every reinstall, not just the
+first time (unless you have internet at that moment, in which case it
+already does it for you).
 
-## Note di sicurezza
+## Security notes
 
-Questo è uno strumento di ricognizione di rete: usalo solo su reti che sei
-autorizzato a scansionare. L'ARP scan, il port scan e i security findings
-sono probe di rete **attivi ma non intrusivi** — mandano pacchetti reali
-(ARP request, tentativi di connessione TCP, richieste HTTP, WS-Discovery
-multicast), quindi non sono "passivi" in senso stretto, ma non fanno mai
-login, test di credenziali di default o tentativi di sfruttamento — e
-generano comunque traffico visibile sulla rete target.
+This is a network reconnaissance tool: only use it on networks you are
+authorized to scan. The ARP scan, port scan, and security findings are
+**active but non-intrusive** network probes — they send real packets (ARP
+requests, TCP connection attempts, HTTP requests, WS-Discovery multicast),
+so they're not "passive" in the strict sense, but they never perform
+login, default-credential testing, or exploitation attempts — and they do
+generate traffic visible on the target network.
 
-### Autenticazione dashboard
+### Dashboard authentication
 
-La dashboard ascolta su `0.0.0.0:7332` ed espone l'inventario completo dei
-dispositivi scansionati (IP, MAC, vendor, **URL RTSP/admin delle
-telecamere**) oltre ai controlli di rete/hotspot: è protetta da **HTTP
-Basic Auth** cosi' chi e' semplicemente sulla stessa rete/hotspot durante
-lo scan non ci accede senza credenziali, servita su **HTTPS** con un
-certificato self-signed generato al primo avvio (persistito in
-`data/tls_cert.pem`/`data/tls_key.pem`) cosi' le credenziali viaggiano
-cifrate invece che in chiaro sulla rete che stai scansionando.
+The dashboard listens on `0.0.0.0:7332` and exposes the full inventory of
+scanned devices (IP, MAC, vendor, **camera RTSP/admin URLs**) plus the
+network/hotspot controls: it's protected by **HTTP Basic Auth** so that
+anyone simply on the same network/hotspot during the scan can't access it
+without credentials, served over **HTTPS** with a self-signed certificate
+generated on first launch (persisted in `data/tls_cert.pem`/
+`data/tls_key.pem`) so credentials travel encrypted instead of in the
+clear over the network you're scanning.
 
-Non esiste un certificato firmato da una CA pubblica per questo caso
-d'uso: il dispositivo (Raspberry Pi o PC Linux) viene installato su reti
-private diverse ogni volta, spesso senza uscita internet, e raggiunto per
-IP, non per dominio — condizioni in cui una CA come Let's Encrypt non può
-emettere né rinnovare nulla. Per questo, come router/NAS/stampanti di
-rete, il browser mostrerà un **avviso "connessione non sicura"** al primo
-accesso: è atteso, va accettato una volta (il certificato resta lo stesso
-tra un riavvio e l'altro, l'avviso non si ripete a ogni accensione).
-Protegge dall'intercettazione passiva del traffico sulla stessa rete, non
-da un attacco attivo man-in-the-middle molto sofisticato che nessuno
-verifica in pratica (impronta del certificato) — un miglioramento reale
-rispetto ad HTTP semplice, non una garanzia assoluta.
+There's no certificate signed by a public CA for this use case: the
+device (Raspberry Pi or Linux PC) gets installed on a different private
+network every time, often without internet access, and reached by IP, not
+by domain — conditions under which a CA like Let's Encrypt can't issue or
+renew anything. Because of this, like routers/NAS/network printers, the
+browser will show an **"insecure connection" warning** on first access:
+that's expected, accept it once (the certificate stays the same across
+restarts, the warning doesn't repeat on every boot). It protects against
+passive traffic interception on the same network, not against a very
+sophisticated active man-in-the-middle attack that nobody actually
+verifies in practice (certificate fingerprint) — a real improvement over
+plain HTTP, not an absolute guarantee.
 
-Al primo avvio, se `data/users.json` non esiste ancora, viene creato
-l'utente di default:
+On first launch, if `data/users.json` doesn't exist yet, the default user
+is created:
 
 ```
-Utente:   RaspiScanner
+Username: RaspiScanner
 Password: RaspiPass
 ```
 
-**Cambia la password appena possibile** dalla scheda "⚙️ Impostazioni"
-della dashboard, dove puoi anche aggiungere altri utenti o rimuoverli. Le
-credenziali sono persistite (hashate, mai in chiaro) in `data/users.json` e
-sopravvivono ai riavvii del servizio — non serve rifare nulla a ogni
-accensione. Il browser chiede utente/password una volta sola e li ricorda
-per la sessione di navigazione.
+**Change the password as soon as possible** from the "Settings" tab of
+the dashboard, where you can also add other users or remove them.
+Credentials are persisted (hashed, never in the clear) in
+`data/users.json` and survive service restarts — nothing needs to be
+redone on every boot. The browser asks for the username/password once and
+remembers it for the browsing session.
 
-`data/users.json` è in `.gitignore`: non va committato (contiene gli hash
-delle password del deployment specifico).
+`data/users.json` is in `.gitignore`: it must not be committed (it
+contains the password hashes for that specific deployment).
 
-## Struttura del progetto
+## Project structure
 
 ```
-raspi-scanner.py            Entry point: dashboard Flask (default) o CLI --report
+raspi-scanner.py            Entry point: Flask dashboard (default) or CLI --report
 scanner/
-  config.py                  Costanti condivise (classi preimpostate, porte, timeout)
-  auth.py                     Utenti dashboard (Basic Auth, persistiti in data/users.json)
-  tls.py                       Certificato TLS self-signed per la dashboard (via openssl)
-  vendor.py                   Lookup vendor da OUI offline
-  hosts.py                     Classificazione "e' un Raspberry Pi/PC/stampante?"
-  scan_engine.py                Orchestrazione scan + stato per la dashboard
+  config.py                  Shared constants (preset classes, ports, timeouts)
+  auth.py                     Dashboard users (Basic Auth, persisted in data/users.json)
+  tls.py                       Self-signed TLS certificate for the dashboard (via openssl)
+  vendor.py                   Vendor lookup from offline OUI
+  hosts.py                     Classification "is it a Raspberry Pi/PC/printer?"
+  scan_engine.py                Scan orchestration + state for the dashboard
   discovery/
     arp.py                       ARP scan (scapy) + reverse DNS
   fingerprint/
-    ports.py                      Port scan TCP + banner HTTP
+    ports.py                      TCP port scan + HTTP banners
   cameras/
     onvif.py                       WS-Discovery + GetDeviceInformation (ONVIF)
-    classify.py                     Classificazione "e' una telecamera?"
+    classify.py                     Classification "is it a camera?"
   nvr/
-    classify.py                      Classificazione "e' un NVR/DVR?"
+    classify.py                      Classification "is it an NVR/DVR?"
   network/
-    setup.py                          Autoconfig eth (DHCP/fallback) + monitor + wifi
-    infra.py                           Gateway di default + "e' un apparato di rete?"
-    hotspot.py                          Access point Wi-Fi (raggiungibilita' senza cavo)
+    setup.py                          Eth autoconfig (DHCP/fallback) + monitor + wifi
+    infra.py                           Default gateway + "is it network gear?"
+    hotspot.py                          Wi-Fi access point (cable-free reachability)
   reporting/
     security.py                         Security findings (Telnet, HTTP, default service)
-    risk.py                              Aggregazione severita' -> riepilogo rischio
-    assessment.py                         Genera il report NETWORK ASSESSMENT
-tests/                       Test unitari (mockati, nessun hardware richiesto)
-docs/ARCHITECTURE.md         Panoramica architetturale piu' in dettaglio
-examples/                    Esempi di report e uso programmatico dei classificatori
-scripts/update_oui.py        Aggiorna oui.csv dal registro IEEE (richiede internet)
-data/oui.csv                 Database OUI offline (best effort)
-data/users.json              Utenti dashboard (hash password, generato al primo avvio, gitignored)
-data/tls_cert.pem, tls_key.pem  Certificato TLS self-signed (generato al primo avvio, gitignored)
-templates/, static/          Dashboard (HTML/CSS/JS, no CDN esterni: funziona offline)
+    risk.py                              Severity aggregation -> risk summary
+    assessment.py                         Generates the NETWORK ASSESSMENT report
+tests/                       Unit tests (mocked, no hardware required)
+docs/ARCHITECTURE.md         More detailed architectural overview
+examples/                    Report examples and programmatic use of the classifiers
+scripts/update_oui.py        Updates oui.csv from the IEEE registry (requires internet)
+data/oui.csv                 Offline OUI database (best effort)
+data/users.json              Dashboard users (password hashes, generated on first launch, gitignored)
+data/tls_cert.pem, tls_key.pem  Self-signed TLS certificate (generated on first launch, gitignored)
+templates/, static/          Dashboard (HTML/CSS/JS, no external CDN: works offline)
 install.sh                   Installer (venv + systemd)
-raspiscanner.service         Unit file systemd
+raspiscanner.service         systemd unit file
 LICENSE                      MIT
 ```
 
-Approfondimenti sul flusso di uno scan e sulle scelte architetturali in
+More on the scan flow and architectural choices in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
