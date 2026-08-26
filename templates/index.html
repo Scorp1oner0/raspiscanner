@@ -227,6 +227,27 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="wifi-connect-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span>📶 Connect to Wi-Fi</span>
+      <button class="modal-close" id="btn-close-wifi-connect">✕</button>
+    </div>
+    <p class="modal-desc">Connecting via <strong id="wifi-connect-iface"></strong>.</p>
+
+    <label class="modal-label">SSID</label>
+    <input type="text" id="wifi-connect-ssid" class="modal-input" readonly>
+
+    <label class="modal-label">Password</label>
+    <input type="text" id="wifi-connect-password" class="modal-input" placeholder="password">
+
+    <div class="modal-actions">
+      <button class="btn primary" id="btn-wifi-connect-submit">▶️ Connect</button>
+    </div>
+    <span id="wifi-connect-msg" class="msg"></span>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

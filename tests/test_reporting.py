@@ -56,6 +56,10 @@ ORPHAN_CAMERA["network_mismatch"] = True
 ORPHAN_CAMERA["onvif_xaddr"] = "http://192.168.10.64/onvif/device_service"
 ORPHAN_CAMERA["network"] = None
 
+VPN_HOST = _device("10.0.0.4", "Unknown", [{"port": 22, "service": "SSH"}])
+VPN_HOST["mac"] = None
+VPN_HOST["network"] = "10.0.0.0/24"
+
 
 class TestSecurityFindings(unittest.TestCase):
     def test_telnet_on_video_device_is_critical(self):
@@ -176,6 +180,32 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("192.168.10.64", report)
         self.assertIn("ONVIF (multicast): http://192.168.10.64/onvif/device_service", report)
         self.assertIn("⚠ Camera IP misconfigured", report)
+
+    def test_no_mac_device_gets_explanatory_note(self):
+        """Un device senza MAC trovato via ICMP su una VPN (link NOARP,
+        niente livello 2) non deve sembrare un dato mancante per errore:
+        il report lo spiega esplicitamente."""
+        report = assessment.generate("10.0.0.0/24", [VPN_HOST])
+        self.assertIn("Note: 1 device on this network have no MAC address", report)
+        self.assertIn("VPN/NOARP", report)
+
+    def test_no_mac_note_uses_plural_for_multiple_devices(self):
+        other_vpn_host = _device("10.0.0.5", "Unknown", [])
+        other_vpn_host["mac"] = None
+        other_vpn_host["network"] = "10.0.0.0/24"
+        report = assessment.generate("10.0.0.0/24", [VPN_HOST, other_vpn_host])
+        self.assertIn("Note: 2 devices on this network have no MAC address", report)
+
+    def test_no_mac_note_absent_when_all_devices_have_mac(self):
+        report = assessment.generate("192.168.10.0/24", [CAMERA])
+        self.assertNotIn("no MAC address", report)
+
+    def test_network_mismatch_camera_does_not_trigger_no_mac_note(self):
+        """L'ORPHAN_CAMERA non ha MAC per un motivo diverso e gia'
+        spiegato (IP fuori rete, non VPN): non deve comparire anche la
+        nota generica sul MAC mancante, sarebbe ridondante/fuorviante."""
+        report = assessment.generate("192.168.10.0/24", [ORPHAN_CAMERA])
+        self.assertNotIn("no MAC address", report)
 
     def test_camera_nvr_infra_not_duplicated_in_other_section(self):
         report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH, RASPBERRY])

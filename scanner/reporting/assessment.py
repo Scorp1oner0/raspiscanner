@@ -139,6 +139,20 @@ def generate(network_cidr, devices):
 
     lines = ["NETWORK ASSESSMENT", _HEADER_RULE, "", f"Network: {network_cidr}", ""]
     lines.append(f"{len(devices)} devices discovered")
+
+    # Un device senza MAC e senza essere gia' segnalato "fuori rete" e'
+    # stato trovato via ICMP invece che ARP (link NOARP: VPN instradata,
+    # niente livello 2 — vedi scan_engine/discovery.icmp). Senza questa
+    # nota il MAC vuoto nella tabella della dashboard/nel CSV sembra un
+    # dato mancante per errore invece di un limite noto del protocollo.
+    no_mac_ips = [d["ip"] for d in devices if not d.get("mac") and not d.get("network_mismatch")]
+    if no_mac_ips:
+        plural = "s" if len(no_mac_ips) != 1 else ""
+        lines.append(
+            f"Note: {len(no_mac_ips)} device{plural} on this network have no MAC address "
+            "available (found via ICMP over a VPN/NOARP link, not ARP) — expected, not a scan error."
+        )
+
     lines.append("")
 
     def _section(title, group, with_services=True):

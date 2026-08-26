@@ -344,7 +344,15 @@ def _run_scan_thread(networks):
             # 2.5s) si sovrappone invece di sommarsi per ogni rete attiva.
             onvif_partial, mdns_partial = {}, {}
             t_onvif = threading.Thread(target=lambda: onvif_partial.update(onvif_probe(iface_ip=iface_ip, timeout=3)))
-            t_mdns = threading.Thread(target=lambda: mdns_partial.update(mdns_probe(iface_ip=iface_ip, timeout=2.5)))
+            # reverse_ips=seen_ips: query PTR inversa per gli host gia'
+            # trovati da ARP/ICMP su questa rete, oltre alle query per i
+            # servizi comuni — da' l'hostname reale anche per device che
+            # non espongono nessuno dei servizi interrogati di default.
+            t_mdns = threading.Thread(
+                target=lambda: mdns_partial.update(
+                    mdns_probe(iface_ip=iface_ip, timeout=2.5, reverse_ips=seen_ips)
+                )
+            )
             t_onvif.start()
             t_mdns.start()
             t_onvif.join()

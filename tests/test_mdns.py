@@ -34,6 +34,14 @@ def _build_fake_response(records, ancount=None):
     return header + body
 
 
+class TestReverseArpaName(unittest.TestCase):
+    def test_octets_reversed(self):
+        self.assertEqual(mdns.reverse_arpa_name("10.0.0.4"), "4.0.0.10.in-addr.arpa")
+
+    def test_typical_lan_address(self):
+        self.assertEqual(mdns.reverse_arpa_name("192.168.1.50"), "50.1.168.192.in-addr.arpa")
+
+
 class TestReadName(unittest.TestCase):
     def test_simple_name_no_compression(self):
         encoded = _dns_name("_device-info._tcp.local")
@@ -227,6 +235,58 @@ class TestMdnsProbe(unittest.TestCase):
 
         mdns.socket.socket = lambda *a, **k: _BrokenSocket([])
         self.assertEqual(mdns.mdns_probe(iface_ip="192.168.1.10"), {})
+
+
+class TestMdnsProbeReverseLookup(unittest.TestCase):
+    """Query PTR inversa (in-addr.arpa) per gli host gia' trovati da
+    ARP/ICMP: da' l'hostname reale anche per device che non rispondono a
+    nessuno dei servizi comuni interrogati di default."""
+
+    def setUp(self):
+        self._orig_socket_cls = mdns.socket.socket
+
+    def tearDown(self):
+        mdns.socket.socket = self._orig_socket_cls
+
+    def test_reverse_query_included_in_sent_packet(self):
+        fake_sock = _FakeSocket([])
+        mdns.socket.socket = lambda *a, **k: fake_sock
+        mdns.mdns_probe(iface_ip="192.168.1.10", timeout=0.01, reverse_ips=["192.168.1.50"])
+
+        sent_data, _ = fake_sock.sent[0]
+        name, _ = mdns._read_name(sent_data, 12)
+        all_names = []
+        offset = 12
+        for _ in range(len(mdns._QUERY_SERVICES) + 1):
+            name, offset = mdns._read_name(sent_data, offset)
+            offset += 4
+            all_names.append(name)
+        self.assertIn("50.1.168.192.in-addr.arpa", all_names)
+
+    def test_reverse_ptr_response_sets_real_hostname(self):
+        packet = _build_fake_response([
+            ("50.1.168.192.in-addr.arpa", mdns._TYPE_PTR, _dns_name("MyLaptop.local")),
+        ])
+        mdns.socket.socket = lambda *a, **k: _FakeSocket([(packet, ("192.168.1.50", 5353))])
+        results = mdns.mdns_probe(iface_ip="192.168.1.10", timeout=0.05, reverse_ips=["192.168.1.50"])
+        self.assertEqual(results["192.168.1.50"]["hostname"], "MyLaptop.local")
+
+    def test_reverse_ptr_wins_even_when_service_ptr_arrives_first(self):
+        """Un device puo' rispondere sia a un PTR di servizio (nome meno
+        preciso) sia alla query inversa (hostname vero) nello stesso
+        pacchetto: la reverse deve vincere indipendentemente dall'ordine."""
+        packet = _build_fake_response([
+            ("_workstation._tcp.local", mdns._TYPE_PTR, _dns_name("Some-Label._workstation._tcp.local")),
+            ("50.1.168.192.in-addr.arpa", mdns._TYPE_PTR, _dns_name("MyLaptop.local")),
+        ])
+        mdns.socket.socket = lambda *a, **k: _FakeSocket([(packet, ("192.168.1.50", 5353))])
+        results = mdns.mdns_probe(iface_ip="192.168.1.10", timeout=0.05, reverse_ips=["192.168.1.50"])
+        self.assertEqual(results["192.168.1.50"]["hostname"], "MyLaptop.local")
+
+    def test_no_reverse_ips_behaves_like_before(self):
+        mdns.socket.socket = lambda *a, **k: _FakeSocket([])
+        self.assertEqual(mdns.mdns_probe(iface_ip="192.168.1.10", timeout=0.01, reverse_ips=None), {})
+        self.assertEqual(mdns.mdns_probe(iface_ip="192.168.1.10", timeout=0.01, reverse_ips=[]), {})
 
 
 if __name__ == "__main__":

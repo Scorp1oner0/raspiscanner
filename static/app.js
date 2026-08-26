@@ -470,6 +470,7 @@ async function toggleWifiListFor(iface, panel) {
       <div class="wifi-net-row">
         <span>${escapeHtml(n.ssid)} ${n.security ? "🔒" : ""}</span>
         <span>${escapeHtml(n.signal)}%</span>
+        <button class="btn small btn-connect-wifi" data-ssid="${escapeHtml(n.ssid)}" data-secured="${n.security ? "1" : "0"}">Connect</button>
       </div>
     `).join("");
   } catch (e) {
@@ -498,6 +499,43 @@ function closeHotspotModal() {
   $("hotspot-modal").classList.add("hidden");
 }
 
+function openWifiConnectModal(iface, ssid, secured) {
+  $("wifi-connect-modal").dataset.iface = iface;
+  $("wifi-connect-iface").textContent = iface;
+  $("wifi-connect-ssid").value = ssid;
+  $("wifi-connect-password").value = "";
+  $("wifi-connect-password").placeholder = secured ? "password" : "not required (open network)";
+  $("wifi-connect-msg").textContent = "";
+  $("wifi-connect-modal").classList.remove("hidden");
+}
+
+function closeWifiConnectModal() {
+  $("wifi-connect-modal").classList.add("hidden");
+}
+
+async function submitWifiConnect() {
+  const iface = $("wifi-connect-modal").dataset.iface;
+  const ssid = $("wifi-connect-ssid").value;
+  const password = $("wifi-connect-password").value;
+  const msg = $("wifi-connect-msg");
+  msg.textContent = "Connecting (can take a few seconds)...";
+  try {
+    const res = await fetch("/api/wifi/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ssid, password, iface }),
+    });
+    const data = await res.json();
+    msg.textContent = data.message || (data.ok ? "Connected." : "Failed to connect.");
+    if (data.ok) {
+      await refreshNetwork();
+      setTimeout(closeWifiConnectModal, 1200);
+    }
+  } catch (e) {
+    msg.textContent = "Network error.";
+  }
+}
+
 async function refreshHotspotStatus() {
   const box = $("hotspot-status-box");
   const iface = $("hotspot-iface").value;
@@ -506,7 +544,8 @@ async function refreshHotspotStatus() {
     const res = await fetch(`/api/hotspot/status${iface ? `?iface=${encodeURIComponent(iface)}` : ""}`);
     const data = await res.json();
     if (data.active) {
-      box.innerHTML = `🟢 Active on <strong>${escapeHtml(data.iface)}</strong> — SSID <strong>${escapeHtml(data.ssid)}</strong>, reachable at <strong>${escapeHtml(data.ip)}:7332</strong>`;
+      const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+      box.innerHTML = `🟢 Active on <strong>${escapeHtml(data.iface)}</strong> — SSID <strong>${escapeHtml(data.ssid)}</strong>, reachable at <strong>${escapeHtml(data.ip)}:${port}</strong>`;
     } else {
       box.textContent = "⚪ Not active";
     }
@@ -588,11 +627,16 @@ function init() {
   $("hotspot-modal").addEventListener("click", (ev) => {
     if (ev.target.id === "hotspot-modal") closeHotspotModal();
   });
+  $("btn-close-wifi-connect").addEventListener("click", closeWifiConnectModal);
+  $("btn-wifi-connect-submit").addEventListener("click", submitWifiConnect);
+  $("wifi-connect-modal").addEventListener("click", (ev) => {
+    if (ev.target.id === "wifi-connect-modal") closeWifiConnectModal();
+  });
 
   // The Wi-Fi boxes (one per adapter) are generated dynamically by
-  // renderWifiBoxes: their "Visible networks"/"Hotspot" buttons are wired
-  // up here by delegation instead of by id, since they can be recreated or
-  // vary in number (0, 1, several adapters).
+  // renderWifiBoxes: their "Visible networks"/"Hotspot"/"Connect" buttons
+  // are wired up here by delegation instead of by id, since they can be
+  // recreated or vary in number (0, 1, several adapters).
   $("wifi-boxes").addEventListener("click", (ev) => {
     const listBtn = ev.target.closest(".btn-wifi-list");
     if (listBtn) {
@@ -603,6 +647,12 @@ function init() {
     const hotspotBtn = ev.target.closest(".btn-open-hotspot");
     if (hotspotBtn) {
       openHotspotModal(hotspotBtn.dataset.iface);
+      return;
+    }
+    const connectBtn = ev.target.closest(".btn-connect-wifi");
+    if (connectBtn) {
+      const iface = connectBtn.closest(".net-box").dataset.iface;
+      openWifiConnectModal(iface, connectBtn.dataset.ssid, connectBtn.dataset.secured === "1");
     }
   });
 
