@@ -73,11 +73,56 @@ class TestSecurityFindings(unittest.TestCase):
         findings = security.find_security_issues(generic)
         self.assertEqual(findings[0]["severity"], "high")
 
-    def test_http_port_flagged_medium(self):
+    def test_http_with_https_available_is_low_severity(self):
+        """CAMERA espone sia HTTP (80) sia HTTPS (443): il rischio reale e'
+        "espone anche una porta in chiaro nonostante supporti la
+        cifratura", non "nessun modo di cifrare" — severita' bassa, non
+        piu' un flat "medium" per qualunque porta HTTP a prescindere dal
+        contesto (vedi anche test_http_without_https_is_medium_severity)."""
         findings = security.find_security_issues(CAMERA)
-        http_findings = [f for f in findings if f["id"] == "http_enabled"]
+        http_findings = [f for f in findings if f["id"] == "http_with_https"]
+        self.assertEqual(len(http_findings), 1)
+        self.assertEqual(http_findings[0]["severity"], "low")
+
+    def test_http_without_https_is_medium_severity(self):
+        findings = security.find_security_issues(SWITCH)
+        http_findings = [f for f in findings if f["id"] == "http_without_https"]
         self.assertEqual(len(http_findings), 1)
         self.assertEqual(http_findings[0]["severity"], "medium")
+
+    def test_http_admin_panel_without_https_is_high_severity(self):
+        admin_device = _device(
+            "192.168.10.55", "Unknown", [{"port": 80, "service": "HTTP"}],
+            banners={80: {"server": None, "title": "Router Admin Login"}},
+        )
+        findings = security.find_security_issues(admin_device)
+        admin_findings = [f for f in findings if f["id"] == "http_admin_without_https"]
+        self.assertEqual(len(admin_findings), 1)
+        self.assertEqual(admin_findings[0]["severity"], "high")
+
+    def test_http_admin_panel_with_https_is_medium_severity(self):
+        admin_device = _device(
+            "192.168.10.56", "Unknown", [{"port": 80, "service": "HTTP"}, {"port": 443, "service": "HTTPS"}],
+            banners={80: {"server": None, "title": "Admin Login"}},
+        )
+        findings = security.find_security_issues(admin_device)
+        admin_findings = [f for f in findings if f["id"] == "http_admin_with_https"]
+        self.assertEqual(len(admin_findings), 1)
+        self.assertEqual(admin_findings[0]["severity"], "medium")
+
+    def test_rtsp_exposed_flagged_medium(self):
+        findings = security.find_security_issues(CAMERA)
+        rtsp_findings = [f for f in findings if f["id"] == "rtsp_exposed"]
+        self.assertEqual(len(rtsp_findings), 1)
+        self.assertEqual(rtsp_findings[0]["severity"], "medium")
+
+    def test_https_only_device_has_no_http_finding(self):
+        """Un dispositivo che espone SOLO HTTPS (nessuna porta HTTP in
+        chiaro) non genera nessun finding HTTP: e' il caso "corretto", non
+        un rischio da segnalare."""
+        https_only = _device("192.168.10.60", "Unknown", [{"port": 443, "service": "HTTPS"}])
+        findings = security.find_security_issues(https_only)
+        self.assertEqual([f for f in findings if "http" in f["id"]], [])
 
     def test_no_open_ports_no_findings(self):
         clean = _device("192.168.10.50", "Apple", [])
@@ -97,9 +142,10 @@ class TestRiskSummary(unittest.TestCase):
             all_findings.extend(security.find_security_issues(d))
         counts = risk.summarize(all_findings)
         self.assertEqual(counts["critical"], 1)  # telnet sull'NVR
-        self.assertEqual(counts["medium"], 2)    # http su camera + switch
         self.assertEqual(counts["high"], 0)
-        self.assertEqual(counts["low"], 0)
+        # medium: rtsp su CAMERA + rtsp su NVR + http-senza-https su SWITCH
+        self.assertEqual(counts["medium"], 3)
+        self.assertEqual(counts["low"], 1)       # http-con-https su CAMERA
 
 
 class TestAssessmentReport(unittest.TestCase):
@@ -113,12 +159,13 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("NETWORK", report)
         self.assertIn("SECURITY", report)
         self.assertIn("⚠ Telnet exposed", report)
-        self.assertIn("⚠ HTTP enabled", report)
+        self.assertIn("⚠ RTSP exposed", report)
+        self.assertIn("⚠ HTTP service detected", report)
         self.assertIn("RISK SUMMARY", report)
         self.assertIn("Critical: 1", report)
         self.assertIn("High:     0", report)
-        self.assertIn("Medium:   2", report)
-        self.assertIn("Low:      0", report)
+        self.assertIn("Medium:   3", report)
+        self.assertIn("Low:      1", report)
 
     def test_other_devices_section_lists_recognized_types(self):
         """Bug reale: un Raspberry Pi o un PC (Windows/SMB) non finivano in
@@ -166,7 +213,7 @@ class TestAssessmentReport(unittest.TestCase):
         report = assessment.generate("192.168.10.0/24", [CAMERA, generic_with_http])
         self.assertIn("OTHER DEVICES", report)
         self.assertIn("192.168.10.77", report)
-        self.assertIn("⚠ HTTP enabled — 192.168.10.77", report)
+        self.assertIn("⚠ HTTP service detected, no HTTPS available — 192.168.10.77", report)
 
     def test_orphan_onvif_camera_labeled_as_ip_misconfigured(self):
         """Bug che questa feature risolve: una telecamera rilevata SOLO via
@@ -220,19 +267,21 @@ class TestAssessmentReport(unittest.TestCase):
     def test_security_findings_attributed_to_device_ip(self):
         """Bug reale: la versione precedente deduplicava i finding SOLO per
         messaggio, senza dire su quale IP si trovassero — un report con
-        "HTTP enabled" su due device diversi mostrava una riga sola,
-        indistinguibile."""
+        "RTSP exposed" su due device diversi (CAMERA e NVR condividono la
+        porta 554) mostrava una riga sola, indistinguibile."""
         report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
         self.assertIn("⚠ Telnet exposed — 192.168.10.10", report)
-        self.assertIn("⚠ HTTP enabled — 192.168.10.21", report)
-        self.assertIn("⚠ HTTP enabled — 192.168.10.1", report)
+        self.assertIn("⚠ RTSP exposed", report)
+        self.assertIn("— 192.168.10.21", report)  # CAMERA
+        self.assertIn("— 192.168.10.10", report)  # NVR
 
     def test_findings_on_different_devices_not_collapsed(self):
-        """CAMERA (192.168.10.21) e SWITCH (192.168.10.1) hanno entrambi
-        'HTTP enabled': devono comparire come DUE righe distinte, non una."""
+        """CAMERA (192.168.10.21) e NVR (192.168.10.10) hanno entrambi la
+        porta RTSP esposta (554): devono comparire come DUE righe
+        "RTSP exposed" distinte, non una sola deduplicata per messaggio."""
         report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
-        http_lines = [line for line in report.splitlines() if "HTTP enabled" in line]
-        self.assertEqual(len(http_lines), 2)
+        rtsp_lines = [line for line in report.splitlines() if "RTSP exposed" in line]
+        self.assertEqual(len(rtsp_lines), 2)
 
     def test_findings_sorted_by_severity_critical_first(self):
         report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
@@ -261,6 +310,20 @@ class TestAssessmentReport(unittest.TestCase):
 
     def test_generate_all_empty(self):
         self.assertIn("No data yet", assessment.generate_all([]))
+
+    def test_generate_all_includes_not_a_vulnerability_scanner_disclaimer(self):
+        """Deve essere esplicito nel report stesso, non solo nei commenti
+        del codice: nessun exploit, nessun brute-force, nessuna scansione
+        CVE — solo esposizione osservata."""
+        text = assessment.generate_all([CAMERA])
+        self.assertIn("not a vulnerability scanner", text)
+        self.assertIn("no exploits", text)
+
+    def test_disclaimer_appears_once_across_multiple_networks(self):
+        other_net_device = _device("10.0.0.5", "Unknown", [])
+        other_net_device["network"] = "10.0.0.0/24"
+        text = assessment.generate_all([CAMERA, other_net_device])
+        self.assertEqual(text.count("not a vulnerability scanner"), 1)
 
 
 if __name__ == "__main__":

@@ -162,16 +162,32 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 
 ## 🟡 P2 — Security assessment
 
-- [ ] More precise HTTP classification: `HTTP service detected` / `HTTP
+- [x] More precise HTTP classification: `HTTP service detected` / `HTTP
       administrative interface` / `HTTPS available` / `HTTP without
-      HTTPS`.
-- [ ] Revisit risk scoring: don't let any HTTP automatically become
+      HTTPS`. *(`scanner/reporting/security.py`: 4 combinazioni distinte
+      in base a banner-indica-pannello-admin x HTTPS-anche-disponibile,
+      invece dell'unico "HTTP enabled" precedente.)*
+- [x] Revisit risk scoring: don't let any HTTP automatically become
       Medium — separate "service exposed" from "actually insecure
-      configuration".
-- [ ] More specific findings: Telnet, HTTP admin, exposed RTSP, legacy
-      services, known CCTV ports.
-- [ ] Document clearly that this is not a vulnerability scanner: no
+      configuration". *(Severita' ora varia low/medium/high in base al
+      contesto: HTTP generico con HTTPS disponibile = low; HTTP senza
+      HTTPS o pannello admin con HTTPS disponibile = medium; pannello
+      admin senza HTTPS = high. Prima: sempre "medium" per qualunque
+      porta HTTP a prescindere dal contesto.)*
+- [x] More specific findings: Telnet, HTTP admin, exposed RTSP, legacy
+      services, known CCTV ports. *(Aggiunto un finding dedicato "RTSP
+      exposed" (porta 554, prima non generava nessun finding di
+      sicurezza, solo usata per la classificazione camera). Telnet e
+      HTTP admin coperti dai punti sopra. Legacy services/porte CCTV
+      specifiche (FTP, SNMP, porte proprietarie Dahua/Hikvision) restano
+      candidati per un giro futuro — non aggiunti ora per non allargare
+      lo scope oltre il segnale piu' concreto e gia' verificato (RTSP).)*
+- [x] Document clearly that this is not a vulnerability scanner: no
       exploits, no brute force, no credential guessing, no CVE scanning.
+      *(Frase esplicita "not a vulnerability scanner" aggiunta in 3 posti
+      visibili all'utente: nota di sicurezza in dashboard, README, e come
+      riga finale di `assessment.generate_all()` — non solo nei commenti
+      del codice, dove gia' c'era.)*
 
 ## 🟢 P3 — Tests
 

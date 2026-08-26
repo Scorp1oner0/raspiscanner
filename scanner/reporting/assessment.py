@@ -21,13 +21,18 @@ scansionate, nel formato:
 
     SECURITY
       ⚠ Telnet exposed — 192.168.10.1 (MikroTik network device)
-      ⚠ HTTP enabled — 192.168.10.21 (Hikvision camera)
+      ⚠ HTTP service detected, no HTTPS available — 192.168.10.21 (Hikvision camera)
 
     RISK SUMMARY
       Critical: 0
       High:     1
       Medium:   2
       Low:      3
+
+generate_all() appends a one-line scope disclaimer at the end of the
+combined report (once, not per-network): questo tool NON e' un
+vulnerability scanner, e va detto esplicitamente dove chi legge il report
+puo' vederlo, non solo nei commenti del codice.
 """
 from . import risk as risk_module
 from . import security as security_module
@@ -35,6 +40,13 @@ from . import security as security_module
 _HEADER_RULE = "─" * 28
 _SECTION_RULE = "═" * 40
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+_SCOPE_DISCLAIMER = (
+    "This is a network/device discovery and exposure report, not a vulnerability "
+    "scanner: no exploits, no brute-force or credential-guessing attempts, no CVE "
+    "matching. Findings describe what a service EXPOSES to a normal connection, "
+    "not whether it is actually vulnerable or exploitable."
+)
 
 # Etichette di protocollo compatte per la riga "servizi" del report: piu'
 # leggibili delle etichette descrittive usate nella dashboard (es.
@@ -208,4 +220,5 @@ def generate_all(devices):
         by_network.setdefault(cidr, []).append(d)
 
     reports = [generate(cidr, devs) for cidr, devs in sorted(by_network.items())]
-    return f"\n\n{_SECTION_RULE}\n\n".join(reports)
+    combined = f"\n\n{_SECTION_RULE}\n\n".join(reports)
+    return f"{combined}\n\n{_SCOPE_DISCLAIMER}"

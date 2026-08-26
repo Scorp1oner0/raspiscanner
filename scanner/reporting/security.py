@@ -2,17 +2,29 @@
 
 Si basano su probe di rete attivi ma non intrusivi (connessioni TCP,
 richieste HTTP) gia' fatte da fingerprint.ports: nessun tentativo di
-login, nessun test di credenziali di default, nessuno sfruttamento. Solo
-"cosa espone il dispositivo" a una connessione normale.
+login, nessun test di credenziali di default, nessuno sfruttamento,
+nessuna scansione CVE. Solo "cosa espone il dispositivo" a una
+connessione normale — RaspiScanner non e' un vulnerability scanner: non
+verifica se un servizio esposto e' davvero sfruttabile, solo se e'
+raggiungibile.
 """
 TELNET_PORT = 23
-HTTP_PORTS = {80, 81, 8080, 8081, 8000, 8899, 9000, 5000}
+RTSP_PORT = 554
+HTTP_PORTS = {80, 81, 8080, 8081, 8000, 8899, 9000, 5000}  # in chiaro
+HTTPS_PORTS = {443, 8443}
 
 # Titoli di pagina generici che suggeriscono un'interfaccia web mai
 # personalizzata/configurata (segnale debole, va preso come indizio non
 # come prova: alcuni vendor usano questi titoli anche a configurazione
 # avvenuta).
 _DEFAULT_TITLE_MARKERS = ("index of /", "welcome", "login")
+
+# Segnali che il servizio HTTP e' probabilmente un pannello di
+# amministrazione (router, NVR, telecamera) invece di una pagina
+# qualunque: cambia la severita' del finding, un pannello admin in
+# chiaro senza HTTPS e' un rischio concreto di credenziali intercettabili,
+# una pagina di stato generica molto meno.
+_ADMIN_TITLE_MARKERS = ("login", "admin", "config", "setup", "management")
 
 
 def find_security_issues(device):
@@ -49,10 +61,55 @@ def find_security_issues(device):
             "severity": "critical" if is_video_device else "high",
         })
 
-    if ports_open & HTTP_PORTS:
+    http_ports_open = ports_open & HTTP_PORTS
+    if http_ports_open:
+        # Non ogni porta HTTP e' lo stesso rischio: un pannello di
+        # amministrazione servito solo in chiaro (nessuna HTTPS disponibile
+        # sul dispositivo) e' il caso peggiore; lo stesso pannello con
+        # HTTPS disponibile in alternativa e' un problema minore (la
+        # configurazione andrebbe corretta, ma l'opzione sicura esiste);
+        # un servizio HTTP generico (non un pannello admin) con HTTPS
+        # disponibile e' il piu' basso. Prima qualunque porta HTTP
+        # diventava sempre e comunque "medium", a prescindere dal contesto.
+        is_admin = any(
+            any(marker in (banners.get(p, {}).get("title") or "").strip().lower() for marker in _ADMIN_TITLE_MARKERS)
+            for p in http_ports_open
+        )
+        has_https = bool(ports_open & HTTPS_PORTS)
+        if is_admin and not has_https:
+            findings.append({
+                "id": "http_admin_without_https",
+                "message": "HTTP administrative interface exposed, no HTTPS available",
+                "severity": "high",
+            })
+        elif is_admin:
+            findings.append({
+                "id": "http_admin_with_https",
+                "message": "HTTP administrative interface exposed (HTTPS also available on this device)",
+                "severity": "medium",
+            })
+        elif not has_https:
+            findings.append({
+                "id": "http_without_https",
+                "message": "HTTP service detected, no HTTPS available",
+                "severity": "medium",
+            })
+        else:
+            findings.append({
+                "id": "http_with_https",
+                "message": "HTTP service detected (HTTPS also available on this device)",
+                "severity": "low",
+            })
+
+    if RTSP_PORT in ports_open:
+        # Segnalato a parte dalla classificazione "e' una camera": qui
+        # interessa la sicurezza (lo stream e' raggiungibile in rete),
+        # non la classificazione del dispositivo. Non si verifica se lo
+        # stream richiede credenziali (richiederebbe un vero handshake
+        # RTSP, fuori dallo scope non intrusivo di questo tool).
         findings.append({
-            "id": "http_enabled",
-            "message": "HTTP enabled",
+            "id": "rtsp_exposed",
+            "message": "RTSP exposed (stream reachability not verified — check the camera's credentials)",
             "severity": "medium",
         })
 

@@ -29,11 +29,18 @@ OTHER DEVICES
 
 SECURITY
   ⚠ Telnet exposed — 192.168.10.10 (Hikvision NVR)
-  ⚠ HTTP enabled — 192.168.10.1 (TP-Link Technologies network device)
-  ⚠ HTTP enabled — 192.168.10.21 (Hikvision camera)
+  ⚠ HTTP service detected, no HTTPS available — 192.168.10.1 (TP-Link Technologies network device)
+  ⚠ RTSP exposed (stream reachability not verified — check the camera's credentials) — 192.168.10.10 (Hikvision NVR)
+  ⚠ RTSP exposed (stream reachability not verified — check the camera's credentials) — 192.168.10.21 (Hikvision camera)
+  ⚠ HTTP service detected (HTTPS also available on this device) — 192.168.10.21 (Hikvision camera)
 
 RISK SUMMARY
   Critical: 1
   High:     0
-  Medium:   2
-  Low:      0
+  Medium:   3
+  Low:      1
+
+This is a network/device discovery and exposure report, not a vulnerability
+scanner: no exploits, no brute-force or credential-guessing attempts, no CVE
+matching. Findings describe what a service EXPOSES to a normal connection,
+not whether it is actually vulnerable or exploitable.

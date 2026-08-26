@@ -87,8 +87,9 @@ of its own discovery mechanisms, aimed at one specific use case.
    Raspberry Pi, PCs, printers show up under "OTHER DEVICES", so no
    discovered device stays invisible in the report text while still being
    counted in "N devices discovered"), security findings from active but
-   non-intrusive probes (Telnet exposed, HTTP enabled, default-looking
-   service) and a risk summary (Critical/High/Medium/Low). If requested
+   non-intrusive probes (Telnet exposed, RTSP exposed, HTTP without HTTPS,
+   HTTP admin interface, default-looking service) and a risk summary
+   (Critical/High/Medium/Low). If requested
    while a scan is still running, the report says so explicitly (it's a
    partial snapshot, counts will increase). See `examples/sample_report.txt`
    for a full example. Available both from the dashboard ("Report" tab)
@@ -245,13 +246,17 @@ already does it for you).
 
 ## Security notes
 
-This is a network reconnaissance tool: only use it on networks you are
-authorized to scan. The ARP scan, port scan, and security findings are
-**active but non-intrusive** network probes — they send real packets (ARP
-requests, TCP connection attempts, HTTP requests, WS-Discovery multicast),
-so they're not "passive" in the strict sense, but they never perform
-login, default-credential testing, or exploitation attempts — and they do
-generate traffic visible on the target network.
+This is a network reconnaissance tool, **not a vulnerability scanner**:
+only use it on networks you are authorized to scan. The ARP scan, port
+scan, and security findings are **active but non-intrusive** network
+probes — they send real packets (ARP requests, TCP connection attempts,
+HTTP requests, WS-Discovery multicast), so they're not "passive" in the
+strict sense, but they never perform login, default/brute-force
+credential testing, exploitation attempts, or CVE matching — and they do
+generate traffic visible on the target network. Security findings
+describe what a service *exposes* to a normal connection (an open Telnet
+port, an HTTP admin panel with no HTTPS, ...), never whether it is
+actually exploitable.
 
 ### Dashboard authentication
 
