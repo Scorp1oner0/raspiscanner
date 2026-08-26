@@ -50,28 +50,41 @@ done — a small, solid, documented 1.0 beats an endlessly growing 0.x.
       Auth has no session/cookie, so a classic CSRF token doesn't apply
       cleanly; validating the `Origin` header — when the browser sends one —
       against `request.host_url` blocks the same cross-site-POST attack.)*
-- [ ] Privilege handling: evaluate running Flask as non-root, possibly a
-      small privileged helper for ARP/raw sockets, DHCP, `ip`,
-      NetworkManager/hotspot. *(Deliberately deferred: an architectural
-      rewrite that can't be reliably validated without real Raspberry Pi
-      hardware, given the tool's core scanning depends on exactly the
-      low-level socket operations this would restrict.)*
 - [x] systemd hardening: `NoNewPrivileges`, minimal capabilities,
       `ProtectSystem`, `ProtectHome`, `PrivateTmp`. *(`raspiscanner.service`:
-      stays `User=root` — see privilege-separation item above — but adds
-      `NoNewPrivileges`, `ProtectSystem=true` (not `strict`: dhclient must
-      still write `/etc/resolv.conf`), `ProtectHome`, `PrivateTmp`,
+      stays `User=root` — vedi separazione privilegi, spostata in P2/P3
+      Architecture qui sotto — ma aggiunge `NoNewPrivileges`,
+      `ProtectSystem=true` (non `strict`: dhclient deve poter scrivere
+      `/etc/resolv.conf`), `ProtectHome`, `PrivateTmp`,
       `ProtectKernelModules/Logs/Clock/Hostname`, `RestrictSUIDSGID`,
       `RestrictRealtime`, `CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW`.
-      Needs live validation on real hardware — network reconfig, hotspot,
-      DHCP fallback, Wi-Fi connect all spawn external commands as root.)*
-      `RestrictAddressFamilies` evaluated and deferred alongside privilege
-      separation above (same rewrite-risk reasoning).
+      Validato dal vivo: emerso e risolto un bug reale — con
+      `CAP_DAC_OVERRIDE` fuori dal bounding set, root non poteva piu'
+      scrivere in `data/` perche' la directory era di proprieta' di un
+      utente non privilegiato (creata da un rsync non-root durante il
+      deploy); fix: `chown -R root:root /opt/raspiscanner/data`, non un
+      allargamento delle capability.)*
 - [x] Fix the scan-start race condition: lock before checking
       `_state["running"]`, guarantee only one concurrent scan. *(`run_scan()`
       now does check-then-set atomically under one `with _lock:` block;
       `TestRunScanRaceCondition` in `tests/test_scan_engine.py` reproduces
       the race deterministically with a 20-thread barrier.)*
+
+P1 chiuso: 6/6. La separazione privilegi (sotto) e' stata spostata
+formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
+
+## 🟡 P2/P3 — Architecture
+
+- [ ] Privilege separation: evaluate running Flask as non-root, with a
+      small privileged helper for ARP/raw sockets, DHCP, `ip`,
+      NetworkManager/hotspot. *(Spostato qui da P1: rimane deliberatamente
+      rimandato — una riscrittura architetturale non verificabile in modo
+      affidabile senza un Raspberry Pi reale, dato che la scansione core
+      dipende esattamente dalle operazioni socket a basso livello che
+      andrebbero ristrette. Non blocca piu' la chiusura di P1.)*
+- [ ] `RestrictAddressFamilies` nel systemd unit: valutato e rimandato
+      insieme alla separazione privilegi sopra (stesso rischio di
+      riscrittura non verificabile senza hardware reale).
 
 ## 🟡 P2 — Networking robustness
 
