@@ -11,7 +11,7 @@ import time
 
 from . import vendor
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url
-from .cameras.onvif import get_device_info, onvif_probe
+from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import arp_scan, icmp_scan, mdns_probe, resolve_hostname
 from .fingerprint import grab_http_banner, scan_ports
 from .hosts import classify_host
@@ -101,7 +101,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
     hostname = resolve_hostname(ip) or (mdns_info.get("hostname") if mdns_info else None)
 
     is_camera, camera_reasons = classify_camera(open_ports, banners, onvif_info)
-    is_nvr, nvr_reasons = classify_nvr(banners)
+    is_nvr, nvr_reasons, nvr_subtype = classify_nvr(banners)
     is_infra, infra_subtype, infra_reasons = classify_network_device(ip, gateway_ip, device_vendor, banners)
     host_label, host_reasons = classify_host(device_vendor, open_ports, hostname)
 
@@ -114,7 +114,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
     # telecamere, non da telefoni/computer.
     model = None
     if onvif_info and onvif_info.get("xaddrs"):
-        info = get_device_info(onvif_info["xaddrs"][0])
+        info = get_device_info_multi(onvif_info["xaddrs"])
         if info.get("model"):
             model = info["model"]
         if info.get("manufacturer"):
@@ -139,7 +139,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
     # perdente, non del tipo mostrato) confonderebbe chi legge il report,
     # anche se la classificazione finale resta corretta.
     if is_nvr:
-        device_type = "NVR/DVR"
+        device_type = nvr_subtype
         reasons = nvr_reasons
     elif is_camera:
         device_type = "Camera"
@@ -260,7 +260,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
     model = None
     device_vendor = "Unknown"
     if xaddrs:
-        info = get_device_info(xaddrs[0])
+        info = get_device_info_multi(xaddrs)
         if info.get("model"):
             model = info["model"]
         if info.get("manufacturer"):

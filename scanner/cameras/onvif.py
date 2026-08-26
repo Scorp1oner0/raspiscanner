@@ -13,6 +13,7 @@ import socket
 import time
 import urllib.parse
 import uuid
+import xml.etree.ElementTree as ET
 
 from .. import config
 
@@ -44,16 +45,95 @@ _DEVICE_INFO_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 </soap:Envelope>"""
 
 
-def _extract_between(text, start_tag_frag, end_tag_frag):
+def _extract_between(text, tag_local_name):
+    """Fallback a sottostringa, usato SOLO quando l'XML non e' valido (non
+    tutti i firmware ONVIF ne producono di corretto): meglio recuperare
+    qualcosa da un documento leggermente malformato che scartarlo per
+    intero. Il parsing "vero" e' _parse_xml_safe + _find_text qui sotto.
+
+    Cerca il primo tag di apertura che finisce con `tag_local_name` (con o
+    senza prefisso di namespace, es. "<d:XAddrs" o "<XAddrs"), poi il
+    corrispondente tag di chiusura scorrendo in avanti ogni "</...>"
+    finche' non ne trova uno che contiene lo stesso nome — non un semplice
+    `find(tag_local_name)`, che matcherebbe la prima ricorrenza della
+    stringa DENTRO il tag di chiusura stesso (es. "</tds:Manufacturer>")
+    e includerebbe per errore "</tds:" nel valore estratto.
+    """
     low = text.lower()
-    start = low.find(start_tag_frag)
+    tag = tag_local_name.lower()
+    start = low.find(f"<{tag}")
     if start == -1:
+        start = low.find(f":{tag}")
+        if start == -1:
+            return None
+    open_close = text.find(">", start)
+    if open_close == -1:
         return None
-    start = text.find(">", start) + 1
-    end = low.find(end_tag_frag, start)
-    if end == -1:
-        return None
-    return text[start:end].strip()
+    content_start = open_close + 1
+    end = low.find("</", content_start)
+    while end != -1:
+        close_end = low.find(">", end)
+        if close_end == -1:
+            return None
+        if tag in low[end:close_end]:
+            return text[content_start:end].strip()
+        end = low.find("</", close_end)
+    return None
+
+
+def _parse_xml_safe(text):
+    """ET.fromstring (via expat) espande le entita' generali definite in
+    una DTD interna: su un documento non fidato questo abilita un attacco
+    "billion laughs" (poche righe di entita' innestate si espandono a
+    gigabyte in memoria). Nessuna risposta ONVIF/WS-Discovery legittima
+    definisce mai una DTD, quindi la si rifiuta a priori invece di
+    tentare di limitarne l'espansione dopo il fatto.
+
+    Questo dato arriva da QUALUNQUE dispositivo sulla stessa rete (probe
+    multicast non autenticato, o un endpoint HTTP il cui host e' comunque
+    gia' validato da _is_safe_xaddr_host ma il cui CONTENUTO resta non
+    fidato) — va sempre trattato come potenzialmente ostile.
+
+    Solleva ET.ParseError (stesso tipo di un fromstring fallito
+    normalmente) cosi' il chiamante ha un solo ramo per il fallback.
+    """
+    if "<!DOCTYPE" in text:
+        raise ET.ParseError("DOCTYPE not allowed in ONVIF/WS-Discovery responses")
+    return ET.fromstring(text)
+
+
+def _local_name(tag):
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _find_text(root, local_name):
+    """Primo elemento con questo nome locale, IGNORANDO il namespace: piu'
+    tollerante delle differenze reali tra implementazioni ONVIF di vendor
+    diversi (prefissi/URI dei namespace leggermente diversi da quelli
+    "canonici" dello standard) di quanto lo sarebbe un confronto esatto
+    su {namespace}local — vedi TODO "Broaden ONVIF compatibility"."""
+    for elem in root.iter():
+        if _local_name(elem.tag).lower() == local_name.lower():
+            return (elem.text or "").strip() or None
+    return None
+
+
+def _parse_probe_response(text):
+    """Estrae xaddrs/types da una risposta WS-Discovery Probe. Prova prima
+    con un parser XML vero (gestisce correttamente namespace/prefissi
+    variabili e struttura annidata, a differenza di un semplice
+    string-search); se l'XML e' malformato ripiega sull'estrazione a
+    sottostringa best-effort invece di scartare la risposta per intero.
+    """
+    try:
+        root = _parse_xml_safe(text)
+        xaddrs_text = _find_text(root, "XAddrs") or ""
+        types = _find_text(root, "Types") or ""
+        return xaddrs_text.split(), types
+    except ET.ParseError:
+        xaddrs_raw = _extract_between(text, "xaddrs")
+        types = _extract_between(text, "types") or ""
+        return (xaddrs_raw.split() if xaddrs_raw else []), types
 
 
 def onvif_probe(iface_ip=None, timeout=3):
@@ -90,10 +170,7 @@ def onvif_probe(iface_ip=None, timeout=3):
             break
         ip = addr[0]
         text = data.decode("utf-8", errors="ignore")
-        xaddrs_raw = _extract_between(text, "<d:xaddrs", "</d:xaddrs") or \
-            _extract_between(text, ":xaddrs", ":xaddrs")
-        types = _extract_between(text, "<d:types", "</d:types") or ""
-        xaddrs = xaddrs_raw.split() if xaddrs_raw else []
+        xaddrs, types = _parse_probe_response(text)
         results[ip] = {"xaddrs": xaddrs, "types": types}
     sock.close()
     return results
@@ -165,9 +242,24 @@ def get_device_info(xaddr, timeout=3):
     if status >= 400 or not body:
         return {}
 
-    manufacturer = _extract_between(body, "manufacturer", "manufacturer")
-    model = _extract_between(body, "model", "model")
-    firmware = _extract_between(body, "firmwareversion", "firmwareversion")
+    return _parse_device_info(body)
+
+
+def _parse_device_info(body):
+    """Estrae Manufacturer/Model/FirmwareVersion dalla risposta SOAP di
+    GetDeviceInformation. Stesso schema di _parse_probe_response: parser
+    XML vero prima (namespace-tollerante), fallback a sottostringa solo
+    se l'XML e' malformato."""
+    try:
+        root = _parse_xml_safe(body)
+        manufacturer = _find_text(root, "Manufacturer")
+        model = _find_text(root, "Model")
+        firmware = _find_text(root, "FirmwareVersion")
+    except ET.ParseError:
+        manufacturer = _extract_between(body, "manufacturer")
+        model = _extract_between(body, "model")
+        firmware = _extract_between(body, "firmwareversion")
+
     info = {}
     if manufacturer:
         info["manufacturer"] = manufacturer
@@ -176,3 +268,19 @@ def get_device_info(xaddr, timeout=3):
     if firmware:
         info["firmware"] = firmware
     return info
+
+
+def get_device_info_multi(xaddrs, timeout=3):
+    """Come get_device_info, ma prova in ordine OGNI XAddr annunciato
+    (il campo WS-Discovery XAddrs e' esplicitamente una lista, spesso con
+    piu' di un URL: interfacce di rete diverse dello stesso dispositivo,
+    o un ordine che non garantisce che il primo sia il raggiungibile).
+    Prima si fermava sempre al primo, perdendo manufacturer/model per
+    intero se quello specifico falliva pur essendocene un altro valido.
+    Ritorna il primo risultato non vuoto, o {} se nessuno risponde.
+    """
+    for xaddr in xaddrs or []:
+        info = get_device_info(xaddr, timeout=timeout)
+        if info:
+            return info
+    return {}

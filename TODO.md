@@ -88,30 +88,77 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 
 ## 🟡 P2 — Networking robustness
 
-- [ ] Avoid IP collisions during DHCP fallback: ARP-probe the `.250`
+- [x] Avoid IP collisions during DHCP fallback: ARP-probe the `.250`
       candidate before assigning it; pick another address if taken.
-- [ ] Better feedback during preset-class probing: show current preset,
-      `7/13`, subnet being tried, timeout.
-- [ ] Handle `nmcli` errors better: distinguish a real error from
+      *(`_find_free_static_ip`/`_probe_ip_taken` in `scanner/network/setup.py`:
+      probe ARP mirato con psrc "0.0.0.0" (RFC 5227) prima di assegnare
+      l'indirizzo, prova `.250/.249/.248/...` finche' non ne trova uno
+      libero. `choose_preset_class` ri-verifica al momento della scelta
+      manuale, non riusa il risultato del probe automatico.)*
+- [x] Better feedback during preset-class probing: show current preset,
+      `7/13`, subnet being tried, timeout. *(Nuovi campi di stato
+      `probing`/`probe_index`/`probe_total`/`probe_cidr`/`probe_timeout`,
+      mostrati in dashboard; verificato via screenshot headless.)*
+- [x] Handle `nmcli` errors better: distinguish a real error from
       unexpected output, don't parse solely on fragile `:` splitting.
-- [ ] Installer: separate required vs optional dependencies — a required
+      *(`scanner/network/nmcli_util.split_nmcli_terse`: rispetta l'escape
+      "\:"/"\\" di nmcli, mai un'eccezione su righe malformate. Bug reale
+      corretto: un SSID con ":" letterale spezzava anche segnale/sicurezza
+      sulla stessa riga con lo split ingenuo precedente.)*
+- [x] Installer: separate required vs optional dependencies — a required
       package failing should STOP the install, an optional one should
-      only warn.
-- [ ] Review `rsync --delete` carefully: document its behavior, consider
-      a `--no-delete` mode.
+      only warn. *(`install.sh`: python3-venv/pip/isc-dhcp-client/
+      iproute2/openssl fermano l'installazione se falliscono;
+      network-manager resta opzionale, solo un avviso.)*
+- [x] Review `rsync --delete` carefully: document its behavior, consider
+      a `--no-delete` mode. *(Trovato un bug reale nel farlo: install.sh
+      non escludeva data/users.json, tls_cert.pem, tls_key.pem, oui.csv
+      dal `--delete` — ogni reinstallazione avrebbe cancellato utenti,
+      certificato TLS e database vendor scaricato. Fix: stesse esclusioni
+      gia' usate per i deploy manuali, + copia una tantum di oui.csv
+      minimo se assente. Niente flag `--no-delete` aggiuntivo: le
+      esclusioni mirate bastano, un `--delete` generale resta utile per
+      non lasciare file di versioni precedenti come residui in giro.)*
 
 ## 🟡 P2 — ONVIF / CCTV
 
-- [ ] Replace the manual XML parsing with a standard XML parser, handle
-      ONVIF namespaces properly.
-- [ ] Broaden ONVIF compatibility: test against more vendor
+- [x] Replace the manual XML parsing with a standard XML parser, handle
+      ONVIF namespaces properly. *(`scanner/cameras/onvif.py`: parsing via
+      `xml.etree.ElementTree` (stdlib, nessuna nuova dipendenza), match sul
+      nome locale dell'elemento ignorando prefisso/namespace. Fallback a
+      sottostringa solo se l'XML e' davvero malformato. Rifiuta a priori
+      qualunque documento con `<!DOCTYPE` prima di passarlo a ElementTree
+      — mitigazione "billion laughs"/entity-expansion su XML non fidato
+      (arriva da un probe multicast non autenticato). Corretto anche un
+      bug reale pre-esistente nel fallback a sottostringa: il valore
+      estratto includeva sempre i caratteri "</" del tag di chiusura,
+      es. manufacturer "Hikvision" diventava "Hikvision</tds:".)*
+- [x] Broaden ONVIF compatibility: test against more vendor
       implementations, differing XML responses, multiple XAddrs.
-- [ ] Improve NVR/DVR identification: add specific fingerprints, separate
-      camera / NVR / DVR / encoder / video server.
-- [ ] Distinguish "detected" from "guessed" URLs: `RTSP endpoint
+      *(`get_device_info_multi` prova in ordine OGNI XAddr annunciato
+      invece di fermarsi al primo; il match sul nome locale (sopra) tollera
+      prefissi di namespace diversi tra vendor. "Test contro piu'
+      implementazioni vendor reali" resta intrinsecamente aperto: richiede
+      hardware reale di piu' marche, non riproducibile solo con XML di
+      esempio scritti a mano.)*
+- [x] Improve NVR/DVR identification: add specific fingerprints, separate
+      camera / NVR / DVR / encoder / video server. *(`scanner/nvr/classify.py`:
+      `classify_nvr` ritorna anche un "subtype" — NVR/DVR/Video
+      Encoder/Video Decoder/Video Server quando il banner lo indica
+      specificamente (incl. "xvr"/"hcvr" per gli ibridi Dahua), altrimenti
+      resta l'etichetta ombrello "NVR/DVR" solo per il segnale generico
+      "recorder". `device_type` in scan_engine ora mostra il subtype
+      specifico invece del blob unico precedente.)*
+- [x] Distinguish "detected" from "guessed" URLs: `RTSP endpoint
       detected` vs `RTSP endpoint candidate`, `Admin URL candidate`.
-- [ ] Never present `rtsp://IP:554/` as a guaranteed stream — label it
-      explicitly as a candidate endpoint.
+      *(Nessun URL e' oggi verificato davvero — sarebbe intrusivo aprire
+      un vero handshake RTSP — quindi entrambi restano sempre "candidate":
+      colonne rinominate "RTSP (candidate)"/"Admin (candidate)" con
+      tooltip esplicito invece di un link che sembra un dato confermato.)*
+- [x] Never present `rtsp://IP:554/` as a guaranteed stream — label it
+      explicitly as a candidate endpoint. *(Stesso fix sopra: link con
+      `title` esplicito "Guessed from an open RTSP port, not a verified
+      working stream".)*
 
 ## 🟡 P2 — Security assessment
 

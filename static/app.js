@@ -228,8 +228,8 @@ function renderCameraRowOk(d) {
       <td>${escapeHtml(d.vendor)}</td>
       <td>${escapeHtml(d.model) || "-"}</td>
       <td>${renderPorts(d)}</td>
-      <td>${d.rtsp_url ? '<a class="link" href="' + escapeHtml(d.rtsp_url) + '">' + escapeHtml(d.rtsp_url) + "</a>" : "-"}</td>
-      <td>${d.admin_url ? '<a class="link" target="_blank" href="' + escapeHtml(d.admin_url) + '">open</a>' : "-"}</td>
+      <td>${d.rtsp_url ? '<a class="link" title="Guessed from an open RTSP port, not a verified working stream" href="' + escapeHtml(d.rtsp_url) + '">' + escapeHtml(d.rtsp_url) + "</a>" : "-"}</td>
+      <td>${d.admin_url ? '<a class="link" title="Guessed from an open web port, not confirmed to be the device\'s admin panel" target="_blank" href="' + escapeHtml(d.admin_url) + '">open</a>' : "-"}</td>
       <td>${escapeHtml((d.reasons || []).join("; "))}</td>
     </tr>
   `;

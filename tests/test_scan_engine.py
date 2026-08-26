@@ -190,13 +190,13 @@ class TestClassifyOrphanIps(unittest.TestCase):
 
 class TestBuildOrphanOnvifDevice(unittest.TestCase):
     def setUp(self):
-        self._orig_get_device_info = scan_engine.get_device_info
+        self._orig_get_device_info_multi = scan_engine.get_device_info_multi
 
     def tearDown(self):
-        scan_engine.get_device_info = self._orig_get_device_info
+        scan_engine.get_device_info_multi = self._orig_get_device_info_multi
 
     def test_no_manufacturer_available(self):
-        scan_engine.get_device_info = lambda xaddr, timeout=3: {}
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
         onvif_info = {"xaddrs": ["http://192.168.1.64/onvif/device_service"], "types": "NetworkVideoTransmitter"}
         device = scan_engine._build_orphan_onvif_device("192.168.1.64", onvif_info, "eth0")
 
@@ -215,7 +215,7 @@ class TestBuildOrphanOnvifDevice(unittest.TestCase):
         self.assertTrue(device["reasons"])
 
     def test_manufacturer_and_model_from_get_device_information(self):
-        scan_engine.get_device_info = lambda xaddr, timeout=3: {
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {
             "manufacturer": "Hikvision", "model": "DS-2CD2043G0",
         }
         onvif_info = {"xaddrs": ["http://192.168.1.64/onvif/device_service"], "types": ""}
@@ -226,8 +226,8 @@ class TestBuildOrphanOnvifDevice(unittest.TestCase):
 
     def test_no_xaddrs_skips_device_info_lookup(self):
         def fail(*a, **k):
-            raise AssertionError("get_device_info non doveva essere chiamata senza xaddrs")
-        scan_engine.get_device_info = fail
+            raise AssertionError("get_device_info_multi non doveva essere chiamata senza xaddrs")
+        scan_engine.get_device_info_multi = fail
 
         onvif_info = {"xaddrs": [], "types": ""}
         device = scan_engine._build_orphan_onvif_device("192.168.1.64", onvif_info, "eth0")
