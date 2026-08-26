@@ -25,13 +25,18 @@ meccanismi di discovery, orientato a un caso d'uso preciso.
 
 1. **Autoconfigurazione ethernet.** Quando l'interfaccia `eth0` rileva il
    cavo collegato e non ha gia' un indirizzo, prova prima un lease **DHCP**.
-   Se non arriva entro il timeout, prova in sequenza una lista di **classi
-   private preimpostate** (192.168.1.0/24, 192.168.0.0/24, 10.0.0.0/24,
-   ecc. — vedi `scanner/config.py`): per ciascuna si assegna un IP statico
-   "alto" e verifica con un probe ARP se ci sono host che rispondono. La
-   prima classe "viva" trovata viene mantenuta. Il monitor gira in
-   continuo: se scolleghi e ricolleghi il cavo (magari su un'altra rete),
-   rifà tutto da capo automaticamente.
+   Se non arriva entro il timeout, prova **tutte** le **classi private
+   preimpostate** (192.168.1.0/24, 192.168.0.0/24, 10.0.0.0/24, ecc. — vedi
+   `scanner/config.py`), non si ferma alla prima: per ciascuna si assegna
+   un IP statico "alto" e verifica con un probe ARP se ci sono host che
+   rispondono. Se e' viva una sola classe, viene assegnata direttamente.
+   Se ne sono vive **piu' di una** (es. piu' subnet private configurate
+   manualmente sullo stesso segmento), lo strumento non sceglie da solo
+   per un ordine di priorita' arbitrario: l'interfaccia resta senza
+   indirizzo e la dashboard mostra tutte le classi candidate trovate
+   (con quanti host ha visto ciascuna), chiedendo di sceglierne una da
+   scansionare. Il monitor gira in continuo: se scolleghi e ricolleghi il
+   cavo (magari su un'altra rete), rifà tutto da capo automaticamente.
 
    Se l'interfaccia ha **gia'** uno o piu' indirizzi IPv4 che il tool non
    ha assegnato lui stesso (es. IP secondari configurati a mano per

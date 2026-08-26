@@ -3,10 +3,17 @@
 Logica richiesta:
   1. Quando l'interfaccia eth ha link (cavo collegato), si prova prima il
      DHCP.
-  2. Se il DHCP non risponde entro un timeout, si prova una lista di classi
-     private preimpostate: per ciascuna ci si assegna un IP statico "alto"
-     (difficilmente occupato) e si verifica con un probe ARP se sulla rete
-     rispondono altri host. La prima classe "viva" trovata viene tenuta.
+  2. Se il DHCP non risponde entro un timeout, si provano TUTTE le classi
+     private preimpostate (non ci si ferma alla prima "viva"): per ciascuna
+     ci si assegna un IP statico "alto" (difficilmente occupato) e si
+     verifica con un probe ARP se sulla rete rispondono altri host.
+     - Se e' viva una sola classe, viene assegnata direttamente.
+     - Se ne sono vive PIU' di una (es. piu' subnet private configurate
+       manualmente sullo stesso segmento), la scelta di quale scansionare
+       spetta a chi usa il tool, non a un ordine di priorita' arbitrario
+       nel codice: l'interfaccia resta senza indirizzo, lo stato riporta
+       tutte le candidate trovate, e la dashboard chiede di sceglierne una
+       (endpoint `choose_preset_class`).
   3. Se nessuna classe risulta viva, l'interfaccia resta senza indirizzo e
      lo stato viene riportato come "nessuna rete rilevata": un nuovo giro
      viene ritentato al prossimo cambio di stato del cavo (o su richiesta
@@ -25,7 +32,7 @@ import threading
 import time
 
 from .. import config
-from ..discovery import quick_subnet_probe
+from ..discovery import arp_scan
 
 log = logging.getLogger("raspiscanner.network")
 
@@ -33,7 +40,7 @@ _state_lock = threading.Lock()
 _status = {
     "eth": {
         "iface": None, "up": False, "mode": None, "ip": None, "cidr": None, "addresses": [],
-        "reconfiguring": False, "error": None, "last_change": None,
+        "reconfiguring": False, "error": None, "last_change": None, "candidates": [],
     },
     # Dizionario iface -> stato, NON un singolo stato: un dispositivo puo'
     # avere piu' schede Wi-Fi (es. una usata come client per raggiungere la
@@ -234,22 +241,50 @@ def assign_static(iface, ip, prefix=24):
     _run(["ip", "addr", "add", f"{ip}/{prefix}", "dev", iface])
 
 
-def try_preset_classes(iface):
-    """Prova ciascuna classe preimpostata assegnando l'IP statico e
-    verificando con un probe ARP se ci sono host attivi su quella rete.
-    Ritorna il preset scelto (dict) oppure None se nessuna classe risponde.
+def probe_preset_classes(iface):
+    """Prova OGNI classe preimpostata (non si ferma alla prima "viva"):
+    assegna l'IP statico candidato e verifica con un probe ARP se ci sono
+    host attivi su quella rete. Ritorna la lista di tutte le classi che
+    hanno risposto (dict originale + "hosts_found"), nello stesso ordine
+    di config.PRESET_SUBNETS.
+
+    Puo' capitare che piu' di una classe risulti viva sullo stesso cavo
+    (es. piu' subnet private configurate manualmente sullo stesso
+    segmento): fermarsi alla prima significherebbe scegliere per
+    l'utente in base a un ordine arbitrario nel codice invece che dirgli
+    che c'era un'ambiguita' da risolvere lui stesso.
     """
+    alive = []
     for preset in config.PRESET_SUBNETS:
         cidr = preset["cidr"]
         static_ip = preset["static_ip"]
         log.info("provo classe %s (IP candidato %s)", cidr, static_ip)
         assign_static(iface, static_ip, prefix=cidr.split("/")[1])
-        alive = quick_subnet_probe(iface, cidr, timeout=config.CLASS_PROBE_TIMEOUT, psrc=static_ip)
-        if alive:
-            log.info("classe %s attiva su %s", cidr, iface)
-            return preset
+        hosts = arp_scan(cidr, iface, timeout=config.CLASS_PROBE_TIMEOUT, psrc=static_ip)
+        if hosts:
+            log.info("classe %s attiva su %s (%d host)", cidr, iface, len(hosts))
+            alive.append({**preset, "hosts_found": len(hosts)})
         flush_addresses(iface)
-    return None
+    return alive
+
+
+def choose_preset_class(iface, cidr):
+    """Assegna in modo definitivo una delle classi candidate trovate da
+    probe_preset_classes, scelta manualmente dall'utente quando ce n'era
+    piu' di una viva sullo stesso cavo. Ritorna (ok, messaggio)."""
+    preset = next((p for p in config.PRESET_SUBNETS if p["cidr"] == cidr), None)
+    if not preset:
+        return False, f"Unknown preset network: {cidr}"
+
+    assign_static(iface, preset["static_ip"], prefix=cidr.split("/")[1])
+    _set_status(
+        "eth", iface=iface, up=True, mode="static-fallback",
+        ip=preset["static_ip"], cidr=cidr,
+        addresses=[{"ip": preset["static_ip"], "cidr": cidr}],
+        candidates=[], reconfiguring=False, error=None, last_change=time.time(),
+    )
+    log.info("classe %s scelta manualmente su %s", cidr, iface)
+    return True, f"Network {cidr} selected"
 
 
 def autoconfigure_ethernet(iface=None, force=False):
@@ -284,7 +319,7 @@ def autoconfigure_ethernet(iface=None, force=False):
         if not has_carrier(iface):
             _set_status(
                 "eth", iface=iface, up=False, mode=None, ip=None, cidr=None, addresses=[],
-                reconfiguring=False, last_change=time.time(),
+                candidates=[], reconfiguring=False, last_change=time.time(),
             )
             return
 
@@ -296,7 +331,7 @@ def autoconfigure_ethernet(iface=None, force=False):
                 _set_status(
                     "eth", iface=iface, up=True, mode="manual",
                     ip=primary["ip"], cidr=primary["cidr"], addresses=existing,
-                    reconfiguring=False, error=None, last_change=time.time(),
+                    candidates=[], reconfiguring=False, error=None, last_change=time.time(),
                 )
                 log.info(
                     "%d IP preesistenti su %s non assegnati da questo tool, lasciati invariati",
@@ -310,25 +345,44 @@ def autoconfigure_ethernet(iface=None, force=False):
                 _set_status(
                     "eth", iface=iface, up=True, mode="dhcp",
                     ip=primary["ip"], cidr=primary["cidr"], addresses=addresses,
-                    reconfiguring=False, error=None, last_change=time.time(),
+                    candidates=[], reconfiguring=False, error=None, last_change=time.time(),
                 )
                 return
 
             log.info("DHCP non disponibile su %s, provo classi preimpostate", iface)
-            preset = try_preset_classes(iface)
-            if preset:
+            candidates = probe_preset_classes(iface)
+            if len(candidates) == 1:
+                preset = candidates[0]
                 addresses = [{"ip": preset["static_ip"], "cidr": preset["cidr"]}]
                 _set_status(
                     "eth", iface=iface, up=True, mode="static-fallback",
                     ip=preset["static_ip"], cidr=preset["cidr"], addresses=addresses,
+                    candidates=[], reconfiguring=False, error=None, last_change=time.time(),
+                )
+                return
+
+            if len(candidates) > 1:
+                # Ambiguo: piu' di una classe preimpostata risulta viva sullo
+                # stesso cavo. Non ne assegniamo nessuna da soli — la scelta
+                # spetta all'utente (choose_preset_class), altrimenti
+                # sceglieremmo per priorita' arbitraria nel codice invece che
+                # in base a cosa serve davvero scansionare.
+                flush_addresses(iface)
+                _set_status(
+                    "eth", iface=iface, up=True, mode="choose-network", ip=None, cidr=None,
+                    addresses=[], candidates=candidates,
                     reconfiguring=False, error=None, last_change=time.time(),
+                )
+                log.warning(
+                    "%d classi preimpostate attive su %s, serve una scelta manuale",
+                    len(candidates), iface,
                 )
                 return
 
             flush_addresses(iface)
             _set_status(
                 "eth", iface=iface, up=True, mode="no-network", ip=None, cidr=None, addresses=[],
-                reconfiguring=False, error=None, last_change=time.time(),
+                candidates=[], reconfiguring=False, error=None, last_change=time.time(),
             )
             log.warning("nessuna classe preimpostata ha risposto su %s", iface)
         except Exception as exc:  # non deve mai lasciare lo stato "congelato" in silenzio
@@ -448,7 +502,7 @@ def _monitor_loop(stop_event):
                     log.info("cavo eth scollegato da %s", eth_iface)
                     _set_status(
                         "eth", iface=eth_iface, up=False, mode=None, ip=None, cidr=None, addresses=[],
-                        reconfiguring=False, error=None, last_change=time.time(),
+                        candidates=[], reconfiguring=False, error=None, last_change=time.time(),
                     )
                 elif carrier and not _autoconfig_lock.locked():
                     # Nessun evento di link, ma teniamo aggiornata la lista

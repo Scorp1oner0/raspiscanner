@@ -71,6 +71,37 @@ function renderWifiBoxes(wifiByIface) {
   }
 }
 
+function renderEthCandidates(candidates) {
+  const box = $("eth-choose-network");
+  const list = $("eth-candidates");
+  if (!candidates || candidates.length === 0) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  list.innerHTML = candidates.map((c) => `
+    <button class="btn small btn-choose-network" data-cidr="${escapeHtml(c.cidr)}">
+      ${escapeHtml(c.cidr)} <span class="iface-name">(${c.hosts_found} host${c.hosts_found === 1 ? "" : "s"})</span>
+    </button>
+  `).join("");
+}
+
+async function chooseNetwork(cidr) {
+  $("net-msg").textContent = `Selecting ${cidr}...`;
+  try {
+    const res = await fetch("/api/network/choose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cidr }),
+    });
+    const data = await res.json();
+    $("net-msg").textContent = data.message || "";
+  } catch (e) {
+    $("net-msg").textContent = "Network error.";
+  }
+  await refreshNetwork();
+}
+
 async function refreshNetwork() {
   try {
     const res = await fetch("/api/network");
@@ -83,6 +114,7 @@ async function refreshNetwork() {
     $("eth-mode").textContent = data.eth.mode || "-";
     renderAddressList("eth-addresses", data.eth.addresses);
     $("eth-last-change").textContent = formatAgo(data.eth.last_change);
+    renderEthCandidates(data.eth.candidates);
 
     const errLine = $("eth-error-line");
     if (data.eth.error) {
@@ -503,6 +535,10 @@ function init() {
   $("btn-scan-start").addEventListener("click", startScan);
   $("btn-scan-stop").addEventListener("click", stopScan);
   $("btn-rescan-net").addEventListener("click", rescanNetwork);
+  $("eth-candidates").addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".btn-choose-network");
+    if (btn) chooseNetwork(btn.dataset.cidr);
+  });
   $("btn-refresh-report").addEventListener("click", refreshReport);
   $("btn-close-hotspot").addEventListener("click", closeHotspotModal);
   $("btn-hotspot-generate").addEventListener("click", generateHotspotPassword);

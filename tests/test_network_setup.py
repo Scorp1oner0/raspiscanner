@@ -2,6 +2,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+from scanner import config
 from scanner.network import setup as network_setup
 
 
@@ -146,6 +147,88 @@ class TestMultiWifiInterfaces(unittest.TestCase):
         network_setup.wifi_connect("CasaWifi", "password123", iface="wlan1")
         self.assertIn("ifname", captured["cmd"])
         self.assertIn("wlan1", captured["cmd"])
+
+
+class TestProbePresetClasses(unittest.TestCase):
+    """Bug reale segnalato dall'utente: probe_preset_classes (ex
+    try_preset_classes) si fermava alla prima classe "viva" trovata,
+    nascondendo eventuali altre classi vive sullo stesso cavo e scegliendo
+    per un ordine di priorita' arbitrario invece di lasciar scegliere
+    all'utente quale scansionare davvero."""
+
+    def setUp(self):
+        self._orig_run = network_setup._run
+        self._orig_arp_scan = network_setup.arp_scan
+        network_setup._run = lambda cmd, timeout=15: _FakeResult()
+
+    def tearDown(self):
+        network_setup._run = self._orig_run
+        network_setup.arp_scan = self._orig_arp_scan
+
+    def test_no_class_alive_returns_empty(self):
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: []
+        self.assertEqual(network_setup.probe_preset_classes("eth0"), [])
+
+    def test_single_alive_class_returned_with_host_count(self):
+        target_cidr = config.PRESET_SUBNETS[0]["cidr"]
+
+        def fake_arp_scan(cidr, iface, timeout=None, psrc=None):
+            return [{"ip": "1.1.1.1", "mac": "aa"}] if cidr == target_cidr else []
+
+        network_setup.arp_scan = fake_arp_scan
+        result = network_setup.probe_preset_classes("eth0")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["cidr"], target_cidr)
+        self.assertEqual(result[0]["hosts_found"], 1)
+
+    def test_multiple_alive_classes_all_returned_not_just_first(self):
+        cidr_a = config.PRESET_SUBNETS[0]["cidr"]
+        cidr_b = config.PRESET_SUBNETS[2]["cidr"]
+
+        def fake_arp_scan(cidr, iface, timeout=None, psrc=None):
+            if cidr == cidr_a:
+                return [{"ip": "1.1.1.1", "mac": "aa"}]
+            if cidr == cidr_b:
+                return [{"ip": "2.2.2.2", "mac": "bb"}, {"ip": "2.2.2.3", "mac": "cc"}]
+            return []
+
+        network_setup.arp_scan = fake_arp_scan
+        result = network_setup.probe_preset_classes("eth0")
+        by_cidr = {r["cidr"]: r for r in result}
+        self.assertEqual(set(by_cidr), {cidr_a, cidr_b})
+        self.assertEqual(by_cidr[cidr_a]["hosts_found"], 1)
+        self.assertEqual(by_cidr[cidr_b]["hosts_found"], 2)
+
+
+class TestChoosePresetClass(unittest.TestCase):
+    def setUp(self):
+        self._orig_run = network_setup._run
+        network_setup._run = lambda cmd, timeout=15: _FakeResult()
+        network_setup._status["eth"] = {
+            "iface": None, "up": False, "mode": "choose-network", "ip": None, "cidr": None,
+            "addresses": [], "reconfiguring": False, "error": None, "last_change": None,
+            "candidates": [
+                {"cidr": "192.168.1.0/24", "static_ip": "192.168.1.250", "hosts_found": 2},
+                {"cidr": "192.168.0.0/24", "static_ip": "192.168.0.250", "hosts_found": 1},
+            ],
+        }
+
+    def tearDown(self):
+        network_setup._run = self._orig_run
+
+    def test_valid_cidr_assigns_and_clears_candidates(self):
+        ok, _ = network_setup.choose_preset_class("eth0", "192.168.1.0/24")
+        self.assertTrue(ok)
+        status = network_setup.get_status()
+        self.assertEqual(status["eth"]["mode"], "static-fallback")
+        self.assertEqual(status["eth"]["cidr"], "192.168.1.0/24")
+        self.assertEqual(status["eth"]["ip"], "192.168.1.250")
+        self.assertEqual(status["eth"]["candidates"], [])
+
+    def test_unknown_cidr_rejected(self):
+        ok, message = network_setup.choose_preset_class("eth0", "9.9.9.0/24")
+        self.assertFalse(ok)
+        self.assertIn("Unknown", message)
 
 
 class TestExistingConfigProtected(unittest.TestCase):

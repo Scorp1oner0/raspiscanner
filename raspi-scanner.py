@@ -84,6 +84,19 @@ def api_network_rescan():
     return jsonify({"status": "started", "force": force})
 
 
+@app.route("/api/network/choose", methods=["POST"])
+def api_network_choose():
+    data = request.get_json(silent=True) or {}
+    cidr = data.get("cidr")
+    if not cidr:
+        return jsonify({"ok": False, "message": "cidr is required"}), 400
+    iface = data.get("iface") or network_setup.get_status()["eth"].get("iface") or network_setup.find_default_eth_iface()
+    if not iface:
+        return jsonify({"ok": False, "message": "No ethernet interface found"}), 400
+    ok, message = network_setup.choose_preset_class(iface, cidr)
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+
 @app.route("/api/wifi/networks")
 def api_wifi_networks():
     iface = request.args.get("iface") or None
