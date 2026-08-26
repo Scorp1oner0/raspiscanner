@@ -159,7 +159,7 @@ function renderAllTable(devices) {
   const tbody = $("table-all");
   $("count-all").textContent = devices.length;
   if (devices.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No data yet — start a scan</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">No data yet — start a scan</td></tr>';
     return;
   }
   tbody.innerHTML = devices.map((d) => `
@@ -167,6 +167,7 @@ function renderAllTable(devices) {
       <td>${escapeHtml(d.ip)}</td>
       <td>${escapeHtml(d.mac) || "-"}</td>
       <td>${escapeHtml(d.vendor)}</td>
+      <td>${escapeHtml(d.model) || "-"}</td>
       <td>${escapeHtml(d.hostname)}</td>
       <td>${escapeHtml(d.iface)}</td>
       <td>${escapeHtml(d.network) || "-"}</td>
@@ -182,6 +183,7 @@ function renderCameraRowOk(d) {
       <td>${escapeHtml(d.ip)}</td>
       <td>${escapeHtml(d.mac)}</td>
       <td>${escapeHtml(d.vendor)}</td>
+      <td>${escapeHtml(d.model) || "-"}</td>
       <td>${renderPorts(d)}</td>
       <td>${d.rtsp_url ? '<a class="link" href="' + escapeHtml(d.rtsp_url) + '">' + escapeHtml(d.rtsp_url) + "</a>" : "-"}</td>
       <td>${d.admin_url ? '<a class="link" target="_blank" href="' + escapeHtml(d.admin_url) + '">open</a>' : "-"}</td>
