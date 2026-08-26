@@ -7,6 +7,25 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<div class="modal-overlay hidden" id="forced-password-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span>🔒 Change your password</span>
+    </div>
+    <p class="modal-desc">
+      Account <strong id="forced-password-username"></strong> is still using
+      the random password generated when the service first started. You
+      must set a new one before you can use the dashboard.
+    </p>
+    <label class="modal-label">New password (min. 6 characters)</label>
+    <input type="text" id="forced-password-input" class="modal-input" placeholder="new password">
+    <div class="modal-actions">
+      <button class="btn primary" id="btn-forced-password-submit">Set new password</button>
+    </div>
+    <span id="forced-password-msg" class="msg"></span>
+  </div>
+</div>
+
 <header class="topbar">
   <div class="brand-row">
     <div class="brand"><span class="brand-mark">📡</span> RaspiScanner</div>
@@ -165,9 +184,8 @@
       <p class="modal-desc">
         Users with dashboard access (HTTP Basic Auth: the browser asks for
         a username/password once and remembers it for the session). The
-        default user created on first launch is
-        <strong>RaspiScanner</strong> / <strong>RaspiPass</strong> —
-        change the password as soon as possible.
+        bootstrap user created on first launch gets a random password
+        printed once to the service log — no fixed default.
       </p>
 
       <div id="settings-user-list" class="user-list"></div>

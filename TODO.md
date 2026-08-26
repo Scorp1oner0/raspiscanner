@@ -1,0 +1,166 @@
+# RaspiScanner — Master TODO
+
+Roadmap toward a 1.0 release, ordered by priority. This is the working
+checklist — check items off as they land, keep it in sync with reality
+instead of letting it drift into aspirational fiction.
+
+Suggested sequence: **Security (P0) → Robustness (P1 networking bits) →
+CCTV/ONVIF (P2) → Tests (P3) → Release (P3 packaging) → new features
+(P4, not before 1.0)**. Resist the urge to start P4 before P0-P3 are
+done — a small, solid, documented 1.0 beats an endlessly growing 0.x.
+
+## 🔴 P0 — Before publishing/release
+
+- [x] Block the HTTP fallback: if TLS/certificate isn't available, refuse
+      to start the dashboard instead of silently serving over plain HTTP.
+      Show a clear error. *(`run_dashboard` now `sys.exit(1)`s with a
+      clear log/stderr message instead of falling back to `ssl_context=None`.)*
+- [x] Remove the fixed default credentials (`RaspiScanner` / `RaspiPass`):
+      generate a random initial password (or a bootstrap procedure) and
+      force a password change on first login. *(`auth.ensure_default_user`
+      generates a random password, marks the account `must_change_password`;
+      every endpoint except the password-change one returns 403 until it's
+      changed, enforced both server-side and with a blocking overlay in
+      the dashboard.)*
+- [x] Secure the ONVIF XAddr: validate the address received from the
+      device, reject public IPs/arbitrary hostnames — GetDeviceInformation
+      must not become an SSRF primitive for whatever XAddr a multicast
+      responder feels like sending. *(`onvif._is_safe_xaddr_host`: IPv4
+      literals only, must be a private, non-loopback/link-local/multicast/
+      reserved address.)*
+- [x] Test behavior with no OpenSSL available: verify the service refuses
+      to start over HTTP, add an automated test for it. *(`tests/test_raspi_scanner.py`.)*
+
+## 🟠 P1 — Security hardening
+
+- [ ] User roles: `admin` / `operator` / `viewer`.
+- [ ] Restrict `/api/settings/users` (create/delete/password/account
+      management) to admins only.
+- [ ] CSRF protection, especially on every dashboard POST.
+- [ ] Origin/Host checks to avoid unwanted cross-origin requests.
+- [ ] Privilege handling: evaluate running Flask as non-root, possibly a
+      small privileged helper for ARP/raw sockets, DHCP, `ip`,
+      NetworkManager/hotspot.
+- [ ] systemd hardening: `NoNewPrivileges`, minimal capabilities,
+      `ProtectSystem`, `ProtectHome`, `PrivateTmp`, evaluate
+      `RestrictAddressFamilies`.
+- [ ] Fix the scan-start race condition: lock before checking
+      `_state["running"]`, guarantee only one concurrent scan.
+
+## 🟡 P2 — Networking robustness
+
+- [ ] Avoid IP collisions during DHCP fallback: ARP-probe the `.250`
+      candidate before assigning it; pick another address if taken.
+- [ ] Better feedback during preset-class probing: show current preset,
+      `7/13`, subnet being tried, timeout.
+- [ ] Handle `nmcli` errors better: distinguish a real error from
+      unexpected output, don't parse solely on fragile `:` splitting.
+- [ ] Installer: separate required vs optional dependencies — a required
+      package failing should STOP the install, an optional one should
+      only warn.
+- [ ] Review `rsync --delete` carefully: document its behavior, consider
+      a `--no-delete` mode.
+
+## 🟡 P2 — ONVIF / CCTV
+
+- [ ] Replace the manual XML parsing with a standard XML parser, handle
+      ONVIF namespaces properly.
+- [ ] Broaden ONVIF compatibility: test against more vendor
+      implementations, differing XML responses, multiple XAddrs.
+- [ ] Improve NVR/DVR identification: add specific fingerprints, separate
+      camera / NVR / DVR / encoder / video server.
+- [ ] Distinguish "detected" from "guessed" URLs: `RTSP endpoint
+      detected` vs `RTSP endpoint candidate`, `Admin URL candidate`.
+- [ ] Never present `rtsp://IP:554/` as a guaranteed stream — label it
+      explicitly as a candidate endpoint.
+
+## 🟡 P2 — Security assessment
+
+- [ ] More precise HTTP classification: `HTTP service detected` / `HTTP
+      administrative interface` / `HTTPS available` / `HTTP without
+      HTTPS`.
+- [ ] Revisit risk scoring: don't let any HTTP automatically become
+      Medium — separate "service exposed" from "actually insecure
+      configuration".
+- [ ] More specific findings: Telnet, HTTP admin, exposed RTSP, legacy
+      services, known CCTV ports.
+- [ ] Document clearly that this is not a vulnerability scanner: no
+      exploits, no brute force, no credential guessing, no CVE scanning.
+
+## 🟢 P3 — Tests
+
+- [ ] Full integration test: Flask → scan → classification → report.
+- [ ] Concurrency tests: two simultaneous `/scan/start`, scan + network
+      reconfiguration, stop mid-scan.
+- [ ] Malicious-input tests: malformed ONVIF XML, malicious XAddr,
+      malformed mDNS, odd hostnames, huge/malformed HTTP banners.
+- [ ] Test `nmcli` with unexpected output.
+- [ ] Test absence of system commands: `openssl`, `dhclient`, `nmcli`,
+      `ip`.
+- [ ] Installer/service tests.
+
+## 🟢 P3 — Performance
+
+- [ ] Measure scan times on Raspberry Pi 3B+.
+- [ ] Measure scan times on Raspberry Pi 4/5.
+- [ ] Optimize timeouts where possible.
+- [ ] Evaluate OUI lookup caching.
+- [ ] Avoid duplicate scans.
+- [ ] Measure RAM usage on large scans.
+- [ ] Measure behavior on `/16` networks.
+
+## 🟢 P3 — Dashboard UX
+
+- [ ] Scan progress indicator.
+- [ ] Real-time network interface status.
+- [ ] VPN status. Wi-Fi status. Hotspot status.
+- [ ] Active-subnet indicator.
+- [ ] Device count.
+- [ ] Visual distinction: Camera / NVR-DVR / Router / PC / Printer /
+      Other.
+- [ ] Clearly show: Detected / Candidate / Inferred.
+
+## 🟢 P3 — Reporting
+
+- [ ] Improve the HTML report.
+- [ ] Improve PDF/print layout, if planned.
+- [ ] Add scan timestamp, interface used, subnet analyzed, scan duration.
+- [ ] Add a summary: devices, cameras, NVRs, infrastructure, findings.
+- [ ] Highlight Critical/High/Medium/Low severity.
+- [ ] Add a disclaimer about sensitive data.
+- [ ] Clearly state the report can contain IP/MAC/hostname.
+
+## 🟢 P3 — Packaging / release
+
+- [ ] Official `1.0.0` version.
+- [ ] Changelog.
+- [ ] Verified `LICENSE`.
+- [ ] Final `README.md`.
+- [ ] `SECURITY.md`.
+- [ ] `CONTRIBUTING.md`.
+- [ ] Final `.gitignore`.
+- [ ] Verified `requirements.txt`.
+- [ ] Installer verified from scratch on a real Raspberry Pi.
+- [ ] Install verified on Debian/Raspberry Pi OS.
+- [ ] Install verified on Kali Linux.
+- [ ] Verified systemd service.
+- [ ] Uninstall procedure.
+- [ ] Upgrade procedure.
+
+## 🚀 P4 — Future evolution (not before 1.0)
+
+- [ ] Richer vendor fingerprint database.
+- [ ] Vendor-specific fingerprints: Hikvision/Dahua/Axis/Bosch/Ksenia etc.
+- [ ] Proprietary NVR detection.
+- [ ] VLAN awareness.
+- [ ] Optional SNMP discovery.
+- [ ] LLDP/CDP discovery.
+- [ ] IPv6 discovery.
+- [ ] Network topology map.
+- [ ] Structured JSON export.
+- [ ] Documented API.
+- [ ] Webhooks.
+- [ ] Comparative reports between scans ("first scan vs current scan").
+- [ ] Local asset database.
+- [ ] Historical dashboard.
+- [ ] Field Technician mode. Audit mode. Continuous Monitoring mode.

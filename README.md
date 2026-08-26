@@ -262,7 +262,11 @@ anyone simply on the same network/hotspot during the scan can't access it
 without credentials, served over **HTTPS** with a self-signed certificate
 generated on first launch (persisted in `data/tls_cert.pem`/
 `data/tls_key.pem`) so credentials travel encrypted instead of in the
-clear over the network you're scanning.
+clear over the network you're scanning. If the certificate can't be
+generated (`openssl` missing or failing), **the service refuses to start**
+rather than silently falling back to plain HTTP — that fallback would
+defeat the point of Basic Auth entirely, and worse, without anyone
+noticing.
 
 There's no certificate signed by a public CA for this use case: the
 device (Raspberry Pi or Linux PC) gets installed on a different private
@@ -277,20 +281,25 @@ sophisticated active man-in-the-middle attack that nobody actually
 verifies in practice (certificate fingerprint) — a real improvement over
 plain HTTP, not an absolute guarantee.
 
-On first launch, if `data/users.json` doesn't exist yet, the default user
-is created:
+On first launch, if `data/users.json` doesn't exist yet, a bootstrap user
+`RaspiScanner` is created with a **random password**, printed once to the
+service log:
 
 ```
-Username: RaspiScanner
-Password: RaspiPass
+sudo journalctl -u raspiscanner -n 20 --no-pager
+# utente di bootstrap creato — utente: RaspiScanner  password iniziale: <random>
 ```
 
-**Change the password as soon as possible** from the "Settings" tab of
-the dashboard, where you can also add other users or remove them.
-Credentials are persisted (hashed, never in the clear) in
-`data/users.json` and survive service restarts — nothing needs to be
-redone on every boot. The browser asks for the username/password once and
-remembers it for the browsing session.
+There is no fixed, well-known default password — every installation gets
+its own, generated at first startup, never hardcoded anywhere. This
+account is also marked "must change password": the dashboard shows
+**nothing else** until you set a new password, so it can't accidentally
+be left running on the random bootstrap one. Once changed, you can add
+other users or remove them from the "Settings" tab. Credentials are
+persisted (hashed, never in the clear) in `data/users.json` and survive
+service restarts — nothing needs to be redone on every boot. The browser
+asks for the username/password once and remembers it for the browsing
+session.
 
 `data/users.json` is in `.gitignore`: it must not be committed (it
 contains the password hashes for that specific deployment).

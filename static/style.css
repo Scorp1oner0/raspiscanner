@@ -266,6 +266,7 @@ a.link:hover { text-decoration: underline; }
   padding: 16px;
 }
 .modal-overlay.hidden { display: none; }
+#forced-password-overlay { z-index: 200; }
 
 .modal-box {
   background: var(--panel);

@@ -7,6 +7,7 @@ supportati. E' un segnale molto piu' affidabile del solo controllo porte
 per riconoscere una telecamera vera.
 """
 import http.client
+import ipaddress
 import logging
 import socket
 import time
@@ -98,6 +99,35 @@ def onvif_probe(iface_ip=None, timeout=3):
     return results
 
 
+def _is_safe_xaddr_host(hostname):
+    """Rifiuta XAddr che non puntano a un IPv4 privato "normale".
+
+    Il probe ONVIF e' multicast: QUALUNQUE dispositivo sulla stessa rete
+    puo' rispondere con l'XAddr che preferisce, inclusi un IP pubblico o
+    un servizio interno sensibile — senza questo controllo
+    get_device_info() farebbe una richiesta HTTP verso un host arbitrario
+    scelto da un mittente non fidato (SSRF: lo scanner gira da root e un
+    dispositivo malevolo potrebbe farlo bussare a porte interne che
+    altrimenti non toccherebbe mai). Ammessi solo IP IPv4 letterali
+    (niente hostname DNS: elimina anche il DNS rebinding) in range privati
+    non speciali.
+
+    Deliberatamente NON limitato alle subnet attualmente scansionate: un
+    IP privato fuori da ogni rete attiva e' esattamente il caso "telecamera
+    con IP sbagliato" che scan_engine.ORPHAN_ONVIF_REASON gestisce di
+    proposito, e continua a essere legittimo interrogare.
+    """
+    try:
+        addr = ipaddress.IPv4Address(hostname)
+    except (ipaddress.AddressValueError, ValueError):
+        return False
+    if not addr.is_private:
+        return False
+    if addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_reserved or addr.is_unspecified:
+        return False
+    return True
+
+
 def get_device_info(xaddr, timeout=3):
     """Interroga l'endpoint ONVIF GetDeviceInformation sull'XAddr ricevuto
     dal WS-Discovery per ottenere Manufacturer/Model/FirmwareVersion REALI,
@@ -107,6 +137,9 @@ def get_device_info(xaddr, timeout=3):
     """
     parsed = urllib.parse.urlparse(xaddr)
     if not parsed.hostname:
+        return {}
+    if not _is_safe_xaddr_host(parsed.hostname):
+        log.warning("XAddr ONVIF scartato (host non privato/non valido): %s", xaddr)
         return {}
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     path = parsed.path or "/onvif/device_service"

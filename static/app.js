@@ -600,7 +600,60 @@ async function stopHotspot() {
   }
 }
 
-function init() {
+async function checkForcedPasswordChange() {
+  try {
+    const res = await fetch("/api/settings/me");
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.must_change_password) {
+      $("forced-password-username").textContent = data.username;
+      $("forced-password-overlay").dataset.username = data.username;
+      $("forced-password-overlay").classList.remove("hidden");
+      return true;
+    }
+  } catch (e) {
+    console.error("checkForcedPasswordChange", e);
+  }
+  return false;
+}
+
+async function submitForcedPasswordChange() {
+  const username = $("forced-password-overlay").dataset.username;
+  const password = $("forced-password-input").value;
+  const msg = $("forced-password-msg");
+  msg.textContent = "Updating...";
+  try {
+    const res = await fetch("/api/settings/users/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msg.textContent = "Password updated — reloading...";
+      // Ricarica invece di proseguire in place: piu' semplice e sicuro
+      // che reinizializzare a meta' uno stato che finora era bloccato di
+      // proposito, e la pagina e' comunque leggera.
+      setTimeout(() => window.location.reload(), 800);
+    } else {
+      msg.textContent = data.message || "Failed to update password.";
+    }
+  } catch (e) {
+    msg.textContent = "Network error.";
+  }
+}
+
+async function init() {
+  // P0: se questo utente ha ancora la password casuale di bootstrap,
+  // blocca tutto il resto della dashboard (niente scan, niente polling)
+  // finche' non la cambia — vedi _PASSWORD_CHANGE_ALWAYS_ALLOWED lato
+  // server, che rifiuta con 403 qualunque altro endpoint nel frattempo.
+  const mustChangePassword = await checkForcedPasswordChange();
+  if (mustChangePassword) {
+    $("btn-forced-password-submit").addEventListener("click", submitForcedPasswordChange);
+    return;
+  }
+
   setupTabs();
   $("btn-scan-start").addEventListener("click", startScan);
   $("btn-scan-stop").addEventListener("click", stopScan);

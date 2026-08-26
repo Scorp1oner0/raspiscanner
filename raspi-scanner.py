@@ -41,6 +41,20 @@ _startup_lock = threading.Lock()
 _started = False
 
 
+# Con must_change_password attivo per l'utente autenticato, SOLO questi
+# endpoint restano raggiungibili: il minimo indispensabile per mostrare e
+# completare la schermata di cambio password forzato (P0: l'utente di
+# bootstrap ha una password casuale generata al primo avvio, vedi
+# scanner.auth — finche' non viene cambiata, nessun controllo di rete o
+# scan deve essere possibile, non solo "consigliato cambiarla appena puoi").
+_PASSWORD_CHANGE_ALWAYS_ALLOWED = {
+    ("GET", "/"),
+    ("GET", "/api/settings/me"),
+    ("GET", "/api/settings/users"),
+    ("POST", "/api/settings/users/password"),
+}
+
+
 @app.before_request
 def _require_auth():
     creds = request.authorization
@@ -49,6 +63,22 @@ def _require_auth():
             "Accesso non autorizzato.", 401,
             {"WWW-Authenticate": 'Basic realm="RaspiScanner"'},
         )
+    if request.path.startswith("/static/"):
+        return
+    if auth.must_change_password(creds.username) and (request.method, request.path) not in _PASSWORD_CHANGE_ALWAYS_ALLOWED:
+        return jsonify({
+            "error": "password_change_required",
+            "message": "You must change your password before continuing.",
+        }), 403
+
+
+@app.route("/api/settings/me")
+def api_settings_me():
+    creds = request.authorization
+    return jsonify({
+        "username": creds.username,
+        "must_change_password": auth.must_change_password(creds.username),
+    })
 
 
 def _ensure_startup():
@@ -264,17 +294,32 @@ def api_settings_delete_user(username):
 
 
 def run_dashboard(port=7332):
-    _ensure_startup()
+    # Il TLS va verificato PRIMA di avviare qualunque altra cosa (monitor
+    # rete, server): la dashboard espone credenziali via Basic Auth e
+    # l'intero inventario dei dispositivi scansionati, quindi servirla su
+    # HTTP semplice come fallback silenzioso vanificherebbe la protezione
+    # — meglio non partire affatto e dirlo chiaramente, piuttosto che
+    # esporre credenziali in chiaro senza che l'operatore se ne accorga.
     cert_path, key_path = tls.ensure_cert()
-    if cert_path:
-        log.info("TLS attivo (certificato self-signed): il browser mostrera' "
-                  "un avviso da accettare la prima volta, e' atteso.")
-        ssl_context = (cert_path, key_path)
-    else:
-        log.warning("TLS non disponibile (openssl assente?): la dashboard "
-                    "restera' su HTTP semplice")
-        ssl_context = None
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True, ssl_context=ssl_context)
+    if not cert_path:
+        log.error(
+            "Certificato TLS non disponibile (openssl assente o generazione "
+            "fallita): mi rifiuto di avviare la dashboard su HTTP semplice, "
+            "che manderebbe le credenziali Basic Auth in chiaro sulla rete "
+            "scansionata. Installa openssl e riavvia il servizio."
+        )
+        print(
+            "ERRORE: certificato TLS non disponibile (openssl assente o "
+            "generazione fallita). La dashboard non parte su HTTP semplice: "
+            "installa openssl e riavvia.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    log.info("TLS attivo (certificato self-signed): il browser mostrera' "
+              "un avviso da accettare la prima volta, e' atteso.")
+    _ensure_startup()
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True, ssl_context=(cert_path, key_path))
 
 
 def run_cli_report(timeout=180):
