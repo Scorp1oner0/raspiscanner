@@ -48,6 +48,11 @@ _status = {
     # senza cavo), e vanno tracciate/mostrate/controllate tutte, non solo la
     # prima trovata.
     "wifi": {},
+    # Stesso principio per le VPN (WireGuard, OpenVPN, PPP...): letture,
+    # mai gestite (nessuna connessione/disconnessione da qui, solo stato +
+    # scan quando attive — vedi network.setup.is_noarp per la parte che
+    # conta davvero, cioe' quale metodo di discovery usarci sopra).
+    "vpn": {},
 }
 
 # Serializza autoconfigure_ethernet(): puo' essere chiamata sia dal monitor
@@ -63,6 +68,7 @@ def get_status():
         return {
             "eth": dict(_status["eth"]),
             "wifi": {iface: dict(info) for iface, info in _status["wifi"].items()},
+            "vpn": {iface: dict(info) for iface, info in _status["vpn"].items()},
         }
 
 
@@ -90,6 +96,8 @@ def classify_interface(name):
         return "eth"
     if name.startswith(config.WIFI_IFACE_PREFIXES):
         return "wifi"
+    if name.startswith(config.VPN_IFACE_PREFIXES):
+        return "vpn"
     return None
 
 
@@ -114,6 +122,35 @@ def find_default_wifi_iface():
     coprire tutte le schede presenti: qui serve list_wifi_ifaces()."""
     ifaces = list_wifi_ifaces()
     return ifaces[0] if ifaces else None
+
+
+def list_vpn_ifaces():
+    """Ritorna TUTTE le interfacce VPN presenti (WireGuard, OpenVPN,
+    PPP, Tailscale, ZeroTier...): un dispositivo puo' averne piu' di una
+    attiva insieme, stesso principio del Wi-Fi."""
+    return sorted(n for n in list_interfaces() if classify_interface(n) == "vpn")
+
+
+_IFF_NOARP = 0x80
+
+
+def is_noarp(iface):
+    """True se il kernel marca l'interfaccia come NOARP: verificato
+    concretamente su un'interfaccia WireGuard reale (flag NOARP presente,
+    `ip neigh` sempre vuoto pur avendo un peer realmente raggiungibile via
+    ping). Tipico di VPN instradate punto-punto senza dominio di broadcast
+    L2 — l'ARP scan (discovery.arp) non puo' funzionarci, serve
+    discovery.icmp_scan al suo posto (vedi scan_engine). Si legge il flag
+    reale del kernel invece di dedurlo dal nome dell'interfaccia: piu'
+    affidabile per qualunque VPN non elencata in config.VPN_IFACE_PREFIXES,
+    e corretto anche per un'eventuale interfaccia VPN in modalita' TAP
+    (bridged, quella si' supporta ARP)."""
+    try:
+        with open(f"/sys/class/net/{iface}/flags") as fh:
+            flags = int(fh.read().strip(), 16)
+            return bool(flags & _IFF_NOARP)
+    except (FileNotFoundError, OSError, ValueError):
+        return False
 
 
 def has_carrier(iface):
@@ -440,6 +477,35 @@ def refresh_wifi_status():
                 del _status["wifi"][stale]
 
 
+def _refresh_one_vpn_iface(iface):
+    addresses = _address_list(iface)
+    primary = addresses[0] if addresses else None
+    status = {
+        "iface": iface,
+        "up": bool(addresses),
+        "ip": primary["ip"] if primary else None,
+        "cidr": primary["cidr"] if primary else None,
+        "addresses": addresses,
+        "noarp": is_noarp(iface),
+    }
+    with _state_lock:
+        _status["vpn"][iface] = status
+
+
+def refresh_vpn_status():
+    """Aggiorna lo stato di tutte le interfacce VPN presenti. Un tunnel
+    chiuso (interfaccia scomparsa, es. WireGuard disattivato) viene
+    rimosso dallo stato invece di restare "fantasma", stesso principio di
+    refresh_wifi_status."""
+    ifaces = list_vpn_ifaces()
+    for iface in ifaces:
+        _refresh_one_vpn_iface(iface)
+    with _state_lock:
+        for stale in list(_status["vpn"]):
+            if stale not in ifaces:
+                del _status["vpn"][stale]
+
+
 def wifi_scan_networks(iface=None):
     """Elenca le reti Wi-Fi visibili (best-effort, richiede nmcli).
 
@@ -513,6 +579,7 @@ def _monitor_loop(stop_event):
             else:
                 eth_iface = find_default_eth_iface()
             refresh_wifi_status()
+            refresh_vpn_status()
         except Exception:
             # Il monitor gira per tutta la vita del processo: un'eccezione
             # qui non deve fermarlo per sempre, altrimenti nessuna

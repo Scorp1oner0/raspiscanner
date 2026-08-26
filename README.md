@@ -46,12 +46,18 @@ of its own discovery mechanisms, aimed at one specific use case.
    dashboard). The "Reconfigure network" button has a "force" option to
    wipe everything anyway and restart DHCP/fallback from scratch.
 
-2. **Device scan** across **all** active subnets on eth and on **every**
+2. **Device scan** across **all** active subnets on eth, on **every**
    Wi-Fi adapter present (a device can have more than one — e.g. one used
    as a client to reach an existing network, another dedicated to the
    hotspot — and all of them are tracked/scanned, not just the first one
-   found; every configured IPv4 address, not just the first): ARP scan for
-   IP/MAC, targeted port scan + HTTP banners, **ONVIF WS-Discovery** probe
+   found; every configured IPv4 address, not just the first), and on
+   **active VPN tunnels** (WireGuard, OpenVPN, PPP, Tailscale, ZeroTier):
+   ARP scan for IP/MAC on regular links, **ICMP sweep** instead on VPN
+   interfaces the kernel marks NOARP (point-to-point/routed tunnels have
+   no L2 broadcast domain to ARP into — verified on a real WireGuard
+   interface: ARP-based discovery finds nothing there no matter what,
+   while a plain ping to a real peer works fine; ICMP sweep has no MAC to
+   report, only IP), targeted port scan + HTTP banners, **ONVIF WS-Discovery** probe
    (with `GetDeviceInformation` for real vendor/model when available),
    **mDNS/Bonjour** probe (`_device-info._tcp.local` and other common
    service types — gives a friendly name and, for Apple devices, the real
@@ -302,6 +308,7 @@ scanner/
   scan_engine.py                Scan orchestration + state for the dashboard
   discovery/
     arp.py                       ARP scan (scapy) + reverse DNS
+    icmp.py                       ICMP sweep for NOARP links (VPN tunnels)
     mdns.py                       mDNS/Bonjour probe (friendly name + Apple model)
   fingerprint/
     ports.py                      TCP port scan + HTTP banners
@@ -311,7 +318,7 @@ scanner/
   nvr/
     classify.py                      Classification "is it an NVR/DVR?"
   network/
-    setup.py                          Eth autoconfig (DHCP/fallback) + monitor + wifi
+    setup.py                          Eth autoconfig (DHCP/fallback) + monitor + wifi/VPN status
     infra.py                           Default gateway + "is it network gear?"
     hotspot.py                          Wi-Fi access point (cable-free reachability)
   reporting/

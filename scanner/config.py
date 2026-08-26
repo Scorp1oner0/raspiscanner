@@ -11,6 +11,12 @@ TLS_KEY_PATH = os.path.join(DATA_DIR, "tls_key.pem")
 # Interfacce di rete gestite (nomi tipici su Raspberry Pi OS / kernel Linux)
 ETH_IFACE_PREFIXES = ("eth", "en")
 WIFI_IFACE_PREFIXES = ("wlan", "wl")
+# VPN comuni: WireGuard (wg*), OpenVPN (tun*/tap*), PPP, Tailscale, ZeroTier.
+# Usate solo per raggrupparle nella dashboard: la scelta ARP vs ICMP per lo
+# scan (vedi network.setup.is_noarp) si basa sul flag NOARP del kernel, non
+# sul nome — piu' affidabile di un prefisso per qualunque interfaccia VPN
+# non elencata qui.
+VPN_IFACE_PREFIXES = ("tun", "tap", "wg", "ppp", "tailscale", "zt")
 
 # Timeout DHCP prima di passare al fallback su classi preimpostate
 DHCP_TIMEOUT_SECONDS = 12

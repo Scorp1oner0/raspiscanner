@@ -102,6 +102,34 @@ async function chooseNetwork(cidr) {
   await refreshNetwork();
 }
 
+function renderVpnBoxes(vpnByIface) {
+  const container = $("vpn-boxes");
+  const ifaces = Object.keys(vpnByIface || {}).sort();
+
+  if (ifaces.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  container.innerHTML = ifaces.map((iface) => {
+    const info = vpnByIface[iface];
+    const noarpNote = info.noarp
+      ? '<div class="net-line">Discovery: <span>ICMP (no ARP on this link)</span></div>'
+      : "";
+    return `
+      <div class="net-box">
+        <div class="net-title">🔒 VPN <span class="iface-name">(${escapeHtml(iface)})</span></div>
+        <div class="net-line">Status: <span>${info.up ? "connected" : "disconnected"}</span></div>
+        <div class="net-line">Addresses:</div>
+        <div class="addr-list">${info.addresses && info.addresses.length
+          ? info.addresses.map((a) => `<div class="addr-row"><span>${escapeHtml(a.ip)}</span><span class="iface-name">${escapeHtml(a.cidr)}</span></div>`).join("")
+          : '<div class="addr-empty">-</div>'}</div>
+        ${noarpNote}
+      </div>
+    `;
+  }).join("");
+}
+
 async function refreshNetwork() {
   try {
     const res = await fetch("/api/network");
@@ -125,6 +153,7 @@ async function refreshNetwork() {
     }
 
     renderWifiBoxes(data.wifi);
+    renderVpnBoxes(data.vpn);
 
     return data;
   } catch (e) {

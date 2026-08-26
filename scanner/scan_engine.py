@@ -12,7 +12,7 @@ import time
 from . import vendor
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url
 from .cameras.onvif import get_device_info, onvif_probe
-from .discovery import arp_scan, mdns_probe, resolve_hostname
+from .discovery import arp_scan, icmp_scan, mdns_probe, resolve_hostname
 from .fingerprint import grab_http_banner, scan_ports
 from .hosts import classify_host
 from .network import setup as network_setup
@@ -54,10 +54,11 @@ def _set_device(ip, device):
 
 def _active_networks():
     """Ritorna [(iface, cidr, local_ip), ...], uno per OGNI indirizzo IPv4
-    attivo su eth e su TUTTE le schede wifi (un'interfaccia puo' averne piu'
-    di uno, es. IP secondari configurati a mano per raggiungere piu' subnet
-    sullo stesso cavo, e un dispositivo puo' avere piu' schede Wi-Fi: vanno
-    scansionate tutte, non solo la prima)."""
+    attivo su eth, su TUTTE le schede wifi e su TUTTE le VPN attive
+    (un'interfaccia puo' averne piu' di uno, es. IP secondari configurati a
+    mano per raggiungere piu' subnet sullo stesso cavo, e un dispositivo
+    puo' avere piu' schede Wi-Fi/VPN: vanno scansionate tutte, non solo la
+    prima)."""
     status = network_setup.get_status()
     nets = []
     eth = status.get("eth", {})
@@ -66,6 +67,12 @@ def _active_networks():
             if addr.get("ip") and addr.get("cidr"):
                 nets.append((eth["iface"], addr["cidr"], addr["ip"]))
     for info in (status.get("wifi") or {}).values():
+        if not info.get("up"):
+            continue
+        for addr in info.get("addresses") or []:
+            if addr.get("ip") and addr.get("cidr"):
+                nets.append((info["iface"], addr["cidr"], addr["ip"]))
+    for info in (status.get("vpn") or {}).values():
         if not info.get("up"):
             continue
         for addr in info.get("addresses") or []:
@@ -312,8 +319,16 @@ def _run_scan_thread(networks):
         for iface, cidr, iface_ip in networks:
             if _stop_flag.is_set():
                 break
-            log.info("discovery ARP su %s (%s)", cidr, iface)
-            hosts = arp_scan(cidr, iface, psrc=iface_ip)
+            if network_setup.is_noarp(iface):
+                # VPN instradata (WireGuard, OpenVPN tun, PPP...): niente
+                # dominio di broadcast L2, l'ARP scan non riceverebbe mai
+                # risposta indipendentemente da quanti host reali ci siano
+                # (verificato: il kernel marca queste interfacce NOARP).
+                log.info("discovery ICMP su %s (%s, interfaccia NOARP)", cidr, iface)
+                hosts = icmp_scan(cidr, iface, psrc=iface_ip)
+            else:
+                log.info("discovery ARP su %s (%s)", cidr, iface)
+                hosts = arp_scan(cidr, iface, psrc=iface_ip)
             seen_ips = set()
             for h in hosts:
                 all_hosts.append((h["ip"], h["mac"], iface, cidr))

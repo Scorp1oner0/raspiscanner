@@ -3,6 +3,54 @@ import unittest
 from scanner import scan_engine
 
 
+class TestActiveNetworks(unittest.TestCase):
+    def setUp(self):
+        self._orig_get_status = scan_engine.network_setup.get_status
+
+    def tearDown(self):
+        scan_engine.network_setup.get_status = self._orig_get_status
+
+    def test_includes_vpn_networks(self):
+        """Bug reale: le VPN (WireGuard, OpenVPN...) non finivano mai tra
+        le reti scansionate, anche quando attive e con un indirizzo IP
+        valido — restavano completamente invisibili allo scan."""
+        scan_engine.network_setup.get_status = lambda: {
+            "eth": {"up": False, "iface": "eth0", "addresses": []},
+            "wifi": {},
+            "vpn": {
+                "wg0": {"up": True, "iface": "wg0", "addresses": [{"ip": "10.0.0.3", "cidr": "10.0.0.0/24"}]},
+            },
+        }
+        self.assertEqual(scan_engine._active_networks(), [("wg0", "10.0.0.0/24", "10.0.0.3")])
+
+    def test_skips_vpn_interface_that_is_down(self):
+        scan_engine.network_setup.get_status = lambda: {
+            "eth": {"up": False, "iface": "eth0", "addresses": []},
+            "wifi": {},
+            "vpn": {
+                "wg0": {"up": False, "iface": "wg0", "addresses": []},
+            },
+        }
+        self.assertEqual(scan_engine._active_networks(), [])
+
+    def test_combines_eth_wifi_and_vpn(self):
+        scan_engine.network_setup.get_status = lambda: {
+            "eth": {"up": True, "iface": "eth0", "addresses": [{"ip": "192.168.88.249", "cidr": "192.168.88.0/24"}]},
+            "wifi": {
+                "wlan0": {"up": True, "iface": "wlan0", "addresses": [{"ip": "192.168.1.253", "cidr": "192.168.1.0/24"}]},
+            },
+            "vpn": {
+                "wg0": {"up": True, "iface": "wg0", "addresses": [{"ip": "10.0.0.3", "cidr": "10.0.0.0/24"}]},
+            },
+        }
+        result = set(scan_engine._active_networks())
+        self.assertEqual(result, {
+            ("eth0", "192.168.88.0/24", "192.168.88.249"),
+            ("wlan0", "192.168.1.0/24", "192.168.1.253"),
+            ("wg0", "10.0.0.0/24", "10.0.0.3"),
+        })
+
+
 class TestOrphanOnvifIps(unittest.TestCase):
     """_orphan_onvif_ips e' pura (nessuna rete reale coinvolta): un IP che
     ha risposto al probe ONVIF ma non e' mai stato trovato dall'ARP scan su

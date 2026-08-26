@@ -231,6 +231,100 @@ class TestChoosePresetClass(unittest.TestCase):
         self.assertIn("Unknown", message)
 
 
+class TestVpnInterfaces(unittest.TestCase):
+    """VPN instradate (WireGuard, OpenVPN, PPP...) sono NOARP a livello
+    kernel (verificato su un'interfaccia WireGuard reale durante lo
+    sviluppo: flag NOARP presente, `ip neigh` vuoto pur avendo un peer
+    realmente raggiungibile via ping) — l'ARP scan non puo' funzionarci,
+    va tracciata come categoria a parte per scegliere discovery.icmp_scan
+    al suo posto (vedi scan_engine)."""
+
+    def setUp(self):
+        self._orig_run = network_setup._run
+        self._orig_list_ifaces = network_setup.list_interfaces
+        network_setup._status["vpn"] = {}
+
+    def tearDown(self):
+        network_setup._run = self._orig_run
+        network_setup.list_interfaces = self._orig_list_ifaces
+        network_setup._status["vpn"] = {}
+
+    def test_classify_interface_recognizes_common_vpn_prefixes(self):
+        for name in ("wg0", "tun0", "tap0", "ppp0", "tailscale0", "zt7nnyxxxx"):
+            self.assertEqual(network_setup.classify_interface(name), "vpn", name)
+
+    def test_list_vpn_ifaces_returns_all_not_just_first(self):
+        network_setup.list_interfaces = lambda: ["eth0", "wlan0", "wg0", "tun0"]
+        self.assertEqual(network_setup.list_vpn_ifaces(), ["tun0", "wg0"])
+
+    def test_refresh_vpn_status_tracks_every_interface(self):
+        network_setup.list_interfaces = lambda: ["eth0", "wg0", "tun0"]
+
+        def fake_run(cmd, timeout=15):
+            if cmd[0] == "ip":
+                iface = cmd[-1]
+                if iface == "wg0":
+                    return _FakeResult("5: wg0    inet 10.0.0.3/24 scope global wg0")
+                return _FakeResult("")
+            return _FakeResult()
+
+        network_setup._run = fake_run
+        network_setup.refresh_vpn_status()
+        status = network_setup.get_status()
+
+        self.assertEqual(set(status["vpn"].keys()), {"wg0", "tun0"})
+        self.assertTrue(status["vpn"]["wg0"]["up"])
+        self.assertEqual(status["vpn"]["wg0"]["ip"], "10.0.0.3")
+        self.assertEqual(status["vpn"]["wg0"]["cidr"], "10.0.0.0/24")
+        self.assertFalse(status["vpn"]["tun0"]["up"])
+
+    def test_refresh_vpn_status_drops_interfaces_no_longer_present(self):
+        """Un tunnel chiuso (es. WireGuard disattivato) non deve restare
+        "fantasma" nello stato, stesso principio del Wi-Fi."""
+        network_setup._status["vpn"] = {
+            "wg0": {"iface": "wg0", "up": True, "ip": "10.0.0.3", "cidr": "10.0.0.0/24", "addresses": [], "noarp": True},
+        }
+        network_setup.list_interfaces = lambda: ["eth0"]
+        network_setup._run = lambda cmd, timeout=15: _FakeResult()
+
+        network_setup.refresh_vpn_status()
+        status = network_setup.get_status()
+        self.assertNotIn("wg0", status["vpn"])
+
+    def test_is_noarp_true_for_wireguard_like_flags(self):
+        """0x91 e' il valore reale osservato su un'interfaccia WireGuard
+        (UP|POINTOPOINT|NOARP)."""
+        import builtins
+        from io import StringIO
+
+        orig_open = builtins.open
+
+        def fake_open(path, *a, **k):
+            if path == "/sys/class/net/wg0/flags":
+                return StringIO("0x91")
+            return orig_open(path, *a, **k)
+
+        with patch("builtins.open", fake_open):
+            self.assertTrue(network_setup.is_noarp("wg0"))
+
+    def test_is_noarp_false_for_ethernet_like_flags(self):
+        import builtins
+        from io import StringIO
+
+        orig_open = builtins.open
+
+        def fake_open(path, *a, **k):
+            if path == "/sys/class/net/eth0/flags":
+                return StringIO("0x1003")
+            return orig_open(path, *a, **k)
+
+        with patch("builtins.open", fake_open):
+            self.assertFalse(network_setup.is_noarp("eth0"))
+
+    def test_is_noarp_missing_interface_defaults_to_false(self):
+        self.assertFalse(network_setup.is_noarp("does-not-exist-xyz"))
+
+
 class TestExistingConfigProtected(unittest.TestCase):
     """autoconfigure_ethernet non deve cancellare IP preesistenti che non
     ha assegnato lui stesso (es. IP secondari configurati a mano)."""
