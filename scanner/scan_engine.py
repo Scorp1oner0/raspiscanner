@@ -85,11 +85,12 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
 
     onvif_info = onvif_results.get(ip)
     device_vendor = vendor.lookup_vendor(mac) if mac else "Unknown"
+    hostname = resolve_hostname(ip)
 
     is_camera, camera_reasons = classify_camera(open_ports, banners, onvif_info)
     is_nvr, nvr_reasons = classify_nvr(banners)
     is_infra, infra_subtype, infra_reasons = classify_network_device(ip, gateway_ip, device_vendor, banners)
-    host_label, host_reasons = classify_host(device_vendor, open_ports)
+    host_label, host_reasons = classify_host(device_vendor, open_ports, hostname)
 
     # Se il dispositivo risponde a ONVIF, prova a interrogare
     # GetDeviceInformation per un vendor/model REALI invece di indovinarli
@@ -140,7 +141,7 @@ def _scan_host(ip, mac, onvif_results, gateway_ip):
         "mac": mac,
         "vendor": device_vendor,
         "model": model,
-        "hostname": resolve_hostname(ip),
+        "hostname": hostname,
         "open_ports": open_ports,
         "http_banners": banners,
         "onvif": onvif_info,

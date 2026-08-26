@@ -53,17 +53,25 @@ of its own discovery mechanisms, aimed at one specific use case.
    found; every configured IPv4 address, not just the first): ARP scan for
    IP/MAC, targeted port scan + HTTP banners, **ONVIF WS-Discovery** probe
    (with `GetDeviceInformation` for real vendor/model when available),
-   offline OUI vendor lookup. Each device is classified, in order of
-   specificity: **Camera**/**NVR-DVR** (protocol signals — ONVIF, typical
-   ports RTSP 554/Hikvision 8000/Dahua 37777/34567, HTTP banners — not on
-   the MAC vendor, unreliable offline), **Router**/**Switch**/**Access
-   Point** (IP == default gateway, or banner/vendor), **Raspberry
-   Pi**/other IoT hardware recognized by vendor, **PC**/**Network
-   printer** (typical SMB/RDP/IPP/JetDirect ports), or **Generic** if none
-   of these signals is available — a structural limit, not a bug: a
-   device with no open ports (common on phones and modern PCs with a
-   default firewall) exposes nothing to read, and this tool doesn't go as
-   far as active TCP/IP stack fingerprinting `nmap -O`-style.
+   offline OUI vendor lookup, reverse DNS hostname. Each device is
+   classified, in order of specificity: **Camera**/**NVR-DVR** (protocol
+   signals — ONVIF, typical ports RTSP 554/Hikvision 8000/Dahua
+   37777/34567, HTTP banners — not on the MAC vendor, unreliable offline),
+   **Router**/**Switch**/**Access Point** (IP == default gateway, or
+   banner/vendor), **Raspberry Pi**/other IoT hardware recognized by
+   vendor, **Phone**/**Tablet**/**Mac**/**PC (Windows)** recognized from
+   hostname patterns (e.g. "iPhone-di-Mario", "Galaxy-A34-5G",
+   "MacBook-Pro", "DESKTOP-7K2N9QP" — useful mainly for Apple devices,
+   whose shared OUI can't otherwise distinguish a Mac from an iPhone from
+   an iPad), **PC (Windows/SMB)**/**Network printer** (typical
+   SMB/RDP/IPP/JetDirect ports) as a fallback when no hostname is
+   resolved, or **Generic** if none of these signals is available — a
+   structural limit, not a bug: a device with no open ports, no
+   distinctive vendor and no resolvable hostname (common on phones and
+   modern PCs with a default firewall, on networks whose DHCP server
+   doesn't register local DNS names) exposes nothing to read, and this
+   tool doesn't go as far as active TCP/IP stack fingerprinting
+   `nmap -O`-style or mDNS/Bonjour probing (not implemented yet).
 
 3. **"NETWORK ASSESSMENT" report**: for each scanned network, a text
    report with devices found by category (cameras/NVR/network/other —
@@ -287,7 +295,7 @@ scanner/
   auth.py                     Dashboard users (Basic Auth, persisted in data/users.json)
   tls.py                       Self-signed TLS certificate for the dashboard (via openssl)
   vendor.py                   Vendor lookup from offline OUI
-  hosts.py                     Classification "is it a Raspberry Pi/PC/printer?"
+  hosts.py                     Classification "is it a phone/tablet/Mac/PC/printer?"
   scan_engine.py                Scan orchestration + state for the dashboard
   discovery/
     arp.py                       ARP scan (scapy) + reverse DNS
