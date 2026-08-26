@@ -33,6 +33,7 @@ import time
 
 from .. import config
 from ..discovery import arp_scan
+from .nmcli_util import split_nmcli_terse
 
 log = logging.getLogger("raspiscanner.network")
 
@@ -41,6 +42,8 @@ _status = {
     "eth": {
         "iface": None, "up": False, "mode": None, "ip": None, "cidr": None, "addresses": [],
         "reconfiguring": False, "error": None, "last_change": None, "candidates": [],
+        "probing": False, "probe_index": None, "probe_total": None, "probe_cidr": None,
+        "probe_timeout": None,
     },
     # Dizionario iface -> stato, NON un singolo stato: un dispositivo puo'
     # avere piu' schede Wi-Fi (es. una usata come client per raggiungere la
@@ -278,49 +281,117 @@ def assign_static(iface, ip, prefix=24):
     _run(["ip", "addr", "add", f"{ip}/{prefix}", "dev", iface])
 
 
+# Suffissi "alti" da provare in ordine per l'IP statico temporaneo di ogni
+# classe preimpostata: si parte dal default storico (.250) e si scende
+# verso indirizzi via via meno probabili da trovare gia' occupati.
+_PRESET_FALLBACK_SUFFIXES = (250, 249, 248, 247, 246, 245, 244, 243, 242, 241)
+
+
+def _probe_ip_taken(iface, ip, timeout=1.0):
+    """True se un altro host risponde gia' per `ip`. Probe ARP mirato su un
+    singolo indirizzo (cidr /32) con psrc "0.0.0.0", la stessa convenzione
+    dell'"ARP probe" di RFC 5227 (address conflict detection): non
+    rivendica l'indirizzo come nostro ne' lo assegna mai all'interfaccia,
+    chiede solo "chi ce l'ha?" — cosi' il controllo stesso non puo' creare
+    il conflitto che dovrebbe evitare.
+    """
+    return bool(arp_scan(f"{ip}/32", iface, timeout=timeout, psrc="0.0.0.0"))
+
+
+def _find_free_static_ip(iface, cidr):
+    """Cerca il primo indirizzo "alto" libero nella classe preimpostata,
+    provando in ordine _PRESET_FALLBACK_SUFFIXES. Ritorna None se sono
+    tutti occupati (classe scartata, non ha senso forzare comunque un
+    conflitto per poterla scansionare).
+
+    Bug reale che questo evita: prima si assegnava sempre e comunque il
+    ".250" di default all'interfaccia per fare il probe della classe —
+    se un altro host (un'altra istanza di RaspiScanner, o un dispositivo
+    configurato a mano) aveva gia' quell'indirizzo, ci si metteva
+    comunque in conflitto IP con lui solo per verificare se la classe
+    era "viva".
+    """
+    network = ipaddress.ip_network(cidr, strict=False)
+    for suffix in _PRESET_FALLBACK_SUFFIXES:
+        candidate = str(network.network_address + suffix)
+        if ipaddress.ip_address(candidate) not in network:
+            continue
+        if not _probe_ip_taken(iface, candidate):
+            return candidate
+        log.info("IP candidato %s gia' occupato su %s, provo il successivo", candidate, iface)
+    return None
+
+
 def probe_preset_classes(iface):
     """Prova OGNI classe preimpostata (non si ferma alla prima "viva"):
     assegna l'IP statico candidato e verifica con un probe ARP se ci sono
     host attivi su quella rete. Ritorna la lista di tutte le classi che
-    hanno risposto (dict originale + "hosts_found"), nello stesso ordine
-    di config.PRESET_SUBNETS.
+    hanno risposto (dict originale + "static_ip" effettivo e
+    "hosts_found"), nello stesso ordine di config.PRESET_SUBNETS.
 
     Puo' capitare che piu' di una classe risulti viva sullo stesso cavo
     (es. piu' subnet private configurate manualmente sullo stesso
     segmento): fermarsi alla prima significherebbe scegliere per
     l'utente in base a un ordine arbitrario nel codice invece che dirgli
     che c'era un'ambiguita' da risolvere lui stesso.
+
+    Aggiorna anche lo stato "probing" (indice/totale/cidr corrente) per
+    dare un minimo di feedback in dashboard durante i ~30s che puo'
+    richiedere provare tutte le classi in sequenza, invece di lasciarla
+    ferma su "reconfiguring..." senza altre indicazioni.
     """
+    total = len(config.PRESET_SUBNETS)
+    _set_status("eth", probing=True, probe_index=0, probe_total=total,
+                probe_cidr=None, probe_timeout=config.CLASS_PROBE_TIMEOUT)
     alive = []
-    for preset in config.PRESET_SUBNETS:
-        cidr = preset["cidr"]
-        static_ip = preset["static_ip"]
-        log.info("provo classe %s (IP candidato %s)", cidr, static_ip)
-        assign_static(iface, static_ip, prefix=cidr.split("/")[1])
-        hosts = arp_scan(cidr, iface, timeout=config.CLASS_PROBE_TIMEOUT, psrc=static_ip)
-        if hosts:
-            log.info("classe %s attiva su %s (%d host)", cidr, iface, len(hosts))
-            alive.append({**preset, "hosts_found": len(hosts)})
-        flush_addresses(iface)
+    try:
+        for index, preset in enumerate(config.PRESET_SUBNETS, start=1):
+            cidr = preset["cidr"]
+            _set_status("eth", probe_index=index, probe_cidr=cidr)
+            static_ip = _find_free_static_ip(iface, cidr)
+            if not static_ip:
+                log.warning("nessun IP candidato libero per la classe %s su %s, salto", cidr, iface)
+                continue
+            log.info("provo classe %s (IP candidato %s)", cidr, static_ip)
+            assign_static(iface, static_ip, prefix=cidr.split("/")[1])
+            hosts = arp_scan(cidr, iface, timeout=config.CLASS_PROBE_TIMEOUT, psrc=static_ip)
+            if hosts:
+                log.info("classe %s attiva su %s (%d host)", cidr, iface, len(hosts))
+                alive.append({**preset, "static_ip": static_ip, "hosts_found": len(hosts)})
+            flush_addresses(iface)
+    finally:
+        _set_status("eth", probing=False, probe_index=None, probe_total=None,
+                    probe_cidr=None, probe_timeout=None)
     return alive
 
 
 def choose_preset_class(iface, cidr):
     """Assegna in modo definitivo una delle classi candidate trovate da
     probe_preset_classes, scelta manualmente dall'utente quando ce n'era
-    piu' di una viva sullo stesso cavo. Ritorna (ok, messaggio)."""
+    piu' di una viva sullo stesso cavo. Ritorna (ok, messaggio).
+
+    Ri-verifica un IP libero al momento della scelta (non riusa quello
+    trovato dal probe iniziale): puo' essere passato del tempo tra il
+    probe automatico e la scelta manuale dell'utente in dashboard, un
+    altro host potrebbe aver preso nel frattempo l'indirizzo che era
+    libero allora.
+    """
     preset = next((p for p in config.PRESET_SUBNETS if p["cidr"] == cidr), None)
     if not preset:
         return False, f"Unknown preset network: {cidr}"
 
-    assign_static(iface, preset["static_ip"], prefix=cidr.split("/")[1])
+    static_ip = _find_free_static_ip(iface, cidr)
+    if not static_ip:
+        return False, f"No free address available on {cidr} right now"
+
+    assign_static(iface, static_ip, prefix=cidr.split("/")[1])
     _set_status(
         "eth", iface=iface, up=True, mode="static-fallback",
-        ip=preset["static_ip"], cidr=cidr,
-        addresses=[{"ip": preset["static_ip"], "cidr": cidr}],
+        ip=static_ip, cidr=cidr,
+        addresses=[{"ip": static_ip, "cidr": cidr}],
         candidates=[], reconfiguring=False, error=None, last_change=time.time(),
     )
-    log.info("classe %s scelta manualmente su %s", cidr, iface)
+    log.info("classe %s scelta manualmente su %s (IP %s)", cidr, iface, static_ip)
     return True, f"Network {cidr} selected"
 
 
@@ -523,17 +594,19 @@ def wifi_scan_networks(iface=None):
     networks = []
     seen = set()
     for line in res.stdout.splitlines():
-        parts = line.split(":")
-        if not parts or not parts[0]:
+        if not line:
             continue
-        ssid = parts[0]
-        if ssid in seen:
+        # split_nmcli_terse rispetta l'escape "\:" di nmcli: un naive
+        # line.split(":") spezzerebbe in piu' pezzi (e disallineerebbe
+        # segnale/sicurezza) un SSID che contiene letteralmente ":".
+        ssid, signal, security = split_nmcli_terse(line, 3)
+        if not ssid or ssid in seen:
             continue
         seen.add(ssid)
         networks.append({
             "ssid": ssid,
-            "signal": parts[1] if len(parts) > 1 else None,
-            "security": parts[2] if len(parts) > 2 else "",
+            "signal": signal or None,
+            "security": security,
         })
     return networks
 

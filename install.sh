@@ -11,16 +11,56 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-echo "==> System packages (python3-venv, dhclient, arp-scan tools, nmcli optional)"
 apt-get update -y
-apt-get install -y python3-venv python3-pip isc-dhcp-client iproute2 network-manager openssl || true
+
+echo "==> Installing required system packages"
+# These are load-bearing: without them the venv can't be created (python3-venv/
+# pip) or core scanning/network features silently can't work (iproute2 for
+# "ip", isc-dhcp-client for DHCP, openssl for the TLS cert the dashboard
+# refuses to start without). A failure here must stop the install instead of
+# limping on to a service that starts but can't actually do its job.
+REQUIRED_PKGS="python3-venv python3-pip isc-dhcp-client iproute2 openssl"
+if ! apt-get install -y $REQUIRED_PKGS; then
+  echo "ERROR: failed to install required packages ($REQUIRED_PKGS)." >&2
+  echo "RaspiScanner cannot run without them — fix apt/network access and re-run install.sh." >&2
+  exit 1
+fi
+
+echo "==> Installing optional system packages (Wi-Fi scan/connect/hotspot support)"
+# network-manager (nmcli) is only needed for the Wi-Fi and hotspot features;
+# a wired-only install works fine without it. Missing/failing here is a
+# reduced-functionality warning, not a reason to abort the whole install.
+apt-get install -y network-manager || \
+  echo "    network-manager not installed: Wi-Fi scan/connect/hotspot will be unavailable, everything else still works."
 
 echo "==> Copying sources to $DEST_DIR"
 mkdir -p "$DEST_DIR"
+# --delete removes from $DEST_DIR anything no longer present in $SRC_DIR, so
+# a file removed from the repo actually disappears from the deployed copy
+# too instead of lingering as a stale leftover across upgrades. The 4
+# exclusions below are runtime state that only ever exists in $DEST_DIR,
+# never in the source repo: without them, --delete would silently wipe out
+# the current users/passwords, the TLS certificate (forcing a new
+# self-signed-cert browser warning), and the full downloaded OUI database
+# on every single re-run of this installer, e.g. an upgrade.
 rsync -a --delete \
   --exclude "venv" \
   --exclude "__pycache__" \
+  --exclude "data/users.json" \
+  --exclude "data/tls_cert.pem" \
+  --exclude "data/tls_key.pem" \
+  --exclude "data/oui.csv" \
   "$SRC_DIR"/ "$DEST_DIR"/
+
+# data/oui.csv is excluded above specifically so a re-install never clobbers
+# a full OUI database fetched by a previous update_oui.py run with the
+# minimal ~100-entry one from the repo — but that means a brand-new install
+# needs it copied in explicitly this one time, otherwise there's no vendor
+# database at all until update_oui.py runs below (and it does nothing on
+# failure, e.g. no network — see its own code).
+if [ ! -f "$DEST_DIR/data/oui.csv" ]; then
+  cp "$SRC_DIR/data/oui.csv" "$DEST_DIR/data/oui.csv"
+fi
 
 echo "==> Creating virtualenv and installing Python dependencies"
 python3 -m venv "$DEST_DIR/venv"

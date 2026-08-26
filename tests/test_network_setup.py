@@ -135,6 +135,22 @@ class TestMultiWifiInterfaces(unittest.TestCase):
         network_setup.wifi_scan_networks()
         self.assertNotIn("ifname", captured["cmd"])
 
+    def test_wifi_scan_networks_unescapes_colon_in_ssid(self):
+        """Bug reale: uno split ingenuo su ":" spezzava un SSID come
+        "Guest:Wifi" (nmcli lo emette come "Guest\\:Wifi", escaped) in due
+        pezzi, disallineando anche segnale e sicurezza sulla stessa riga."""
+        network_setup._run = lambda cmd, timeout=15: _FakeResult("Guest\\:Wifi:70:WPA2\n")
+        networks = network_setup.wifi_scan_networks()
+        self.assertEqual(networks, [{"ssid": "Guest:Wifi", "signal": "70", "security": "WPA2"}])
+
+    def test_wifi_scan_networks_tolerates_malformed_line(self):
+        """Una riga con meno campi del previsto (output inatteso di nmcli)
+        non deve far crashare l'intero parsing: solo quella riga risulta
+        con i campi mancanti vuoti."""
+        network_setup._run = lambda cmd, timeout=15: _FakeResult("SoloSSID\n")
+        networks = network_setup.wifi_scan_networks()
+        self.assertEqual(networks, [{"ssid": "SoloSSID", "signal": None, "security": ""}])
+
     def test_wifi_connect_targets_the_given_interface(self):
         captured = {}
 
@@ -203,7 +219,11 @@ class TestProbePresetClasses(unittest.TestCase):
 class TestChoosePresetClass(unittest.TestCase):
     def setUp(self):
         self._orig_run = network_setup._run
+        self._orig_arp_scan = network_setup.arp_scan
         network_setup._run = lambda cmd, timeout=15: _FakeResult()
+        # Nessuno risponde ai probe di collisione: preserva il comportamento
+        # storico di questi test (indirizzo di default sempre libero).
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: []
         network_setup._status["eth"] = {
             "iface": None, "up": False, "mode": "choose-network", "ip": None, "cidr": None,
             "addresses": [], "reconfiguring": False, "error": None, "last_change": None,
@@ -215,6 +235,7 @@ class TestChoosePresetClass(unittest.TestCase):
 
     def tearDown(self):
         network_setup._run = self._orig_run
+        network_setup.arp_scan = self._orig_arp_scan
 
     def test_valid_cidr_assigns_and_clears_candidates(self):
         ok, _ = network_setup.choose_preset_class("eth0", "192.168.1.0/24")
@@ -229,6 +250,118 @@ class TestChoosePresetClass(unittest.TestCase):
         ok, message = network_setup.choose_preset_class("eth0", "9.9.9.0/24")
         self.assertFalse(ok)
         self.assertIn("Unknown", message)
+
+    def test_falls_back_to_free_address_if_default_now_taken(self):
+        """Puo' passare del tempo tra il probe automatico e la scelta
+        manuale in dashboard: se nel frattempo un altro host ha preso
+        l'indirizzo di default, choose_preset_class deve accorgersene
+        (ri-probing) e usarne uno alternativo, non assegnarselo comunque."""
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: (
+            [{"ip": "192.168.1.250", "mac": "AA"}] if cidr == "192.168.1.250/32" else []
+        )
+        ok, _ = network_setup.choose_preset_class("eth0", "192.168.1.0/24")
+        self.assertTrue(ok)
+        status = network_setup.get_status()
+        self.assertEqual(status["eth"]["ip"], "192.168.1.249")
+
+    def test_rejected_when_every_fallback_address_is_taken(self):
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: (
+            [{"ip": "x", "mac": "AA"}] if cidr.startswith("192.168.1.") else []
+        )
+        ok, message = network_setup.choose_preset_class("eth0", "192.168.1.0/24")
+        self.assertFalse(ok)
+        self.assertIn("No free address", message)
+
+
+class TestFindFreeStaticIp(unittest.TestCase):
+    """Unit test mirati della logica di collisione IP: bug reale evitato
+    qui e' assegnarsi (anche solo temporaneamente, per il probe) un
+    indirizzo gia' occupato da un altro host sulla stessa rete."""
+
+    def setUp(self):
+        self._orig_arp_scan = network_setup.arp_scan
+
+    def tearDown(self):
+        network_setup.arp_scan = self._orig_arp_scan
+
+    def test_default_address_returned_when_free(self):
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: []
+        ip = network_setup._find_free_static_ip("eth0", "192.168.1.0/24")
+        self.assertEqual(ip, "192.168.1.250")
+
+    def test_skips_to_next_suffix_when_default_taken(self):
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: (
+            [{"ip": "192.168.1.250", "mac": "AA"}] if cidr == "192.168.1.250/32" else []
+        )
+        ip = network_setup._find_free_static_ip("eth0", "192.168.1.0/24")
+        self.assertEqual(ip, "192.168.1.249")
+
+    def test_probe_never_binds_the_candidate_itself(self):
+        """Il probe deve interrogare la rete con psrc "0.0.0.0" (ARP probe
+        RFC 5227), mai rivendicare l'indirizzo candidato come proprio —
+        altrimenti il controllo stesso creerebbe il conflitto che dovrebbe
+        individuare."""
+        captured_psrc = []
+
+        def fake_arp_scan(cidr, iface, timeout=None, psrc=None):
+            captured_psrc.append(psrc)
+            return []
+
+        network_setup.arp_scan = fake_arp_scan
+        network_setup._find_free_static_ip("eth0", "192.168.1.0/24")
+        self.assertEqual(captured_psrc, ["0.0.0.0"])
+
+    def test_returns_none_when_all_fallback_addresses_taken(self):
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: [{"ip": "x", "mac": "AA"}]
+        ip = network_setup._find_free_static_ip("eth0", "192.168.1.0/24")
+        self.assertIsNone(ip)
+
+
+class TestProbePresetClassesProgressStatus(unittest.TestCase):
+    """Feedback di avanzamento durante il probe delle classi preimpostate
+    (P2): senza questo, la dashboard restava ferma su "reconfiguring..."
+    per fino a ~30s (13 classi x timeout) senza altre indicazioni."""
+
+    def setUp(self):
+        self._orig_run = network_setup._run
+        self._orig_arp_scan = network_setup.arp_scan
+        network_setup._run = lambda cmd, timeout=15: _FakeResult()
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: []
+
+    def tearDown(self):
+        network_setup._run = self._orig_run
+        network_setup.arp_scan = self._orig_arp_scan
+
+    def test_probing_flag_cleared_after_completion(self):
+        network_setup.probe_preset_classes("eth0")
+        status = network_setup.get_status()
+        self.assertFalse(status["eth"]["probing"])
+        self.assertIsNone(status["eth"]["probe_index"])
+        self.assertIsNone(status["eth"]["probe_total"])
+        self.assertIsNone(status["eth"]["probe_cidr"])
+
+    def test_progress_reaches_the_last_preset_during_the_loop(self):
+        """Cattura lo stato all'ultima iterazione del loop (l'unico punto
+        osservabile in un test sincrono a thread singolo): deve riportare
+        l'ultima classe della lista, non fermarsi alla prima."""
+        seen_last_cidr = []
+        last_preset_cidr = config.PRESET_SUBNETS[-1]["cidr"]
+
+        orig_find_free = network_setup._find_free_static_ip
+
+        def spy_find_free(iface, cidr):
+            if cidr == last_preset_cidr:
+                status = network_setup.get_status()
+                seen_last_cidr.append((status["eth"]["probe_cidr"], status["eth"]["probe_index"]))
+            return orig_find_free(iface, cidr)
+
+        network_setup._find_free_static_ip = spy_find_free
+        try:
+            network_setup.probe_preset_classes("eth0")
+        finally:
+            network_setup._find_free_static_ip = orig_find_free
+
+        self.assertEqual(seen_last_cidr, [(last_preset_cidr, len(config.PRESET_SUBNETS))])
 
 
 class TestVpnInterfaces(unittest.TestCase):

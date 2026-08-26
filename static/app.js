@@ -147,6 +147,13 @@ async function refreshNetwork() {
       ? "🔄 reconfiguring..."
       : (data.eth.up ? "connected" : "disconnected");
     $("eth-mode").textContent = data.eth.mode || "-";
+    $("eth-probing-line").classList.toggle("hidden", !data.eth.probing);
+    if (data.eth.probing) {
+      $("eth-probing-index").textContent = data.eth.probe_index ?? "-";
+      $("eth-probing-total").textContent = data.eth.probe_total ?? "-";
+      $("eth-probing-cidr").textContent = data.eth.probe_cidr || "-";
+      $("eth-probing-timeout").textContent = data.eth.probe_timeout ?? "-";
+    }
     renderAddressList("eth-addresses", data.eth.addresses);
     $("eth-last-change").textContent = formatAgo(data.eth.last_change);
     renderEthCandidates(data.eth.candidates);

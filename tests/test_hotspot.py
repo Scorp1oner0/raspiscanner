@@ -117,6 +117,23 @@ class TestGetHotspotStatus(unittest.TestCase):
         status = hotspot.get_hotspot_status()
         self.assertFalse(status["active"])
 
+    def test_ssid_with_literal_colon_unescaped_correctly(self):
+        """nmcli esegue l'escape di ':' letterali dentro un valore come
+        "\\:": uno split ingenuo su ":" tronca l'SSID a meta' invece di
+        restituire il nome reale della rete."""
+        def fake_run(cmd, timeout=20):
+            if cmd[:4] == ["nmcli", "-t", "-f", "NAME,DEVICE"]:
+                return _FakeResult(stdout=f"{hotspot.HOTSPOT_CONNECTION_NAME}:wlan0\n", returncode=0)
+            if "802-11-wireless.ssid" in cmd:
+                return _FakeResult(stdout="802-11-wireless.ssid:Guest\\:Wifi\n", returncode=0)
+            if cmd[:3] == ["nmcli", "-t", "-f"] and "device" in cmd:
+                return _FakeResult(stdout="IP4.ADDRESS[1]:10.42.0.1/24\n", returncode=0)
+            return _FakeResult(returncode=1)
+
+        hotspot._run = fake_run
+        status = hotspot.get_hotspot_status()
+        self.assertEqual(status["ssid"], "Guest:Wifi")
+
 
 if __name__ == "__main__":
     unittest.main()

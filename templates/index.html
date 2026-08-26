@@ -72,6 +72,10 @@
         <div class="net-title">🔌 Ethernet <span id="eth-iface" class="iface-name"></span></div>
         <div class="net-line">Status: <span id="eth-up">-</span></div>
         <div class="net-line">Mode: <span id="eth-mode">-</span></div>
+        <div class="net-line net-probing hidden" id="eth-probing-line">
+          🔍 Probing preset network <span id="eth-probing-index"></span>/<span id="eth-probing-total"></span>:
+          <span id="eth-probing-cidr" class="mono"></span> (timeout <span id="eth-probing-timeout"></span>s)
+        </div>
         <div class="net-line">Addresses:</div>
         <div id="eth-addresses" class="addr-list"><div class="addr-empty">-</div></div>
         <div class="net-line">Last updated: <span id="eth-last-change">-</span></div>

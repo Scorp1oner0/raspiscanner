@@ -20,6 +20,8 @@ import secrets
 import string
 import subprocess
 
+from .nmcli_util import split_nmcli_terse
+
 log = logging.getLogger("raspiscanner.network.hotspot")
 
 HOTSPOT_CONNECTION_NAME = "raspiscanner-hotspot"
@@ -108,7 +110,9 @@ def get_hotspot_status():
     iface = None
     if active_res and active_res.returncode == 0:
         for line in active_res.stdout.splitlines():
-            name, _, device = line.partition(":")
+            if not line:
+                continue
+            name, device = split_nmcli_terse(line, 2)
             if name == HOTSPOT_CONNECTION_NAME:
                 iface = device
                 break
@@ -122,14 +126,16 @@ def get_hotspot_status():
         timeout=10,
     )
     if ssid_res and ssid_res.returncode == 0 and ssid_res.stdout.strip():
-        ssid = ssid_res.stdout.strip().split(":", 1)[-1] or None
+        _, ssid = split_nmcli_terse(ssid_res.stdout.strip(), 2)
+        ssid = ssid or None
 
     ip = None
     ip_res = _run(["nmcli", "-t", "-f", "IP4.ADDRESS", "device", "show", iface], timeout=10)
     if ip_res and ip_res.returncode == 0:
         for line in ip_res.stdout.splitlines():
             if line.startswith("IP4.ADDRESS"):
-                ip = line.split(":", 1)[-1].split("/")[0].strip() or None
+                _, value = split_nmcli_terse(line, 2)
+                ip = value.split("/")[0].strip() or None
                 break
 
     return {"active": True, "ssid": ssid, "ip": ip, "iface": iface}

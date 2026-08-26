@@ -124,6 +124,8 @@ main { padding: 24px; max-width: 1180px; margin: 0 auto; }
 .net-box-empty { opacity: 0.6; font-size: 13px; }
 .net-error { color: var(--critical); }
 .net-error.hidden { display: none; }
+.net-probing { color: var(--info); }
+.net-probing.hidden { display: none; }
 .net-title { font-weight: 600; margin-bottom: 8px; font-size: 13.5px; }
 .iface-name { color: var(--text-faint); font-weight: 400; font-size: 12px; font-family: var(--font-mono); }
 .net-line { font-size: 13px; margin: 4px 0; color: var(--text-dim); }
