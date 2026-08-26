@@ -13,7 +13,7 @@ fi
 
 echo "==> Pacchetti di sistema (python3-venv, dhclient, arp-scan tools, nmcli opzionale)"
 apt-get update -y
-apt-get install -y python3-venv python3-pip isc-dhcp-client iproute2 network-manager || true
+apt-get install -y python3-venv python3-pip isc-dhcp-client iproute2 network-manager openssl || true
 
 echo "==> Copio i sorgenti in $DEST_DIR"
 mkdir -p "$DEST_DIR"
@@ -35,7 +35,8 @@ systemctl restart raspiscanner.service
 
 echo ""
 echo "✅ Installato. Servizio: systemctl status raspiscanner"
-echo "   Dashboard: http://<ip-del-raspberry>:7332"
+echo "   Dashboard: https://<ip-del-raspberry>:7332 (certificato self-signed,"
+echo "   il browser mostrera' un avviso da accettare la prima volta)"
 echo ""
 echo "NOTA: se NetworkManager o dhcpcd gestiscono gia' eth0, marcala come"
 echo "'unmanaged' per evitare conflitti con l'autoconfigurazione dello scanner"

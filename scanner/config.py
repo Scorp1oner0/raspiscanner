@@ -5,6 +5,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 OUI_CSV_PATH = os.path.join(DATA_DIR, "oui.csv")
 USERS_JSON_PATH = os.path.join(DATA_DIR, "users.json")
+TLS_CERT_PATH = os.path.join(DATA_DIR, "tls_cert.pem")
+TLS_KEY_PATH = os.path.join(DATA_DIR, "tls_key.pem")
 
 # Interfacce di rete gestite (nomi tipici su Raspberry Pi OS / kernel Linux)
 ETH_IFACE_PREFIXES = ("eth", "en")

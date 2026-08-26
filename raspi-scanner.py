@@ -24,7 +24,7 @@ import time
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from scanner import auth, scan_engine
+from scanner import auth, scan_engine, tls
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -239,7 +239,16 @@ def api_settings_delete_user(username):
 
 def run_dashboard(port=7332):
     _ensure_startup()
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    cert_path, key_path = tls.ensure_cert()
+    if cert_path:
+        log.info("TLS attivo (certificato self-signed): il browser mostrera' "
+                  "un avviso da accettare la prima volta, e' atteso.")
+        ssl_context = (cert_path, key_path)
+    else:
+        log.warning("TLS non disponibile (openssl assente?): la dashboard "
+                    "restera' su HTTP semplice")
+        ssl_context = None
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True, ssl_context=ssl_context)
 
 
 def run_cli_report(timeout=180):

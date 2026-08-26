@@ -154,7 +154,10 @@ sudo ./install.sh
 
 Installa il progetto in `/opt/raspiscanner`, crea un virtualenv, installa
 le dipendenze Python (`Flask`, `scapy`) e registra/avvia il servizio
-systemd `raspiscanner.service`. Dashboard su `http://<ip-raspberry>:7332`.
+systemd `raspiscanner.service`. Dashboard su `https://<ip-raspberry>:7332`
+(certificato self-signed generato al primo avvio: il browser mostra un
+avviso "connessione non sicura" da accettare una volta — vedi
+[Autenticazione dashboard](#autenticazione-dashboard)).
 
 Per eseguirlo senza installarlo come servizio, in sviluppo:
 
@@ -228,7 +231,23 @@ La dashboard ascolta su `0.0.0.0:7332` ed espone l'inventario completo dei
 dispositivi scansionati (IP, MAC, vendor, **URL RTSP/admin delle
 telecamere**) oltre ai controlli di rete/hotspot: è protetta da **HTTP
 Basic Auth** cosi' chi e' semplicemente sulla stessa rete/hotspot durante
-lo scan non ci accede senza credenziali.
+lo scan non ci accede senza credenziali, servita su **HTTPS** con un
+certificato self-signed generato al primo avvio (persistito in
+`data/tls_cert.pem`/`data/tls_key.pem`) cosi' le credenziali viaggiano
+cifrate invece che in chiaro sulla rete che stai scansionando.
+
+Non esiste un certificato firmato da una CA pubblica per questo caso
+d'uso: il dispositivo (Raspberry Pi o PC Linux) viene installato su reti
+private diverse ogni volta, spesso senza uscita internet, e raggiunto per
+IP, non per dominio — condizioni in cui una CA come Let's Encrypt non può
+emettere né rinnovare nulla. Per questo, come router/NAS/stampanti di
+rete, il browser mostrerà un **avviso "connessione non sicura"** al primo
+accesso: è atteso, va accettato una volta (il certificato resta lo stesso
+tra un riavvio e l'altro, l'avviso non si ripete a ogni accensione).
+Protegge dall'intercettazione passiva del traffico sulla stessa rete, non
+da un attacco attivo man-in-the-middle molto sofisticato che nessuno
+verifica in pratica (impronta del certificato) — un miglioramento reale
+rispetto ad HTTP semplice, non una garanzia assoluta.
 
 Al primo avvio, se `data/users.json` non esiste ancora, viene creato
 l'utente di default:
@@ -255,6 +274,7 @@ raspi-scanner.py            Entry point: dashboard Flask (default) o CLI --repor
 scanner/
   config.py                  Costanti condivise (classi preimpostate, porte, timeout)
   auth.py                     Utenti dashboard (Basic Auth, persistiti in data/users.json)
+  tls.py                       Certificato TLS self-signed per la dashboard (via openssl)
   vendor.py                   Lookup vendor da OUI offline
   hosts.py                     Classificazione "e' un Raspberry Pi/PC/stampante?"
   scan_engine.py                Orchestrazione scan + stato per la dashboard
@@ -281,6 +301,7 @@ examples/                    Esempi di report e uso programmatico dei classifica
 scripts/update_oui.py        Aggiorna oui.csv dal registro IEEE (richiede internet)
 data/oui.csv                 Database OUI offline (best effort)
 data/users.json              Utenti dashboard (hash password, generato al primo avvio, gitignored)
+data/tls_cert.pem, tls_key.pem  Certificato TLS self-signed (generato al primo avvio, gitignored)
 templates/, static/          Dashboard (HTML/CSS/JS, no CDN esterni: funziona offline)
 install.sh                   Installer (venv + systemd)
 raspiscanner.service         Unit file systemd
