@@ -12,8 +12,9 @@ originally sequenced — see the P4 section header for the full note.
 
 ## 📊 Stato attuale (2026-08-27)
 
-- **456 test**, tutti verdi, nessuna regressione nota (rieseguita la
-  suite due volte di seguito per escludere flakiness dopo ogni batch).
+- **458 test**, tutti verdi, nessuna regressione nota (rieseguita la
+  suite ripetutamente dopo ogni batch, incluso dopo i due fix trovati
+  sul Pi reale — vedi sotto).
 - **P0 (Security)**: chiuso 4/4.
 - **P1 (Hardening)**: chiuso 6/6, con un affinamento RBAC dal vivo (vedi
   quella sezione).
@@ -23,37 +24,48 @@ originally sequenced — see the P4 section header for the full note.
 - **P3 Tests**: chiuso 7/7.
 - **P3 Dashboard UX**: chiuso 7/7.
 - **P3 Reporting**: chiuso 7/7.
-- **P3 Performance**: chiuso 3/7 — le 4 voci aperte sono TUTTE misure
-  che richiedono hardware reale (vedi "Cosa manca solo per hardware
-  reale" sotto), nessuna e' lavoro software rimasto.
-- **P3 Packaging/release**: chiuso 10/14 — le 4 voci aperte sono 3
-  verifiche hardware + la decisione finale "assegnare 1.0.0", che spetta
-  all'utente.
+- **P3 Performance**: chiuso 4/7 — misurato dal vivo il tempo di scan su
+  Pi 3B+ (vedi sotto); restano Pi 4/5, RAM su scan grandi, reti `/16`.
+- **P3 Packaging/release**: chiuso 12/14 — verificato dal vivo
+  l'installer da zero su Raspberry Pi OS reale (Pi 3B+); resta solo la
+  decisione finale "assegnare 1.0.0", che spetta all'utente.
 - **P4 (Future evolution)**: chiuso 15/15 delle voci pianificate per la
   1.0. "Field Technician mode" e' stato tentato, rimosso per un bug non
   isolato sul browser reale, e spostato in **P5 (backlog, post-1.0)** —
   non conta come voce P4 aperta.
 
-### 🔧 Cosa manca solo per hardware reale (non software)
+### ✅ Test hardware reale del 2026-08-27 (Raspberry Pi 3 Model B Plus)
 
-Tutto cio' che segue e' scritto, testato con test unitari/di
-integrazione dove possibile, e non verificabile oltre da questa
-sandbox — non sono bug sospetti, sono misure che esistono solo su
-hardware fisico:
+Primo giro completo end-to-end su hardware fisico vero (non emulato):
+SD riscritta da zero, `install.sh` da zero, bootstrap, cambio password,
+systemd, HTTPS, scan reale (**~11s** per una `/24`, 4 host), report,
+Audit mode, topology, IPv6 discovery — tutto verificato via SSH/curl
+diretti contro il dashboard reale. Trovati e corretti **due bug reali**
+mai visibili testando solo su x86 (vedi i rispettivi punti P3
+Packaging/P4 e il commit dedicato):
 
-- Tempo di scan su Raspberry Pi 3B+ e su Pi 4/5.
+1. `install.sh` concludeva erroneamente "nessun account bootstrap
+   creato" su una CPU lenta (poll troppo breve dopo il restart del
+   servizio).
+2. L'Audit mode mostrava una severita' diversa dal report live per lo
+   STESSO scan, a causa di un bug di round-trip JSON (chiavi intere di
+   `http_banners` diventate stringhe passando per lo storage salvato).
+
+Aggiunto anche, durante la verifica: un pulsante "Chiudi" mancante
+sull'audit report in dashboard (segnalato dall'utente durante il test
+stesso).
+
+### 🔧 Cosa manca ancora solo per hardware reale (non software)
+
+- Tempo di scan su Raspberry Pi 4/5 (solo un 3B+ era disponibile).
 - Uso RAM su scan di reti grandi.
 - Comportamento su reti `/16` (limite architetturale gia' identificato
   nel codice — loop host sequenziale — non solo "da misurare", vedi P3
   Performance per il dettaglio).
-- Installer da zero su un Raspberry Pi reale.
-- Install verificato su Debian/Raspberry Pi OS "puro" (questa macchina
-  e' Kali).
-- Comportamento IPv6 discovery su una rete reale con host IPv6-enabled
-  (finora solo testato con pacchetti costruiti a mano).
 
 Nessuno di questi blocca il codice dall'essere corretto oggi: bloccano
-solo la certezza empirica su hardware che questa sessione non ha.
+solo la certezza empirica su scale/hardware che questa sessione non ha
+potuto provare.
 
 ## 🔴 P0 — Before publishing/release
 
@@ -300,9 +312,19 @@ P3 Tests chiuso: 7/7.
 
 ## 🟢 P3 — Performance
 
-- [ ] Measure scan times on Raspberry Pi 3B+. *(Richiede hardware reale,
-      non riproducibile da qui.)*
-- [ ] Measure scan times on Raspberry Pi 4/5. *(Idem.)*
+- [x] Measure scan times on Raspberry Pi 3B+. *(Misurato dal vivo il
+      2026-08-27 su un Pi 3B+ reale (1GB RAM): scan completo di una
+      rete `/24` (254 host possibili, 4 realmente attivi) in **~11
+      secondi** (`started_at`/`finished_at` reali, non stimati),
+      classificazione completa inclusa (router MikroTik via
+      vendor+gateway, due Raspberry Pi via OUI, un PC via SMB/RDP).
+      Non e' un dato su una rete satura di centinaia di host (vedi la
+      voce "/16 networks" sotto, che resta un limite architetturale
+      distinto), ma la prima misura reale su questa classe di
+      hardware.)*
+- [ ] Measure scan times on Raspberry Pi 4/5. *(Richiede hardware reale
+      di quel modello specifico, non disponibile in questa sessione —
+      solo un Pi 3B+ era disponibile.)*
 - [x] Optimize timeouts where possible. *(Bug reale trovato e corretto:
       `config.PORT_SCAN_THREADS = 60` era definita ma MAI letta dal
       codice — `scan_ports()` usava sempre un valore fisso di 16 worker.
@@ -432,10 +454,23 @@ P3 Reporting chiuso: 7/7.
 - [x] Verified `requirements.txt`. *(Solo Flask e scapy, range di versioni
       gia' presenti — coerente con la scelta deliberata di non aggiungere
       dipendenze, vedi CONTRIBUTING.md.)*
-- [ ] Installer verified from scratch on a real Raspberry Pi. *(Richiede
-      hardware reale, non riproducibile da qui.)*
-- [ ] Install verified on Debian/Raspberry Pi OS. *(Idem — questa macchina
-      e' Kali, non Debian/RPi OS "puro".)*
+- [x] Installer verified from scratch on a real Raspberry Pi. *(Fatto dal
+      vivo il 2026-08-27: SD riscritta da zero (Raspberry Pi OS Trixie
+      via `dd` + cloud-init, dopo che Raspberry Pi Imager e' crashato
+      due volte per un bug proprio — non nostro), `sudo ./install.sh`
+      su un Raspberry Pi 3B+ reale, tutto verificato via SSH: pacchetti
+      apt, venv, OUI database completo scaricato, servizio systemd
+      avviato, password bootstrap generata e stampata, cambio password,
+      HTTPS raggiungibile, scan reale (~11s, vedi P3 Performance), Audit
+      mode e topology interrogati con successo. Trovati e corretti DUE
+      bug reali mai visibili su x86 (vedi P3 Tests/CHANGELOG): il
+      polling della password bootstrap troppo aggressivo per una CPU
+      lenta, e un bug di round-trip JSON che degradava la severita' di
+      un finding nell'Audit mode.)*
+- [x] Install verified on Debian/Raspberry Pi OS. *(Stessa verifica sopra
+      — Raspberry Pi OS Trixie (basato su Debian) e' esattamente il
+      target "Debian/RPi OS puro" che mancava rispetto alla verifica
+      Kali gia' fatta.)*
 - [x] Install verified on Kali Linux. *(Fatto davvero in questa sessione,
       non solo sulla carta: installazione pulita con `sudo ./install.sh`
       su questa macchina Kali, servizio partito, dashboard raggiungibile
@@ -530,9 +565,14 @@ non e' un cambio di priorita' silenzioso.
       correlato per MAC. Le risposte sono quasi sempre link-local
       (fe80::...): la selezione dell'indirizzo sorgente IPv6 preferisce lo
       stesso scope della destinazione (RFC 6724), un indirizzo globale non
-      emerge da questo probe. Non verificabile con host IPv6-enabled reali
-      in questa sessione: `parse_icmpv6_echo_reply()` testato con un Echo
-      Reply costruito a mano, stesso trattamento round-trip-a-bytes gia'
+      emerge da questo probe. Verificato dal vivo il 2026-08-27 su hardware
+      reale (Raspberry Pi 3B+ + rete domestica): 2 dei 4 device dello scan
+      hanno risposto con un indirizzo link-local reale, uno dei quali
+      combacia esattamente con l'EUI-64 derivato dal suo MAC
+      (`b8:27:eb:36:ba:b9` -> `fe80::ba27:ebff:fe36:bab9`) — comportamento
+      SLAAC corretto, non solo teoricamente plausibile. Prima di quella
+      verifica: `parse_icmpv6_echo_reply()` testato con un Echo Reply
+      costruito a mano, stesso trattamento round-trip-a-bytes gia'
       necessario per SNMP/LLDP/CDP.)*
 - [x] Network topology map. *(GET /api/topology, nuova sezione "Topology
       (one-hop)" in dashboard. Per-interfaccia: gateway (gia' noto) +

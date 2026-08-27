@@ -208,7 +208,10 @@
         snapshot mid-scan) with a "changes since previous scan" section
         prepended automatically.
       </p>
-      <pre id="audit-report-text" class="report-text" style="display:none;"></pre>
+      <div id="audit-report-box" class="hidden">
+        <button class="btn small" id="btn-close-audit-report">✕ Close</button>
+        <pre id="audit-report-text" class="report-text"></pre>
+      </div>
 
       <h3 class="settings-subtitle">Compare two scans</h3>
       <div class="modal-row">

@@ -59,6 +59,18 @@ status), so everything below is grouped under **Unreleased**.
   discard the results for every other port on that host.
 - `PORT_SCAN_THREADS` was defined but never actually used — the port
   scanner's thread pool was hardcoded to 16 workers regardless.
+- `install.sh` could wrongly report "no bootstrap account was created"
+  on a slow CPU (Raspberry Pi 3B+): it checked the log too soon after
+  restarting the service, before the account had actually been created
+  and logged — found testing on real Pi hardware.
+- Audit mode (`GET /api/audit/report`) could show a lower severity than
+  the live report for the exact same scan: `find_security_issues()`
+  looked up `http_banners` by an integer port key, but a device that
+  had gone through `storage.save_scan()`/`get_scan_devices()` had that
+  same dict with string keys (a JSON round-trip artifact — JSON object
+  keys are always strings), so the lookup silently missed and an "HTTP
+  admin panel exposed" finding degraded to a generic "HTTP service"
+  one. Found testing Audit mode end-to-end on real Pi hardware.
 
 ### Added
 

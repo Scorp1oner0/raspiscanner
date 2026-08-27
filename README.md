@@ -210,12 +210,9 @@ discover:
 - **RAM usage on large scans.** Not measured against a real network big
   enough to matter; each device's data is modest, but hasn't been
   profiled at scale.
-- **Raspberry Pi scan times.** Not yet measured on real Pi 3B+/4/5
-  hardware — only on x86 development/test machines.
-- **IPv6 discovery on a real IPv6-enabled network.** The ICMPv6
-  Echo-to-multicast technique (see above) is tested against hand-built
-  packets, not against real IPv6 hosts on a live segment — the logic is
-  protocol-correct, but real-world timing/router behavior is unverified.
+- **Raspberry Pi 4/5 scan times.** Measured on a real Pi 3B+ (~11s for a
+  `/24` with 4 live hosts, full classification included) but not yet on
+  the faster 4/5 models.
 
 None of these block using the tool day to day; they're gaps in
 *measurement*, not known bugs.

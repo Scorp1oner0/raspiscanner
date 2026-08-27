@@ -574,7 +574,7 @@ async function saveMonitoringConfig() {
 
 async function viewAuditReport(scanId) {
   const box = $("audit-report-text");
-  box.style.display = "block";
+  $("audit-report-box").classList.remove("hidden");
   box.textContent = "Loading...";
   try {
     const res = await fetch(`/api/audit/report?scan_id=${scanId}`);
@@ -983,6 +983,9 @@ async function init() {
   $("table-history-scans").addEventListener("click", (ev) => {
     const btn = ev.target.closest(".btn-audit-report");
     if (btn) viewAuditReport(btn.dataset.scanId);
+  });
+  $("btn-close-audit-report").addEventListener("click", () => {
+    $("audit-report-box").classList.add("hidden");
   });
   $("settings-user-list").addEventListener("click", (ev) => {
     const btn = ev.target.closest(".btn-remove-user");
