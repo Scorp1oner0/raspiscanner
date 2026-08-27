@@ -1,10 +1,12 @@
 # RaspiScanner
 
-Standalone project: a Raspberry Pi (or any Linux box) that, connected via
-ethernet to an unfamiliar network, auto-configures itself to talk to it and
-offers a web dashboard **and** a command-line mode to scan the devices
-present — IP cameras, NVR/DVR, network gear — with a security "assessment"
-style report.
+**Status: 1.0.0.** A network discovery and security-exposure scanner for
+local networks, built to run unattended on a Raspberry Pi (or any Linux
+box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
+VPN tunnel: it auto-configures itself, discovers what's connected — IP
+cameras, NVR/DVR, network gear, general hosts — and produces a security
+report from active but non-intrusive probes. Available as a web dashboard
+and as a command-line tool.
 
 ## Why RaspiScanner?
 
@@ -20,14 +22,18 @@ of some of the same discovery mechanisms.
 
 ## What it does
 
-1. **Ethernet auto-configuration.** Tries **DHCP** first; if none arrives,
-   probes **all** preset private classes (192.168.1.0/24, 10.0.0.0/24,
-   etc. — see `scanner/config.py`) with an ARP check and assigns the one
-   that's actually alive. If more than one subnet responds, it doesn't
-   guess: the dashboard lists every candidate (with host counts) and asks
-   you to pick one. Pre-existing IPs the tool didn't assign are left
-   alone ("manual" mode). Runs continuously — unplug/replug the cable and
-   it reconfigures on its own.
+1. **Ethernet auto-configuration.** Tries **DHCP** first. If none arrives,
+   it doesn't need to be told the subnet: it tries a short built-in list
+   of common private ranges (192.168.1.0/24, 192.168.0.0/24, 10.0.0.0/24,
+   etc. — hardcoded in `scanner/config.py`, nothing to configure) and
+   keeps whichever one an ARP check finds hosts on. If more than one
+   does, it won't guess: the dashboard lists every candidate (with host
+   counts) and asks you to pick. Pre-existing IPs are left alone
+   ("manual" mode). This step only decides the device's **own** address —
+   the device scan itself then runs automatically on whatever subnet the
+   interface ends up with, there's no separate list of networks to scan.
+   Runs continuously — unplug/replug the cable and it reconfigures on its
+   own.
 
 2. **Device scan** across every active subnet: all of Ethernet, every
    Wi-Fi adapter present, and every active VPN tunnel (WireGuard,
@@ -90,6 +96,88 @@ of some of the same discovery mechanisms.
    report from a saved scan (reproducible, unlike the live "Report" tab)
    with a changes-since-previous-scan section prepended automatically.
    Full reference: [`API.md`](API.md).
+
+## What it doesn't do
+
+- **It is not a vulnerability scanner.** No exploitation, no default/
+  brute-force credential testing, no CVE matching. Findings describe what
+  a service *exposes* to a normal connection, never whether it's actually
+  exploitable — see [Security notes](#security-notes).
+- **It doesn't cross a router.** ARP-based discovery only sees the
+  directly connected L2 segment; a device on another VLAN/subnet needs to
+  be scanned from there, not found by proxy.
+- **It doesn't build a multi-hop network map.** Topology (`GET
+  /api/topology`) is one hop — the gateway and directly observed LLDP/CDP
+  neighbors — not a full network graph. That would need SNMP-walking
+  remote switches with credentials this tool doesn't have and won't guess.
+- **It isn't tuned for very large networks.** Hosts within a scan are
+  processed one at a time; see [Known limitations](#known-limitations).
+- **It doesn't phone home.** No telemetry, no cloud dependency, no
+  external service required to function — everything it needs (an OUI
+  database, its own TLS certificate) works offline.
+
+## Screenshot
+
+![RaspiScanner dashboard, populated with example data](docs/dashboard.png)
+
+*(Illustrative data — a Hikvision camera, NVR, TP-Link router, and a
+Raspberry Pi — not a real scan of anyone's network.)*
+
+## Quick start
+
+```bash
+git clone https://github.com/Scorp1oner0/raspiscanner.git
+cd raspiscanner
+sudo ./install.sh
+```
+
+Dashboard at `https://<device-ip>:7332`. A bootstrap admin account and
+random password are created on first launch and printed to the service
+log — see [Dashboard authentication](#dashboard-authentication) for the
+full flow. Full install/upgrade/uninstall instructions further down.
+
+## Example output
+
+```
+$ sudo raspi-scanner.py --report
+
+NETWORK ASSESSMENT
+────────────────────────────
+
+Network: 192.168.10.0/24
+
+4 devices discovered
+Summary: 1 camera, 1 NVR/DVR, 1 network device, 5 security findings
+
+SECURITY
+  ⚠ Telnet exposed — 192.168.10.10 (Hikvision NVR)
+  ⚠ HTTP service detected, no HTTPS available — 192.168.10.1 (TP-Link Technologies network device)
+  ⚠ RTSP exposed (stream reachability not verified) — 192.168.10.10 (Hikvision NVR)
+
+RISK SUMMARY
+  Critical: 1
+  High:     0
+  Medium:   3
+  Low:      1
+```
+
+Full example, including the disclaimers every report ends with:
+[`examples/sample_report.txt`](examples/sample_report.txt).
+
+## Architecture, in brief
+
+```
+ethernet/wifi/VPN status  →  ARP/ICMP discovery  →  per-host fingerprint
+(ports, ONVIF, mDNS, SNMP)  →  classification (camera/NVR/network/host)
+→  security findings + risk summary  →  dashboard / JSON API / text report
+```
+
+Four independent classifiers (camera, NVR, network gear, generic host)
+run on every discovered device; the most specific one wins. Continuous
+Monitoring and Audit mode reuse this exact pipeline — an automatic scan
+and a manual one are the same code path, and an Audit report is generated
+from a saved scan rather than a separate mechanism. Full breakdown,
+module-by-module, in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Usage
 
@@ -171,16 +259,10 @@ None of these block using the tool day to day; they're gaps in
 
 ## Installation
 
-```bash
-sudo ./install.sh
-```
-
-Installs the project into `/opt/raspiscanner`, creates a virtualenv,
-installs the Python dependencies (`Flask`, `scapy`) and
-registers/starts the `raspiscanner.service` systemd service. Dashboard at
-`https://<raspberry-ip>:7332` (self-signed certificate generated on first
-launch: the browser will show an "insecure connection" warning to accept
-once — see [Dashboard authentication](#dashboard-authentication)).
+`sudo ./install.sh` (see [Quick start](#quick-start)) installs the
+project into `/opt/raspiscanner`, creates a virtualenv, installs the
+Python dependencies (`Flask`, `scapy`), and registers/starts the
+`raspiscanner.service` systemd service.
 
 To run it without installing it as a service, for development:
 
@@ -325,7 +407,7 @@ service log:
 
 ```
 sudo journalctl -u raspiscanner -n 20 --no-pager
-# utente di bootstrap creato — utente: RaspiScanner  password iniziale: <random>
+# bootstrap account created — username: RaspiScanner  initial password: <random>
 ```
 
 There is no fixed, well-known default password — every installation gets

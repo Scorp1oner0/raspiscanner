@@ -117,10 +117,15 @@ def ensure_default_user():
                 "role": "admin",
             }
             _save(users)
+            # Messaggio in inglese nonostante la convenzione "commenti in
+            # italiano" del progetto: e' testo che l'operatore DEVE leggere
+            # per completare l'installazione (vedi CONTRIBUTING.md, "testo
+            # a runtime e' in inglese") — install.sh lo estrae da qui via
+            # grep, vedi i pattern "username:"/"initial password:" li'.
             log.warning(
-                "utente di bootstrap creato — utente: %s  password iniziale: %s  "
-                "ruolo: admin (casuale, valida una sola volta: il primo accesso "
-                "obbliga a cambiarla dalla scheda Impostazioni)",
+                "bootstrap account created — username: %s  initial password: %s  "
+                "role: admin (random, valid once: first login forces a "
+                "password change from the Settings tab)",
                 DEFAULT_USERNAME, password,
             )
 

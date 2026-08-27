@@ -108,7 +108,7 @@ echo "==> Checking service status and looking for first-login credentials..."
 # hardware veloce (esce quasi subito) sia su hardware lento.
 BOOTSTRAP_LINE=""
 for _ in $(seq 1 15); do
-  BOOTSTRAP_LINE="$(journalctl -u raspiscanner.service --no-pager 2>/dev/null | grep -i "utente di bootstrap creato" | tail -1 || true)"
+  BOOTSTRAP_LINE="$(journalctl -u raspiscanner.service --no-pager 2>/dev/null | grep -i "bootstrap account created" | tail -1 || true)"
   [ -n "$BOOTSTRAP_LINE" ] && break
   sleep 1
 done
@@ -119,8 +119,8 @@ echo "   Dashboard: https://<raspberry-ip>:7332 (self-signed certificate,"
 echo "   the browser will show a warning to accept on first visit)"
 echo ""
 if [ -n "$BOOTSTRAP_LINE" ]; then
-  BOOTSTRAP_USER="$(echo "$BOOTSTRAP_LINE" | grep -oP '(?<=utente: )\S+')"
-  BOOTSTRAP_PASS="$(echo "$BOOTSTRAP_LINE" | grep -oP '(?<=password iniziale: )\S+')"
+  BOOTSTRAP_USER="$(echo "$BOOTSTRAP_LINE" | grep -oP '(?<=username: )\S+')"
+  BOOTSTRAP_PASS="$(echo "$BOOTSTRAP_LINE" | grep -oP '(?<=initial password: )\S+')"
   echo "🔑 FIRST LOGIN — shown only once, copy it now:"
   echo "   Username: ${BOOTSTRAP_USER:-RaspiScanner}"
   echo "   Password: ${BOOTSTRAP_PASS:-<see: sudo journalctl -u raspiscanner | grep -i bootstrap>}"
