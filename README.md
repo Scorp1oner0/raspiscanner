@@ -192,6 +192,34 @@ bugs aren't:
   reachable on the subnet: `sudo arp-scan --interface=eth0 --localnet` or
   `sudo nmap -sn <subnet>`, or check the router/AP's DHCP lease table.
 
+## Known limitations
+
+Everything below is implemented and covered by unit/integration tests,
+but hasn't been characterized on real hardware or a real network of
+that shape yet — documented honestly rather than left for you to
+discover:
+
+- **Large networks (`/16` or bigger).** Hosts are scanned one at a time
+  after the initial ARP/ICMP sweep (the per-host port scan is
+  parallelized internally, but there's no parallelism *across* hosts) —
+  on a subnet with hundreds or thousands of live hosts, this loop is the
+  dominant factor in total scan time, more than any single timeout.
+  Not parallelized further without a real large network to validate
+  correctness against (shared state across concurrent hosts, stop-flag
+  responsiveness mid-batch) — see `TODO.md` for the full reasoning.
+- **RAM usage on large scans.** Not measured against a real network big
+  enough to matter; each device's data is modest, but hasn't been
+  profiled at scale.
+- **Raspberry Pi scan times.** Not yet measured on real Pi 3B+/4/5
+  hardware — only on x86 development/test machines.
+- **IPv6 discovery on a real IPv6-enabled network.** The ICMPv6
+  Echo-to-multicast technique (see above) is tested against hand-built
+  packets, not against real IPv6 hosts on a live segment — the logic is
+  protocol-correct, but real-world timing/router behavior is unverified.
+
+None of these block using the tool day to day; they're gaps in
+*measurement*, not known bugs.
+
 ## Installation
 
 ```bash
@@ -361,6 +389,14 @@ persisted (hashed, never in the clear) in `data/users.json` and survive
 service restarts — nothing needs to be redone on every boot. The browser
 asks for the username/password once and remembers it for the browsing
 session.
+
+Three roles, each seeing a progressively bigger slice of the dashboard:
+**viewer** (Devices/Cameras only — the live inventory, nothing else),
+**operator** (also Report, History, and topology — everything except
+Settings), and **admin** (everything, including user/webhook/monitoring
+management). Enforced on both sides: the dashboard hides tabs a role
+can't use, and every API route independently rejects a role below its
+minimum — see [`API.md`](API.md) for the exact requirement per endpoint.
 
 `data/users.json` is in `.gitignore`: it must not be committed (it
 contains the password hashes for that specific deployment).

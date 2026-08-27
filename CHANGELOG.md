@@ -124,6 +124,7 @@ status), so everything below is grouped under **Unreleased**.
   **saved** scan (reproducible — unlike the live `/api/report`, which can
   be a partial snapshot mid-scan) with a "changes since previous scan"
   section prepended automatically.
+
 ### Changed
 
 - `install.sh` now stops on failure to install required system packages

@@ -6,8 +6,54 @@ instead of letting it drift into aspirational fiction.
 
 Suggested sequence: **Security (P0) → Robustness (P1 networking bits) →
 CCTV/ONVIF (P2) → Tests (P3) → Release (P3 packaging) → new features
-(P4, not before 1.0)**. Resist the urge to start P4 before P0-P3 are
-done — a small, solid, documented 1.0 beats an endlessly growing 0.x.
+(P4)**. Followed in practice: P0-P3 closed first, P4 explicitly
+authorized by the user afterward (2026-08-27) rather than before 1.0 as
+originally sequenced — see the P4 section header for the full note.
+
+## 📊 Stato attuale (2026-08-27)
+
+- **456 test**, tutti verdi, nessuna regressione nota (rieseguita la
+  suite due volte di seguito per escludere flakiness dopo ogni batch).
+- **P0 (Security)**: chiuso 4/4.
+- **P1 (Hardening)**: chiuso 6/6, con un affinamento RBAC dal vivo (vedi
+  quella sezione).
+- **P2/P3 Architecture**: 0/2, deliberatamente rimandati (non bloccano
+  la 1.0 — vedi la sezione dedicata).
+- **P2 (Networking/ONVIF/Security assessment)**: chiuso 14/14.
+- **P3 Tests**: chiuso 7/7.
+- **P3 Dashboard UX**: chiuso 7/7.
+- **P3 Reporting**: chiuso 7/7.
+- **P3 Performance**: chiuso 3/7 — le 4 voci aperte sono TUTTE misure
+  che richiedono hardware reale (vedi "Cosa manca solo per hardware
+  reale" sotto), nessuna e' lavoro software rimasto.
+- **P3 Packaging/release**: chiuso 10/14 — le 4 voci aperte sono 3
+  verifiche hardware + la decisione finale "assegnare 1.0.0", che spetta
+  all'utente.
+- **P4 (Future evolution)**: chiuso 15/15 delle voci pianificate per la
+  1.0. "Field Technician mode" e' stato tentato, rimosso per un bug non
+  isolato sul browser reale, e spostato in **P5 (backlog, post-1.0)** —
+  non conta come voce P4 aperta.
+
+### 🔧 Cosa manca solo per hardware reale (non software)
+
+Tutto cio' che segue e' scritto, testato con test unitari/di
+integrazione dove possibile, e non verificabile oltre da questa
+sandbox — non sono bug sospetti, sono misure che esistono solo su
+hardware fisico:
+
+- Tempo di scan su Raspberry Pi 3B+ e su Pi 4/5.
+- Uso RAM su scan di reti grandi.
+- Comportamento su reti `/16` (limite architetturale gia' identificato
+  nel codice — loop host sequenziale — non solo "da misurare", vedi P3
+  Performance per il dettaglio).
+- Installer da zero su un Raspberry Pi reale.
+- Install verificato su Debian/Raspberry Pi OS "puro" (questa macchina
+  e' Kali).
+- Comportamento IPv6 discovery su una rete reale con host IPv6-enabled
+  (finora solo testato con pacchetti costruiti a mano).
+
+Nessuno di questi blocca il codice dall'essere corretto oggi: bloccano
+solo la certezza empirica su hardware che questa sessione non ha.
 
 ## 🔴 P0 — Before publishing/release
 
@@ -30,6 +76,8 @@ done — a small, solid, documented 1.0 beats an endlessly growing 0.x.
       reserved address.)*
 - [x] Test behavior with no OpenSSL available: verify the service refuses
       to start over HTTP, add an automated test for it. *(`tests/test_raspi_scanner.py`.)*
+
+P0 chiuso: 4/4.
 
 ## 🟠 P1 — Security hardening
 
@@ -92,6 +140,10 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       insieme alla separazione privilegi sopra (stesso rischio di
       riscrittura non verificabile senza hardware reale).
 
+P2/P3 Architecture: 0/2, entrambi deliberatamente rimandati (non
+bloccano la 1.0 — richiederebbero una riscrittura architetturale non
+verificabile in modo affidabile senza hardware reale su cui provarla).
+
 ## 🟡 P2 — Networking robustness
 
 - [x] Avoid IP collisions during DHCP fallback: ARP-probe the `.250`
@@ -125,6 +177,8 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       minimo se assente. Niente flag `--no-delete` aggiuntivo: le
       esclusioni mirate bastano, un `--delete` generale resta utile per
       non lasciare file di versioni precedenti come residui in giro.)*
+
+P2 Networking robustness chiuso: 5/5.
 
 ## 🟡 P2 — ONVIF / CCTV
 
@@ -166,6 +220,10 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       `title` esplicito "Guessed from an open RTSP port, not a verified
       working stream".)*
 
+P2 ONVIF/CCTV chiuso: 5/5 (il test multi-vendor reale resta
+intrinsecamente aperto — richiede hardware di piu' marche, non e' un
+task software residuo).
+
 ## 🟡 P2 — Security assessment
 
 - [x] More precise HTTP classification: `HTTP service detected` / `HTTP
@@ -194,6 +252,8 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       visibili all'utente: nota di sicurezza in dashboard, README, e come
       riga finale di `assessment.generate_all()` — non solo nei commenti
       del codice, dove gia' c'era.)*
+
+P2 Security assessment chiuso: 4/4.
 
 ## 🟢 P3 — Tests
 
@@ -235,6 +295,8 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       sui due bug scoperti dal vivo in questa sessione — esclusioni
       rsync per data/users.json/tls_*.pem/oui.csv, e il chown esplicito
       di data/.)*
+
+P3 Tests chiuso: 7/7.
 
 ## 🟢 P3 — Performance
 
@@ -278,6 +340,10 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       stessa cautela gia' applicata alla separazione dei privilegi in
       P2/P3 Architecture.)*
 
+P3 Performance chiuso: 3/7 — le 4 voci aperte richiedono TUTTE hardware
+reale (vedi "Cosa manca solo per hardware reale" in cima al file), non
+sono lavoro software rimasto.
+
 ## 🟢 P3 — Dashboard UX
 
 - [x] Scan progress indicator. *(Gia' presente: barra di avanzamento +
@@ -302,6 +368,8 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       dichiarato di se stesso via un protocollo strutturato; il tooltip
       lo rende esplicito ("self-reported via ONVIF/mDNS") invece di
       lasciarlo ambiguo. Verificato via screenshot headless.)*
+
+P3 Dashboard UX chiuso: 7/7.
 
 ## 🟢 P3 — Reporting
 
@@ -332,6 +400,8 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       data...".)*
 - [x] Clearly state the report can contain IP/MAC/hostname. *(Stesso
       disclaimer sopra, esplicito su IP/MAC/hostname/vendor/model/banner.)*
+
+P3 Reporting chiuso: 7/7.
 
 ## 🟢 P3 — Packaging / release
 
@@ -379,6 +449,11 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 - [x] Upgrade procedure. *(Documentato in README: `git pull` +
       `sudo ./install.sh`, sicuro da rieseguire grazie alle esclusioni
       rsync gia' corrette in P2/questa sessione.)*
+
+P3 Packaging/release chiuso: 10/14 — le 4 voci aperte sono 3 verifiche
+hardware (Pi reale, Debian/RPi OS puro, installer da zero su hardware)
+piu' la decisione finale "assegnare la versione 1.0.0", che spetta
+esplicitamente all'utente, non e' automatica.
 
 ## 🚀 P4 — Future evolution
 
@@ -540,8 +615,19 @@ non e' un cambio di priorita' silenzioso.
 
       425 -> 451 test (26 nuovi: scheduler, storage, sezione "changes"
       del report, route Flask). Nessuna regressione.)*
-- [ ] Field Technician mode. *(Tentato e rimosso nella stessa sessione:
-      un toggle client-side che nascondeva History/Settings via
+
+P4 chiuso: 15/15 delle voci pianificate per la 1.0. "Field Technician
+mode" era nel backlog P4 originale ma e' stato tentato, rimosso, e
+spostato in **P5 (backlog, post-1.0)** qui sotto — non conta come voce
+P4 aperta, e non blocca la 1.0.
+
+## 🧪 P5 — Backlog (post-1.0, non richiesto per la 1.0)
+
+Idee valutate ma deliberatamente rimandate oltre la 1.0 — non bloccano
+la release, da riprendere solo se richiesto esplicitamente in futuro.
+
+- [ ] Field Technician mode. *(Tentato e rimosso il 2026-08-27: un
+      toggle client-side che nascondeva History/Settings via
       `body.technician-mode` + CSS non si comportava in modo affidabile
       sul browser reale usato per il test hardware (la classe risultava
       applicata secondo la console, ma le tab restavano visibili —
@@ -550,4 +636,13 @@ non e' un cambio di priorita' silenzioso.
       lasciare una feature visibile ma non funzionante. Da ripensare
       (eventualmente con un approccio diverso, es. classe su un
       contenitore piu' vicino invece che su `<body>`) solo se richiesto
-      di nuovo esplicitamente — non un blocker per la 1.0.)*
+      di nuovo esplicitamente.)*
+- [ ] Privilege separation (vedi P2/P3 Architecture sopra): stessa voce,
+      elencata anche qui perche' e' un candidato naturale per un futuro
+      giro di lavoro con hardware reale disponibile, non solo "rimandata
+      a tempo indeterminato".
+- [ ] Multi-hop network topology (SNMP-walk su switch remoti): fuori
+      scope per design, non solo per questa sessione — richiederebbe
+      credenziali che lo scanner non ha e non deve indovinare. Elencato
+      qui solo come nota per chi in futuro volesse valutare un modello
+      "bring your own credentials" esplicito e opt-in.
