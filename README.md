@@ -187,6 +187,36 @@ pip install -r requirements.txt
 sudo venv/bin/python3 raspi-scanner.py
 ```
 
+### Upgrading
+
+Pull the latest sources and re-run the installer:
+
+```bash
+git pull
+sudo ./install.sh
+```
+
+`install.sh` is safe to re-run on an existing installation: it preserves
+dashboard users, the TLS certificate, and any full OUI database you
+previously downloaded (they're excluded from the `rsync --delete` step
+that syncs everything else), and restarts the service at the end.
+
+### Uninstalling
+
+```bash
+sudo ./uninstall.sh
+```
+
+Stops and disables the systemd service, removes the unit file, and
+removes `/opt/raspiscanner` entirely — **this deletes dashboard users,
+the TLS certificate, and the scanned-device history**. Pass `--keep-data`
+to remove everything else but preserve `data/` (useful if you plan to
+reinstall later and want to keep your users/certificate):
+
+```bash
+sudo ./uninstall.sh --keep-data
+```
+
 ## Tests
 
 Unit tests, all mocked (no hardware or network access required):

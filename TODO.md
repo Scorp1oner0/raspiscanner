@@ -329,20 +329,50 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 
 ## 🟢 P3 — Packaging / release
 
-- [ ] Official `1.0.0` version.
-- [ ] Changelog.
-- [ ] Verified `LICENSE`.
-- [ ] Final `README.md`.
-- [ ] `SECURITY.md`.
-- [ ] `CONTRIBUTING.md`.
-- [ ] Final `.gitignore`.
-- [ ] Verified `requirements.txt`.
-- [ ] Installer verified from scratch on a real Raspberry Pi.
-- [ ] Install verified on Debian/Raspberry Pi OS.
-- [ ] Install verified on Kali Linux.
-- [ ] Verified systemd service.
-- [ ] Uninstall procedure.
-- [ ] Upgrade procedure.
+- [ ] Official `1.0.0` version. *(Decisione dell'utente, non mia: numerare
+      1.0.0 e' una dichiarazione di stabilita'/completezza verso chi lo
+      installa, e i tre item hardware sotto (Pi reale, Debian/RPi OS,
+      installer da zero) non sono ancora verificati. Non assegnato senza
+      conferma esplicita.)*
+- [x] Changelog. *(`CHANGELOG.md`, formato Keep a Changelog, sezione
+      "Unreleased" — niente numero di versione finche' non se ne decide
+      uno, vedi punto sopra.)*
+- [x] Verified `LICENSE`. *(MIT, presente e valida, nessuna modifica
+      necessaria.)*
+- [x] Final `README.md`. *(Aggiornato incrementalmente per tutta la
+      sessione; aggiunte qui le sezioni Upgrading/Uninstalling.)*
+- [x] `SECURITY.md`. *(Scope di sicurezza specifico di questo progetto
+      — gira come root, espone una dashboard sulla rete scansionata —
+      + procedura di segnalazione privata via GitHub.)*
+- [x] `CONTRIBUTING.md`. *(Setup sviluppo, convenzioni gia' in uso nel
+      progetto — lingua commenti/commit vs stringhe utente, niente nuove
+      dipendenze senza motivo forte, input non fidato trattato come
+      tale — checklist prima di una PR.)*
+- [x] Final `.gitignore`. *(Gia' completo: venv/pycache, log, i 3 file
+      sensibili generati al primo avvio. `data/oui.csv` NON e' ignorato
+      di proposito — e' la versione minima committata nel repo, quella
+      completa scaricata da update_oui.py e' locale-only e va ripristinata
+      con `git checkout` prima di ogni commit, non ignorata.)*
+- [x] Verified `requirements.txt`. *(Solo Flask e scapy, range di versioni
+      gia' presenti — coerente con la scelta deliberata di non aggiungere
+      dipendenze, vedi CONTRIBUTING.md.)*
+- [ ] Installer verified from scratch on a real Raspberry Pi. *(Richiede
+      hardware reale, non riproducibile da qui.)*
+- [ ] Install verified on Debian/Raspberry Pi OS. *(Idem — questa macchina
+      e' Kali, non Debian/RPi OS "puro".)*
+- [x] Install verified on Kali Linux. *(Fatto davvero in questa sessione,
+      non solo sulla carta: installazione pulita con `sudo ./install.sh`
+      su questa macchina Kali, servizio partito, dashboard raggiungibile
+      via HTTPS e via VPN WireGuard dal telefono, hardening systemd
+      validato dal vivo (incluso un bug reale trovato e corretto sulla
+      proprieta' di data/), cambio password confermato funzionante.)*
+- [x] Verified systemd service. *(Stessa validazione dal vivo sopra, piu'
+      `systemd-analyze verify` automatizzato in tests/test_installer.py.)*
+- [x] Uninstall procedure. *(`uninstall.sh`, con `--keep-data` opzionale;
+      documentato in README.)*
+- [x] Upgrade procedure. *(Documentato in README: `git pull` +
+      `sudo ./install.sh`, sicuro da rieseguire grazie alle esclusioni
+      rsync gia' corrette in P2/questa sessione.)*
 
 ## 🚀 P4 — Future evolution (not before 1.0)
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTALL_SH = REPO_ROOT / "install.sh"
+UNINSTALL_SH = REPO_ROOT / "uninstall.sh"
 SERVICE_FILE = REPO_ROOT / "raspiscanner.service"
 
 
@@ -63,6 +64,29 @@ class TestInstallShSyntax(unittest.TestCase):
         text = INSTALL_SH.read_text()
         self.assertIn("FIRST LOGIN", text)
         self.assertIn("journalctl", text)
+
+
+class TestUninstallShSyntax(unittest.TestCase):
+    def test_bash_syntax_is_valid(self):
+        result = subprocess.run(
+            ["bash", "-n", str(UNINSTALL_SH)], capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_requires_sudo_before_doing_anything(self):
+        text = UNINSTALL_SH.read_text()
+        self.assertIn('$EUID" -ne 0', text)
+
+    def test_keep_data_flag_preserves_the_data_directory(self):
+        text = UNINSTALL_SH.read_text()
+        self.assertIn("--keep-data", text)
+        self.assertIn('mv "$DEST_DIR/data"', text)
+
+    def test_removes_the_systemd_unit(self):
+        text = UNINSTALL_SH.read_text()
+        self.assertIn("systemctl stop raspiscanner.service", text)
+        self.assertIn("systemctl disable raspiscanner.service", text)
+        self.assertIn("rm -f /etc/systemd/system/raspiscanner.service", text)
 
 
 class TestSystemdServiceFile(unittest.TestCase):
