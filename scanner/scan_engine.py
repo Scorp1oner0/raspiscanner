@@ -10,7 +10,7 @@ import threading
 import time
 
 from . import vendor
-from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url
+from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import arp_scan, icmp_scan, mdns_probe, resolve_hostname
 from .fingerprint import grab_http_banner, scan_ports
@@ -93,6 +93,19 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
     onvif_info = onvif_results.get(ip)
     mdns_info = mdns_results.get(ip)
     device_vendor = vendor.lookup_vendor(mac) if mac else "Unknown"
+    # "vendor_source" (P4 richer vendor fingerprinting): "oui"/"banner"/
+    # "onvif" — da dove viene il vendor mostrato, stesso principio di
+    # model_source. Il banner HTTP e' usato SOLO come fallback quando il
+    # lookup OUI (MAC) non da' un vendor noto: il nostro database OUI
+    # locale e' minimo (~120 voci), un dispositivo il cui banner dice
+    # letteralmente "Hikvision" non deve restare "Unknown" solo perche'
+    # il suo prefisso MAC non e' nella lista.
+    vendor_source = "oui" if device_vendor != "Unknown" else None
+    if device_vendor == "Unknown":
+        banner_vendor = guess_vendor_from_banner(banners)
+        if banner_vendor:
+            device_vendor = banner_vendor
+            vendor_source = "banner"
     # Reverse DNS prima (dipende dal DNS locale, spesso assente per
     # dispositivi personali su reti domestiche); il nome amichevole
     # annunciato via mDNS/Bonjour (es. "Marios-iPhone") come fallback,
@@ -127,6 +140,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
             model_source = "onvif"
         if info.get("manufacturer"):
             device_vendor = info["manufacturer"]
+            vendor_source = "onvif"
     if not model and mdns_info and mdns_info.get("model"):
         model = mdns_info["model"]
         model_source = "mdns"
@@ -167,6 +181,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
         "ip": ip,
         "mac": mac,
         "vendor": device_vendor,
+        "vendor_source": vendor_source,
         "model": model,
         "model_source": model_source,
         "hostname": hostname,
@@ -270,6 +285,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
     model = None
     model_source = None
     device_vendor = "Unknown"
+    vendor_source = None
     if xaddrs:
         info = get_device_info_multi(xaddrs)
         if info.get("model"):
@@ -277,11 +293,13 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
             model_source = "onvif"
         if info.get("manufacturer"):
             device_vendor = info["manufacturer"]
+            vendor_source = "onvif"
 
     return {
         "ip": ip,
         "mac": None,
         "vendor": device_vendor,
+        "vendor_source": vendor_source,
         "model": model,
         "model_source": model_source,
         "hostname": None,

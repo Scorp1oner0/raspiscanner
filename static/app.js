@@ -201,6 +201,20 @@ function renderModelCell(d) {
   return `<span${title}>${escapeHtml(d.model)}</span>`;
 }
 
+function renderVendorCell(d) {
+  // vendor_source (P4 richer vendor fingerprinting): "oui" (default MAC
+  // lookup) / "banner" (fallback quando l'OUI non sa nulla, indovinato dal
+  // banner HTTP del dispositivo) / "onvif" (auto-dichiarato, il piu'
+  // affidabile) — reso esplicito invece di mostrare lo stesso nome vendor
+  // a prescindere da quanto sia affidabile la fonte.
+  const sourceLabel = d.vendor_source === "onvif" ? "self-reported via ONVIF"
+    : d.vendor_source === "banner" ? "guessed from the device's own HTTP banner (MAC vendor unknown)"
+    : d.vendor_source === "oui" ? "from MAC vendor lookup (OUI database)"
+    : null;
+  const title = sourceLabel ? ` title="${escapeHtml(sourceLabel)}"` : "";
+  return `<span${title}>${escapeHtml(d.vendor)}</span>`;
+}
+
 function deviceTypeCell(d) {
   if (d.network_mismatch) {
     return '<span class="badge badge-warn">⚠️ ' + escapeHtml(d.device_type) + ' — out of network</span>';
@@ -222,7 +236,7 @@ function renderAllTable(devices) {
     <tr>
       <td>${escapeHtml(d.ip)}</td>
       <td>${escapeHtml(d.mac) || "-"}</td>
-      <td>${escapeHtml(d.vendor)}</td>
+      <td>${renderVendorCell(d)}</td>
       <td>${renderModelCell(d)}</td>
       <td>${escapeHtml(d.hostname)}</td>
       <td>${escapeHtml(d.iface)}</td>
@@ -238,7 +252,7 @@ function renderCameraRowOk(d) {
     <tr>
       <td>${escapeHtml(d.ip)}</td>
       <td>${escapeHtml(d.mac)}</td>
-      <td>${escapeHtml(d.vendor)}</td>
+      <td>${renderVendorCell(d)}</td>
       <td>${renderModelCell(d)}</td>
       <td>${renderPorts(d)}</td>
       <td>${d.rtsp_url ? '<a class="link" title="Guessed from an open RTSP port, not a verified working stream" href="' + escapeHtml(d.rtsp_url) + '">' + escapeHtml(d.rtsp_url) + "</a>" : "-"}</td>
@@ -252,7 +266,7 @@ function renderCameraRowMismatch(d) {
   return `
     <tr>
       <td>${escapeHtml(d.ip)}</td>
-      <td>${escapeHtml(d.vendor)}</td>
+      <td>${renderVendorCell(d)}</td>
       <td>${renderModelCell(d)}</td>
       <td>${escapeHtml(d.iface) || "-"}</td>
       <td>${d.onvif_xaddr ? '<a class="link" href="' + escapeHtml(d.onvif_xaddr) + '">' + escapeHtml(d.onvif_xaddr) + "</a>" : "-"}</td>

@@ -374,11 +374,37 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
       `sudo ./install.sh`, sicuro da rieseguire grazie alle esclusioni
       rsync gia' corrette in P2/questa sessione.)*
 
-## 🚀 P4 — Future evolution (not before 1.0)
+## 🚀 P4 — Future evolution
 
-- [ ] Richer vendor fingerprint database.
-- [ ] Vendor-specific fingerprints: Hikvision/Dahua/Axis/Bosch/Ksenia etc.
-- [ ] Proprietary NVR detection.
+Nota: la sequenza originale prevedeva di non toccare P4 prima della 1.0.
+L'utente ha esplicitamente autorizzato di iniziarlo in questa sessione
+mentre le verifiche hardware restanti (vedi P3 Performance/Packaging)
+sono rimandate a una sessione con un Raspberry Pi reale disponibile —
+non e' un cambio di priorita' silenzioso.
+
+- [x] Richer vendor fingerprint database. *(`scanner/cameras/classify.py`:
+      nuovo `guess_vendor_from_banner()`, usato da scan_engine come
+      fallback SOLO quando il lookup OUI (MAC) non da' un vendor noto —
+      il database OUI locale e' minimo (~120 voci), un dispositivo il cui
+      banner dice letteralmente "Hikvision" non deve restare "Unknown".
+      Nuovo campo `vendor_source` ("oui"/"banner"/"onvif") mostrato in
+      dashboard con tooltip, stesso principio gia' usato per
+      `model_source` in P3.)*
+- [x] Vendor-specific fingerprints: Hikvision/Dahua/Axis/Bosch/Ksenia etc.
+      *(Hikvision/Dahua/Axis gia' presenti nei keyword di classificazione
+      camera; aggiunti Bosch e Ksenia. `guess_vendor_from_banner()`
+      copre lo stesso elenco piu' Reolink/Foscam/Vivotek, con un
+      fallback generico "uc-httpd" per le board OEM DVR/NVR cinesi non
+      attribuibili con certezza a un vendor specifico — mai inventati
+      segnali/porte non verificabili con sicurezza.)*
+- [x] Proprietary NVR detection. *(Copertura vendor per NVR/DVR e'
+      la STESSA funzione di cui sopra (banner-based, indipendente dal
+      tipo di dispositivo): un NVR con banner "Dahua" viene attribuito
+      correttamente anche se il MAC non e' nel database OUI. Porte
+      proprietarie specifiche (Dahua 37777/34567) erano gia' coperte da
+      prima; non aggiunte porte per altri vendor senza una fonte
+      affidabile da verificare — un segnale sbagliato sarebbe peggio di
+      nessun segnale.)*
 - [ ] VLAN awareness.
 - [ ] Optional SNMP discovery.
 - [ ] LLDP/CDP discovery.
