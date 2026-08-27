@@ -62,6 +62,18 @@ if [ ! -f "$DEST_DIR/data/oui.csv" ]; then
   cp "$SRC_DIR/data/oui.csv" "$DEST_DIR/data/oui.csv"
 fi
 
+# rsync -a (girando come root) sincronizza anche proprietario/permessi
+# della DIRECTORY data/ da quelli del checkout sorgente — di norma
+# l'utente non privilegiato che sviluppa, non root. Il servizio gira
+# come root ma con CapabilityBoundingSet ristretto (niente
+# CAP_DAC_OVERRIDE, vedi raspiscanner.service): se data/ risulta di
+# proprieta' di un altro utente, root non puo' PIU' creare file al suo
+# interno (es. data/users.json.tmp scrivendo la password), anche se i
+# file gia' esistenti restano leggibili. Impostata sempre esplicitamente
+# qui, invece di fidarsi di cosa rsync ha copiato dal sorgente.
+chown root:root "$DEST_DIR/data"
+chmod 750 "$DEST_DIR/data"
+
 echo "==> Creating virtualenv and installing Python dependencies"
 python3 -m venv "$DEST_DIR/venv"
 "$DEST_DIR/venv/bin/pip" install --upgrade pip
