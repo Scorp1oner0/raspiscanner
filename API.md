@@ -287,6 +287,7 @@ The shape returned by `/api/devices`, `/api/devices/cameras`,
   "snmp_info": {},
   "lldp_cdp_info": null,
   "vlan_id": null,
+  "ipv6_addresses": [],
   "iface": "eth0",
   "network": "192.168.1.0/24",
   "open_ports": [{"port": 554, "service": "RTSP"}],
@@ -325,6 +326,12 @@ The shape returned by `/api/devices`, `/api/devices/cameras`,
   `null` — most switch ports are "access" mode (the tag is stripped
   before the frame reaches the scanner), so `null` is the normal case,
   not a sign anything is missing.
+- `ipv6_addresses`: IPv6 addresses (usually link-local, `fe80::...`) that
+  answered an ICMPv6 Echo Request to the all-nodes multicast `ff02::1`
+  from this device's MAC — `[]` on devices with IPv6 disabled, or none
+  answered during the scan's listen window. Not full IPv6 discovery of
+  every device's every address, just a supplementary "is this device also
+  reachable over IPv6" signal alongside the primary IPv4/ARP scan.
 - `rtsp_url`/`admin_url` are **candidates**, not verified endpoints:
   guessed from an open port (554 for RTSP; the first open web port for
   admin), never confirmed with an actual handshake — see

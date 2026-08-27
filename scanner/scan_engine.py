@@ -12,7 +12,9 @@ import time
 from . import storage, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
-from .discovery import arp_scan, icmp_scan, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe
+from .discovery import (
+    arp_scan, icmp_scan, ipv6_discovery, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe,
+)
 from .fingerprint import grab_http_banner, scan_ports
 from .hosts import classify_host
 from .network import setup as network_setup
@@ -283,6 +285,20 @@ def _match_lldp_cdp_neighbor(mac, neighbors):
     return None
 
 
+def _match_ipv6_addresses(mac, ipv6_hosts):
+    """Ritorna la lista di indirizzi IPv6 visti (via discovery.ipv6) con
+    MAC sorgente uguale a quello di questo device — un host puo' rispondere
+    da piu' di un indirizzo (es. privacy extension RFC 4941), quindi lista
+    e non singolo valore come per LLDP/CDP. Lista vuota (non None) se
+    nessuno coincide o mac e' None: coerente con "vlan_id: None" per
+    "nessun segnale", ma qui il valore naturale di "niente" e' gia' una
+    lista vuota."""
+    if not mac:
+        return []
+    mac_upper = mac.upper()
+    return [h["ipv6"] for h in ipv6_hosts if h.get("mac") and h["mac"].upper() == mac_upper]
+
+
 def _classify_orphan_ips(orphan_ips, networks):
     """Un IP "orfano" (visto solo via ONVIF, mai dall'ARP scan) NON e'
     automaticamente "fuori rete": se rientra comunque in una subnet gia'
@@ -362,6 +378,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
         "iface": iface,
         "network": None,
         "vlan_id": None,
+        "ipv6_addresses": [],
     }
 
 
@@ -395,6 +412,7 @@ def _run_scan_thread(networks):
         mdns_results = {}
         gateways = {}
         topology = {}
+        ipv6_by_iface = {}
         for iface, cidr, iface_ip in networks:
             if _stop_flag.is_set():
                 break
@@ -423,15 +441,15 @@ def _run_scan_thread(networks):
                 # scanner non comparirebbe mai da sola nei risultati.
                 all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, cidr, None))
 
-            # ONVIF, mDNS e LLDP/CDP sono probe indipendenti: in thread
-            # separati invece che in sequenza, cosi' la loro attesa (3s +
-            # 2.5s + 3s) si sovrappone invece di sommarsi per ogni rete
-            # attiva. LLDP/CDP e' puro ascolto passivo (nessuna richiesta
-            # da mandare, gli apparati trasmettono da soli ogni ~30-60s):
-            # skippato sulle interfacce NOARP per lo stesso motivo
-            # dell'ARP scan (nessun dominio di broadcast L2 su cui
-            # ascoltare annunci L2).
-            onvif_partial, mdns_partial, lldp_cdp_neighbors = {}, {}, []
+            # ONVIF, mDNS, LLDP/CDP e IPv6 sono probe indipendenti: in
+            # thread separati invece che in sequenza, cosi' la loro attesa
+            # (3s + 2.5s + 3s + 2s) si sovrappone invece di sommarsi per
+            # ogni rete attiva. LLDP/CDP e IPv6 vengono skippati sulle
+            # interfacce NOARP per lo stesso motivo dell'ARP scan: LLDP/CDP
+            # richiede un dominio di broadcast L2 su cui ascoltare annunci,
+            # IPv6 discovery invia un frame Ethernet multicast che non ha
+            # senso su un link punto-punto senza L2 (WireGuard/tun).
+            onvif_partial, mdns_partial, lldp_cdp_neighbors, ipv6_partial = {}, {}, [], []
             t_onvif = threading.Thread(target=lambda: onvif_partial.update(onvif_probe(iface_ip=iface_ip, timeout=3)))
             # reverse_ips=seen_ips: query PTR inversa per gli host gia'
             # trovati da ARP/ICMP su questa rete, oltre alle query per i
@@ -445,7 +463,9 @@ def _run_scan_thread(networks):
             threads = [t_onvif, t_mdns]
             if not is_noarp_iface:
                 t_lldp_cdp = threading.Thread(target=lambda: lldp_cdp_neighbors.extend(lldp_cdp_probe(iface, timeout=3)))
+                t_ipv6 = threading.Thread(target=lambda: ipv6_partial.extend(ipv6_discovery(iface)))
                 threads.append(t_lldp_cdp)
+                threads.append(t_ipv6)
             for t in threads:
                 t.start()
             for t in threads:
@@ -453,6 +473,7 @@ def _run_scan_thread(networks):
             for onvif_ip, info in onvif_partial.items():
                 onvif_results[onvif_ip] = {**info, "_iface": iface}
             mdns_results.update(mdns_partial)
+            ipv6_by_iface[iface] = ipv6_partial
 
             if iface not in gateways:
                 gateways[iface] = get_default_gateway(iface)
@@ -488,6 +509,7 @@ def _run_scan_thread(networks):
             device["network"] = cidr
             device["vlan_id"] = vlan_id
             device["lldp_cdp_info"] = _match_lldp_cdp_neighbor(mac, topology.get(iface, {}).get("neighbors", []))
+            device["ipv6_addresses"] = _match_ipv6_addresses(mac, ipv6_by_iface.get(iface, []))
             _set_device(ip, device)
 
         for idx, ip in enumerate(out_of_range_ips):

@@ -100,3 +100,10 @@ ARP_SCAN_RETRY = 2
 
 # Timeout risoluzione hostname (reverse DNS, best-effort)
 HOSTNAME_TIMEOUT = 0.6
+
+# Timeout e ripetizioni della IPv6 discovery (ICMPv6 Echo Request verso il
+# multicast "all-nodes" ff02::1): stessa logica di ARP_SCAN_TIMEOUT/RETRY,
+# valori piu' bassi perche' e' un probe locale al link (nessun routing di
+# mezzo) e solo supplementare alla scoperta IPv4 principale.
+IPV6_DISCOVERY_TIMEOUT = 2
+IPV6_DISCOVERY_RETRY = 1

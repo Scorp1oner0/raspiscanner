@@ -435,7 +435,24 @@ non e' un cambio di priorita' silenzioso.
       scapy appena creato non ha i campi ASN.1/tipizzati coerenti finche'
       non viene serializzato e riparsato — stesso problema gia' visto con
       SNMP, stessa correzione (round-trip byte a byte nei test).)*
-- [ ] IPv6 discovery.
+- [x] IPv6 discovery. *(`scanner/discovery/ipv6.py`: ICMPv6 Echo Request
+      verso il multicast "all-nodes" ff02::1 — IPv6 non ha broadcast, ma
+      ogni nodo IPv6 attivo ascolta quell'indirizzo per definizione di
+      protocollo (RFC 4291), quindi non serve conoscere in anticipo nessun
+      indirizzo, esattamente come l'ARP sweep per IPv4. Probe supplementare
+      alla scoperta IPv4 principale, non un secondo scan indipendente:
+      corre in parallelo per interfaccia insieme a ONVIF/mDNS/LLDP-CDP,
+      skippato sulle interfacce NOARP (nessun L2 su cui inviare un frame
+      multicast Ethernet, stesso motivo di LLDP/CDP). Nuovo campo
+      `device["ipv6_addresses"]` (lista, non singolo valore: un host puo'
+      rispondere da piu' di un indirizzo, es. privacy extension RFC 4941),
+      correlato per MAC. Le risposte sono quasi sempre link-local
+      (fe80::...): la selezione dell'indirizzo sorgente IPv6 preferisce lo
+      stesso scope della destinazione (RFC 6724), un indirizzo globale non
+      emerge da questo probe. Non verificabile con host IPv6-enabled reali
+      in questa sessione: `parse_icmpv6_echo_reply()` testato con un Echo
+      Reply costruito a mano, stesso trattamento round-trip-a-bytes gia'
+      necessario per SNMP/LLDP/CDP.)*
 - [x] Network topology map. *(GET /api/topology, nuova sezione "Topology
       (one-hop)" in dashboard. Per-interfaccia: gateway (gia' noto) +
       vicini LLDP/CDP. Deliberatamente UN SOLO hop, non un grafo
