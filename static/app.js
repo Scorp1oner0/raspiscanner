@@ -441,6 +441,35 @@ async function refreshHistory() {
   } catch (e) {
     console.error("refreshHistory (assets)", e);
   }
+
+  try {
+    const res = await fetch("/api/topology");
+    const topology = await res.json();
+    const ifaces = Object.keys(topology).sort();
+    $("topology-box").innerHTML = ifaces.length
+      ? ifaces.map((iface) => {
+          const info = topology[iface];
+          const neighbors = info.neighbors || [];
+          return `
+            <div class="net-box">
+              <div class="net-title">🔌 ${escapeHtml(iface)} <span class="iface-name">(${escapeHtml(info.cidr) || "-"})</span></div>
+              <div class="net-line">Gateway: <span>${escapeHtml(info.gateway) || "-"}</span></div>
+              <div class="net-line">LLDP/CDP neighbors:</div>
+              ${neighbors.length
+                ? neighbors.map((n) => `
+                    <div class="addr-row">
+                      <span>${escapeHtml(n.system_name || n.chassis_id || "?")}</span>
+                      <span class="iface-name">${escapeHtml(n.protocol).toUpperCase()} · port ${escapeHtml(n.port_id) || "?"}</span>
+                    </div>
+                  `).join("")
+                : '<div class="addr-empty">None seen this scan</div>'}
+            </div>
+          `;
+        }).join("")
+      : '<p class="modal-desc">No topology data yet — run a scan first.</p>';
+  } catch (e) {
+    console.error("refreshHistory (topology)", e);
+  }
 }
 
 async function compareScans() {

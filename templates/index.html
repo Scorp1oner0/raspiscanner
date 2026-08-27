@@ -219,6 +219,15 @@
           <tbody id="table-history-assets"></tbody>
         </table>
       </div>
+
+      <h3 class="settings-subtitle">Topology (one-hop)</h3>
+      <p class="modal-desc">
+        Gateway and LLDP/CDP neighbors seen per interface during the last
+        scan — not a multi-hop map. LLDP/CDP devices transmit on their
+        own timer (usually every 30-60s), so an empty list here doesn't
+        mean none is present, only that none transmitted during the scan.
+      </p>
+      <div id="topology-box"></div>
     </div>
 
     <div class="tab-panel hidden" id="panel-settings">

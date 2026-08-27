@@ -353,6 +353,38 @@ class TestHistoryRoutes(RaspiScannerAppTestCase):
         self.assertEqual(assets[0]["times_seen"], 2)
 
 
+class TestTopologyRoute(RaspiScannerAppTestCase):
+    """P4 'network topology map': la route legge scan_engine.get_state()
+    direttamente, gia' testato a fondo in test_scan_engine.py e
+    test_integration_scan_report.py — qui interessa solo che risponda con
+    la forma attesa."""
+
+    def setUp(self):
+        super().setUp()
+        from scanner import scan_engine
+        self._orig_topology = scan_engine._state.get("topology")
+        # scan_engine._state e' un singleton di modulo condiviso con TUTTI
+        # gli altri file di test nello stesso processo pytest: un test che
+        # gira prima di questo (in un altro file) puo' aver lasciato
+        # topology popolata. Reset esplicito qui, non ci si affida alla
+        # pulizia altrui.
+        scan_engine._state["topology"] = {}
+        self.scan_engine = scan_engine
+
+    def tearDown(self):
+        self.scan_engine._state["topology"] = self._orig_topology
+        super().tearDown()
+
+    def test_empty_before_any_scan(self):
+        resp = self.client.get("/api/topology", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json(), {})
+
+    def test_viewer_can_read_topology(self):
+        resp = self.client.get("/api/topology", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+
+
 class TestWebhookSettings(RaspiScannerAppTestCase):
     def test_viewer_cannot_read_webhook_config(self):
         resp = self.client.get("/api/settings/webhook", auth=self.viewer_auth)

@@ -263,6 +263,14 @@ def api_scan_status():
     return jsonify(scan_engine.get_state())
 
 
+@app.route("/api/topology")
+@require_role("viewer")
+def api_topology():
+    """P4 'network topology map': adiacenza a un salto per interfaccia
+    (gateway + vicini LLDP/CDP visti), popolata dall'ultimo scan."""
+    return jsonify(scan_engine.get_state()["topology"])
+
+
 @app.route("/api/devices")
 @require_role("viewer")
 def api_devices():

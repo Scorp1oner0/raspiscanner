@@ -12,7 +12,7 @@ import time
 from . import storage, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
-from .discovery import arp_scan, icmp_scan, mdns_probe, resolve_hostname, snmp_probe
+from .discovery import arp_scan, icmp_scan, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe
 from .fingerprint import grab_http_banner, scan_ports
 from .hosts import classify_host
 from .network import setup as network_setup
@@ -31,6 +31,11 @@ _state = {
     "finished_at": None,
     "error": None,
     "devices": {},  # ip -> dettagli
+    # P4 "network topology map": adiacenza a un salto, non un grafo
+    # multi-hop (richiederebbe interrogare switch remoti via SNMP walk
+    # con credenziali che non abbiamo — fuori scope per un tool non
+    # intrusivo). {iface: {"cidr":.., "gateway":.., "neighbors": [...]}}
+    "topology": {},
 }
 _stop_flag = threading.Event()
 
@@ -261,6 +266,23 @@ def _match_active_network(ip, networks):
     return None
 
 
+def _match_lldp_cdp_neighbor(mac, neighbors):
+    """Se il chassis_id di un vicino LLDP/CDP visto su questa interfaccia
+    coincide col MAC di questo device (confronto case-insensitive: LLDP
+    formatta il MAC in minuscolo, il resto del progetto in maiuscolo),
+    ritorna quel vicino — corrobora "questo e' davvero l'apparato visto
+    via LLDP/CDP", non solo un IP/MAC scoperto via ARP. None se nessun
+    vicino ha un chassis_id che sembra un MAC, o nessuno coincide."""
+    if not mac:
+        return None
+    mac_upper = mac.upper()
+    for neighbor in neighbors:
+        chassis_id = neighbor.get("chassis_id")
+        if chassis_id and chassis_id.upper() == mac_upper:
+            return neighbor
+    return None
+
+
 def _classify_orphan_ips(orphan_ips, networks):
     """Un IP "orfano" (visto solo via ONVIF, mai dall'ARP scan) NON e'
     automaticamente "fuori rete": se rientra comunque in una subnet gia'
@@ -320,6 +342,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
         "model_source": model_source,
         "hostname": None,
         "snmp_info": {},
+        "lldp_cdp_info": None,
         "open_ports": [],
         "http_banners": {},
         "onvif": onvif_info,
@@ -371,10 +394,12 @@ def _run_scan_thread(networks):
         onvif_results = {}
         mdns_results = {}
         gateways = {}
+        topology = {}
         for iface, cidr, iface_ip in networks:
             if _stop_flag.is_set():
                 break
-            if network_setup.is_noarp(iface):
+            is_noarp_iface = network_setup.is_noarp(iface)
+            if is_noarp_iface:
                 # VPN instradata (WireGuard, OpenVPN tun, PPP...): niente
                 # dominio di broadcast L2, l'ARP scan non riceverebbe mai
                 # risposta indipendentemente da quanti host reali ci siano
@@ -398,10 +423,15 @@ def _run_scan_thread(networks):
                 # scanner non comparirebbe mai da sola nei risultati.
                 all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, cidr, None))
 
-            # ONVIF e mDNS sono probe multicast indipendenti: in thread
+            # ONVIF, mDNS e LLDP/CDP sono probe indipendenti: in thread
             # separati invece che in sequenza, cosi' la loro attesa (3s +
-            # 2.5s) si sovrappone invece di sommarsi per ogni rete attiva.
-            onvif_partial, mdns_partial = {}, {}
+            # 2.5s + 3s) si sovrappone invece di sommarsi per ogni rete
+            # attiva. LLDP/CDP e' puro ascolto passivo (nessuna richiesta
+            # da mandare, gli apparati trasmettono da soli ogni ~30-60s):
+            # skippato sulle interfacce NOARP per lo stesso motivo
+            # dell'ARP scan (nessun dominio di broadcast L2 su cui
+            # ascoltare annunci L2).
+            onvif_partial, mdns_partial, lldp_cdp_neighbors = {}, {}, []
             t_onvif = threading.Thread(target=lambda: onvif_partial.update(onvif_probe(iface_ip=iface_ip, timeout=3)))
             # reverse_ips=seen_ips: query PTR inversa per gli host gia'
             # trovati da ARP/ICMP su questa rete, oltre alle query per i
@@ -412,16 +442,30 @@ def _run_scan_thread(networks):
                     mdns_probe(iface_ip=iface_ip, timeout=2.5, reverse_ips=seen_ips)
                 )
             )
-            t_onvif.start()
-            t_mdns.start()
-            t_onvif.join()
-            t_mdns.join()
+            threads = [t_onvif, t_mdns]
+            if not is_noarp_iface:
+                t_lldp_cdp = threading.Thread(target=lambda: lldp_cdp_neighbors.extend(lldp_cdp_probe(iface, timeout=3)))
+                threads.append(t_lldp_cdp)
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
             for onvif_ip, info in onvif_partial.items():
                 onvif_results[onvif_ip] = {**info, "_iface": iface}
             mdns_results.update(mdns_partial)
 
             if iface not in gateways:
                 gateways[iface] = get_default_gateway(iface)
+
+            # Topologia (P4): un salto solo, per interfaccia — chi e' il
+            # gateway, e quali vicini LLDP/CDP sono stati visti (se il
+            # timing di trasmissione dell'apparato ha coinciso con la
+            # finestra di ascolto: un elenco vuoto NON significa "nessun
+            # apparato LLDP/CDP-capable presente", vedi discovery.lldp_cdp).
+            topology[iface] = {
+                "cidr": cidr, "gateway": gateways[iface], "neighbors": lldp_cdp_neighbors,
+            }
+        _update(topology=topology)
 
         known_ips = {h[0] for h in all_hosts}
         orphan_ips = _orphan_onvif_ips(onvif_results, known_ips)
@@ -443,6 +487,7 @@ def _run_scan_thread(networks):
             device["iface"] = iface
             device["network"] = cidr
             device["vlan_id"] = vlan_id
+            device["lldp_cdp_info"] = _match_lldp_cdp_neighbor(mac, topology.get(iface, {}).get("neighbors", []))
             _set_device(ip, device)
 
         for idx, ip in enumerate(out_of_range_ips):

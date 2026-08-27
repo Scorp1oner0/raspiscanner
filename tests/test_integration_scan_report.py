@@ -24,7 +24,7 @@ class TestFullScanToReportIntegration(unittest.TestCase):
     def setUp(self):
         self._orig = {
             name: getattr(scan_engine, name)
-            for name in ("arp_scan", "icmp_scan", "onvif_probe", "mdns_probe",
+            for name in ("arp_scan", "icmp_scan", "onvif_probe", "mdns_probe", "lldp_cdp_probe",
                          "get_device_info_multi", "scan_ports", "grab_http_banner",
                          "resolve_hostname", "get_default_gateway")
         }
@@ -60,6 +60,7 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         scan_engine.icmp_scan = lambda cidr, iface, timeout=None, psrc=None: []
         scan_engine.onvif_probe = lambda iface_ip=None, timeout=3: {}
         scan_engine.mdns_probe = lambda iface_ip=None, timeout=2.5, reverse_ips=None: {}
+        scan_engine.lldp_cdp_probe = lambda iface, timeout=3: []
         scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
         scan_engine.scan_ports = lambda ip: (
             [{"port": 554, "service": "RTSP"}, {"port": 23, "service": "Telnet"}]
@@ -76,7 +77,7 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         scan_engine.network_setup.get_status = self._orig_get_status
         scan_engine.network_setup.is_noarp = self._orig_is_noarp
         scan_engine.network_setup.get_interface_mac = self._orig_get_mac
-        scan_engine._state.update(running=False, devices={})
+        scan_engine._state.update(running=False, devices={}, topology={})
         config.HISTORY_DB_PATH = self._orig_history_db
         config.WEBHOOKS_JSON_PATH = self._orig_webhooks_path
         shutil.rmtree(self._tmp_dir, ignore_errors=True)
@@ -90,6 +91,24 @@ class TestFullScanToReportIntegration(unittest.TestCase):
                 return scan_engine.get_state()
             time.sleep(0.02)
         self.fail("scan did not finish within the test timeout")
+
+    def test_topology_and_lldp_cdp_correlation(self):
+        """P4 'network topology map': il vicino LLDP visto sull'interfaccia
+        finisce in state["topology"], E viene corroborato sul device
+        scoperto via ARP con lo stesso MAC (chassis_id)."""
+        scan_engine.lldp_cdp_probe = lambda iface, timeout=3: [
+            {"protocol": "lldp", "chassis_id": "aa:bb:cc:11:22:33", "system_name": "core-switch"},
+        ]
+        state = self._run_and_wait()
+
+        self.assertIn("eth0", state["topology"])
+        self.assertEqual(state["topology"]["eth0"]["gateway"], "192.168.10.1")
+        self.assertEqual(len(state["topology"]["eth0"]["neighbors"]), 1)
+
+        devices = {d["ip"]: d for d in state["devices"]}
+        camera = devices["192.168.10.21"]  # MAC AA:BB:CC:11:22:33, vedi setUp
+        self.assertIsNotNone(camera["lldp_cdp_info"])
+        self.assertEqual(camera["lldp_cdp_info"]["system_name"], "core-switch")
 
     def test_scan_discovers_camera_and_local_host(self):
         state = self._run_and_wait()

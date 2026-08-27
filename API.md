@@ -133,6 +133,28 @@ next checkpoint (not necessarily instantaneous).
 }
 ```
 
+### `GET /api/topology` — viewer
+One-hop network adjacency from the last (or current) scan — not a
+multi-hop graph (that would need walking remote switches' MIBs via
+credentials this tool doesn't have, out of scope for a non-intrusive
+tool). Keyed by interface:
+```json
+{
+  "eth0": {
+    "cidr": "192.168.1.0/24", "gateway": "192.168.1.1",
+    "neighbors": [{"protocol": "lldp", "chassis_id": "aa:bb:cc:11:22:33", "port_id": "Gi0/1", "system_name": "core-switch", "system_description": "Cisco IOS Switch"}]
+  }
+}
+```
+`neighbors` comes from passively listening for LLDP/CDP announcements
+during the scan (`protocol`: `"lldp"` or `"cdp"`) — these aren't
+request/response like ARP, network gear transmits them on its own timer
+(commonly every 30-60s), so an empty list doesn't mean no LLDP/CDP-capable
+device is present, only that none transmitted during this scan's listen
+window. When a neighbor's `chassis_id` matches a MAC seen elsewhere in
+this scan, that device's own `lldp_cdp_info` field (see **Device object**)
+is set to this same neighbor object.
+
 ### `GET /api/devices` — viewer
 `[device, ...]` — every device found by the last (or current) scan. See
 **Device object** below for the schema.
@@ -263,6 +285,7 @@ The shape returned by `/api/devices`, `/api/devices/cameras`,
   "model_source": "onvif",
   "hostname": null,
   "snmp_info": {},
+  "lldp_cdp_info": null,
   "vlan_id": null,
   "iface": "eth0",
   "network": "192.168.1.0/24",
@@ -294,6 +317,10 @@ The shape returned by `/api/devices`, `/api/devices/cameras`,
   usually disabled, and only probed on hosts already classified as
   network infrastructure). Community `public`, read-only, never a list
   of guessed communities.
+- `lldp_cdp_info`: the LLDP/CDP neighbor object (see `/api/topology`)
+  whose `chassis_id` matched this device's MAC, or `null` on the vast
+  majority of devices (only network gear announces LLDP/CDP, and only
+  if it happened to transmit during the scan's listen window).
 - `vlan_id`: the 802.1Q VLAN tag seen on this device's ARP traffic, or
   `null` — most switch ports are "access" mode (the tag is stripped
   before the frame reaches the scanner), so `null` is the normal case,

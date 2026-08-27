@@ -19,12 +19,12 @@ class TestRunScanRaceCondition(unittest.TestCase):
         # run_scan() deve solo esistere, non fare I/O reale.
         scan_engine._run_scan_thread = lambda networks: None
         scan_engine._active_networks = lambda: [("eth0", "192.168.1.0/24", "192.168.1.10")]
-        scan_engine._state.update(running=False, devices={})
+        scan_engine._state.update(running=False, devices={}, topology={})
 
     def tearDown(self):
         scan_engine._run_scan_thread = self._orig_run_thread
         scan_engine._active_networks = self._orig_active_networks
-        scan_engine._state.update(running=False, devices={})
+        scan_engine._state.update(running=False, devices={}, topology={})
 
     def test_only_one_concurrent_scan_can_start(self):
         n_threads = 20
@@ -70,7 +70,7 @@ class TestScanAndNetworkReconfigureConcurrently(unittest.TestCase):
         self._orig_active_networks = scan_engine._active_networks
         scan_engine._run_scan_thread = lambda networks: None
         scan_engine._active_networks = lambda: [("eth0", "192.168.1.0/24", "192.168.1.10")]
-        scan_engine._state.update(running=False, devices={})
+        scan_engine._state.update(running=False, devices={}, topology={})
 
         self._orig_carrier = network_setup.has_carrier
         network_setup.has_carrier = lambda iface: False
@@ -78,7 +78,7 @@ class TestScanAndNetworkReconfigureConcurrently(unittest.TestCase):
     def tearDown(self):
         scan_engine._run_scan_thread = self._orig_run_thread
         scan_engine._active_networks = self._orig_active_networks
-        scan_engine._state.update(running=False, devices={})
+        scan_engine._state.update(running=False, devices={}, topology={})
         network_setup.has_carrier = self._orig_carrier
 
     def test_no_crash_or_deadlock_when_run_concurrently(self):
@@ -183,6 +183,40 @@ class TestOrphanOnvifIps(unittest.TestCase):
 
     def test_no_onvif_results_no_orphans(self):
         self.assertEqual(scan_engine._orphan_onvif_ips({}, {"192.168.88.1"}), [])
+
+
+class TestMatchLldpCdpNeighbor(unittest.TestCase):
+    """P4 'network topology map': corrobora un device gia' scoperto via
+    ARP col vicino LLDP/CDP visto sulla stessa interfaccia, quando i MAC
+    coincidono."""
+
+    def test_matching_mac_returns_the_neighbor(self):
+        neighbors = [{"protocol": "lldp", "chassis_id": "aa:bb:cc:11:22:33", "system_name": "core-switch"}]
+        result = scan_engine._match_lldp_cdp_neighbor("AA:BB:CC:11:22:33", neighbors)
+        self.assertEqual(result["system_name"], "core-switch")
+
+    def test_case_insensitive_match(self):
+        """LLDP formatta il MAC in minuscolo, il resto del progetto in
+        maiuscolo: il confronto non deve dipendere da quale delle due."""
+        neighbors = [{"chassis_id": "aa:bb:cc:11:22:33"}]
+        self.assertIsNotNone(scan_engine._match_lldp_cdp_neighbor("AA:BB:CC:11:22:33", neighbors))
+
+    def test_no_match_returns_none(self):
+        neighbors = [{"chassis_id": "AA:BB:CC:99:99:99"}]
+        self.assertIsNone(scan_engine._match_lldp_cdp_neighbor("AA:BB:CC:11:22:33", neighbors))
+
+    def test_no_mac_returns_none(self):
+        neighbors = [{"chassis_id": "AA:BB:CC:11:22:33"}]
+        self.assertIsNone(scan_engine._match_lldp_cdp_neighbor(None, neighbors))
+
+    def test_empty_neighbor_list_returns_none(self):
+        self.assertIsNone(scan_engine._match_lldp_cdp_neighbor("AA:BB:CC:11:22:33", []))
+
+    def test_neighbor_without_chassis_id_does_not_crash(self):
+        """Un chassis_id di tipo diverso da MAC (es. subtype "nome
+        locale") non deve mai far fallire il confronto."""
+        neighbors = [{"chassis_id": "some-local-name"}]
+        self.assertIsNone(scan_engine._match_lldp_cdp_neighbor("AA:BB:CC:11:22:33", neighbors))
 
 
 class TestMatchActiveNetwork(unittest.TestCase):

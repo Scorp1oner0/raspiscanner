@@ -427,9 +427,29 @@ non e' un cambio di priorita' silenzioso.
       dispositivo SNMP-enabled in questa sessione: parsing testato con
       risposte SNMP costruite a mano (round-trip byte a byte, non
       oggetti scapy "freschi" — differenza scoperta scrivendo il test).)*
-- [ ] LLDP/CDP discovery.
+- [x] LLDP/CDP discovery. *(`scanner/discovery/lldp_cdp.py`: sniff passivo
+      (AsyncSniffer, nessun pacchetto inviato — questi protocolli sono
+      annunci periodici spontanei) su multicast LLDP/CDP per la durata
+      dello scan, parsing di chassis ID/port ID/system name/description.
+      Frame LLDP e CDP costruiti a mano nei test: scoperto che un oggetto
+      scapy appena creato non ha i campi ASN.1/tipizzati coerenti finche'
+      non viene serializzato e riparsato — stesso problema gia' visto con
+      SNMP, stessa correzione (round-trip byte a byte nei test).)*
 - [ ] IPv6 discovery.
-- [ ] Network topology map.
+- [x] Network topology map. *(GET /api/topology, nuova sezione "Topology
+      (one-hop)" in dashboard. Per-interfaccia: gateway (gia' noto) +
+      vicini LLDP/CDP. Deliberatamente UN SOLO hop, non un grafo
+      multi-hop: quello richiederebbe SNMP-walk su switch remoti con
+      credenziali che lo scanner non ha e non deve indovinare — fuori
+      scope, documentato come tale in `API.md`. Il vicino LLDP/CDP viene
+      anche correlato al device scoperto via ARP con lo stesso MAC
+      (chassis_id), popolando `device["lldp_cdp_info"]`. Non verificabile
+      con hardware LLDP/CDP-enabled reale in questa sessione: correlazione
+      testata end-to-end in `test_integration_scan_report.py` con vicini
+      costruiti a mano. Nota anche nella UI: un elenco vuoto non significa
+      "nessun vicino", solo che nessuno ha trasmesso durante i pochi
+      secondi dello scan — questi protocolli hanno un timer proprio,
+      tipicamente 30-60s.)*
 - [x] Structured JSON export. *(`/api/export?format=json` ora ritorna un
       envelope con metadati — `exported_at`, `type`, `count`,
       `scan_started_at`/`scan_finished_at`, `devices` — invece di un
