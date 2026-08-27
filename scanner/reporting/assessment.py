@@ -34,6 +34,8 @@ combined report (once, not per-network): questo tool NON e' un
 vulnerability scanner, e va detto esplicitamente dove chi legge il report
 puo' vederlo, non solo nei commenti del codice.
 """
+from datetime import datetime
+
 from . import risk as risk_module
 from . import security as security_module
 
@@ -47,6 +49,24 @@ _SCOPE_DISCLAIMER = (
     "matching. Findings describe what a service EXPOSES to a normal connection, "
     "not whether it is actually vulnerable or exploitable."
 )
+
+_SENSITIVE_DATA_DISCLAIMER = (
+    "This report may contain sensitive network data (IP/MAC addresses, hostnames, "
+    "vendor/model information, exposed service banners): handle and store it with "
+    "the same care as the network inventory it describes."
+)
+
+
+def _format_timestamp(epoch_seconds):
+    return datetime.fromtimestamp(epoch_seconds).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _format_duration(seconds):
+    seconds = max(0, int(seconds))
+    minutes, secs = divmod(seconds, 60)
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
 
 # Etichette di protocollo compatte per la riga "servizi" del report: piu'
 # leggibili delle etichette descrittive usate nella dashboard (es.
@@ -149,8 +169,23 @@ def generate(network_cidr, devices):
     device_findings.sort(key=lambda t: (_SEVERITY_ORDER.get(t[0], 9), t[1]))
     risk_counts = risk_module.summarize(all_findings)
 
-    lines = ["NETWORK ASSESSMENT", _HEADER_RULE, "", f"Network: {network_cidr}", ""]
+    lines = ["NETWORK ASSESSMENT", _HEADER_RULE, "", f"Network: {network_cidr}"]
+    # L'interfaccia e' la stessa per ogni device di questa rete (una CIDR
+    # appartiene a una sola interfaccia per scan): basta leggerla dal primo,
+    # se la lista non e' vuota (generate() e' sempre chiamata con almeno un
+    # device per rete da generate_all, ma resta chiamabile a vuoto nei test).
+    iface = devices[0].get("iface") if devices else None
+    if iface:
+        lines.append(f"Interface: {iface}")
+    lines.append("")
     lines.append(f"{len(devices)} devices discovered")
+    total_findings = sum(len(v) for v in findings_by_ip.values())
+    lines.append(
+        f"Summary: {len(cameras)} camera{'s' if len(cameras) != 1 else ''}, "
+        f"{len(nvrs)} NVR/DVR, "
+        f"{len(infra)} network device{'s' if len(infra) != 1 else ''}, "
+        f"{total_findings} security finding{'s' if total_findings != 1 else ''}"
+    )
 
     # Un device senza MAC e senza essere gia' segnalato "fuori rete" e'
     # stato trovato via ICMP invece che ARP (link NOARP: VPN instradata,
@@ -205,11 +240,15 @@ def generate(network_cidr, devices):
     return "\n".join(lines)
 
 
-def generate_all(devices):
+def generate_all(devices, started_at=None, finished_at=None):
     """devices: lista piatta di tutti i dispositivi trovati (con campo
     "network" gia' valorizzato da scan_engine). Raggruppa per rete e
     concatena un report per ciascuna. Ritorna la stringa completa, o un
     messaggio se non ci sono dati.
+
+    started_at/finished_at: timestamp epoch dello scan (scan_engine.get_state()),
+    opzionali — omessi (es. chiamate dirette nei test) non producono un
+    header di timing invece di un errore.
     """
     if not devices:
         return "No data yet — run a scan first."
@@ -221,4 +260,15 @@ def generate_all(devices):
 
     reports = [generate(cidr, devs) for cidr, devs in sorted(by_network.items())]
     combined = f"\n\n{_SECTION_RULE}\n\n".join(reports)
-    return f"{combined}\n\n{_SCOPE_DISCLAIMER}"
+
+    timing_lines = []
+    if started_at:
+        timing_lines.append(f"Scan started:  {_format_timestamp(started_at)}")
+    if finished_at:
+        timing_lines.append(f"Scan finished: {_format_timestamp(finished_at)}")
+    if started_at and finished_at:
+        timing_lines.append(f"Duration:      {_format_duration(finished_at - started_at)}")
+    timing_header = "\n".join(timing_lines)
+
+    parts = [p for p in (timing_header, combined, _SCOPE_DISCLAIMER, _SENSITIVE_DATA_DISCLAIMER) if p]
+    return "\n\n".join(parts)

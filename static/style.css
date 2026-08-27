@@ -214,6 +214,12 @@ main { padding: 24px; max-width: 1180px; margin: 0 auto; }
   white-space: pre-wrap;
   overflow-x: auto;
 }
+.sev-line { font-weight: 700; }
+.sev-critical { color: var(--critical); }
+.sev-high { color: var(--high); }
+.sev-medium { color: var(--medium); }
+.sev-low { color: var(--low); }
+.sev-warn { color: var(--high); font-weight: 400; }
 
 /* ---------- Tables ---------- */
 .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border-soft); margin-bottom: 8px; }

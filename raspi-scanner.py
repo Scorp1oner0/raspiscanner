@@ -292,7 +292,7 @@ def api_security_summary():
 @require_role("viewer")
 def api_report():
     state = scan_engine.get_state()
-    text = assessment.generate_all(state["devices"])
+    text = assessment.generate_all(state["devices"], started_at=state["started_at"], finished_at=state["finished_at"])
     if state["running"]:
         # Lo scan processa le reti una alla volta e, dentro ciascuna, un
         # host alla volta: un report generato a meta' scan e' un'istantanea
@@ -431,7 +431,8 @@ def run_cli_report(timeout=180):
         print("Timeout reached, printing partial results.", file=sys.stderr)
         scan_engine.stop_scan()
 
-    print(assessment.generate_all(scan_engine.devices_all()))
+    state = scan_engine.get_state()
+    print(assessment.generate_all(state["devices"], started_at=state["started_at"], finished_at=state["finished_at"]))
     return 0
 
 

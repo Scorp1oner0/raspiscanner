@@ -321,11 +321,31 @@ async function refreshScan() {
   }
 }
 
+function renderReportText(text) {
+  // Evidenzia solo righe con un prefisso ESATTO e noto (il testo e'
+  // sempre escaped PRIMA di questo controllo, quindi anche se un campo
+  // controllato dal dispositivo scansionato coincidesse per caso con uno
+  // di questi prefissi non ci sarebbe nessun rischio, solo una riga
+  // colorata per errore — puramente cosmetico, non un problema di
+  // sicurezza).
+  const escaped = escapeHtml(text);
+  const html = escaped.split("\n").map((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("Critical:")) return `<span class="sev-line sev-critical">${line}</span>`;
+    if (trimmed.startsWith("High:")) return `<span class="sev-line sev-high">${line}</span>`;
+    if (trimmed.startsWith("Medium:")) return `<span class="sev-line sev-medium">${line}</span>`;
+    if (trimmed.startsWith("Low:")) return `<span class="sev-line sev-low">${line}</span>`;
+    if (trimmed.startsWith("⚠")) return `<span class="sev-line sev-warn">${line}</span>`;
+    return line;
+  }).join("\n");
+  $("report-text").innerHTML = html;
+}
+
 async function refreshReport() {
   try {
     const res = await fetch("/api/report");
     const data = await res.json();
-    $("report-text").textContent = data.text || "No data.";
+    renderReportText(data.text || "No data.");
   } catch (e) {
     $("report-text").textContent = "Failed to fetch the report.";
   }

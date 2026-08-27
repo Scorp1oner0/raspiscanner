@@ -167,6 +167,41 @@ class TestAssessmentReport(unittest.TestCase):
         self.assertIn("Medium:   3", report)
         self.assertIn("Low:      1", report)
 
+    def test_interface_shown_when_devices_carry_one(self):
+        device_with_iface = dict(CAMERA)
+        device_with_iface["iface"] = "eth0"
+        report = assessment.generate("192.168.10.0/24", [device_with_iface])
+        self.assertIn("Interface: eth0", report)
+
+    def test_no_interface_line_when_devices_lack_it(self):
+        report = assessment.generate("192.168.10.0/24", [CAMERA])
+        self.assertNotIn("Interface:", report)
+
+    def test_summary_line_counts_by_category(self):
+        report = assessment.generate("192.168.10.0/24", [CAMERA, NVR, SWITCH])
+        # CAMERA: 1 camera; NVR: 1 nvr; SWITCH: 1 network device; 4 findings totali
+        # (rtsp su camera+nvr, http-con-https su camera, http-senza-https su switch, telnet su nvr)
+        self.assertIn("Summary: 1 camera, 1 NVR/DVR, 1 network device, 5 security findings", report)
+
+    def test_summary_line_pluralizes_correctly(self):
+        report = assessment.generate("192.168.10.0/24", [GENERIC_HOST])
+        self.assertIn("Summary: 0 cameras, 0 NVR/DVR, 0 network devices, 0 security findings", report)
+
+    def test_scan_timing_shown_when_provided(self):
+        report = assessment.generate_all([CAMERA], started_at=1000.0, finished_at=1075.0)
+        self.assertIn("Scan started:", report)
+        self.assertIn("Scan finished:", report)
+        self.assertIn("Duration:      1m 15s", report)
+
+    def test_scan_timing_omitted_when_not_provided(self):
+        report = assessment.generate_all([CAMERA])
+        self.assertNotIn("Scan started:", report)
+        self.assertNotIn("Duration:", report)
+
+    def test_sensitive_data_disclaimer_present(self):
+        report = assessment.generate_all([CAMERA])
+        self.assertIn("sensitive network data", report)
+
     def test_other_devices_section_lists_recognized_types(self):
         """Bug reale: un Raspberry Pi o un PC (Windows/SMB) non finivano in
         NESSUNA sezione del report pur essendo contati in "N devices

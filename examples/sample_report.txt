@@ -1,12 +1,18 @@
 Esempio di output di: python3 raspi-scanner.py --report
 (oppure della scheda "Report" nella dashboard, /api/report)
 
+Scan started:  2026-08-27 08:14:02
+Scan finished: 2026-08-27 08:15:17
+Duration:      1m 15s
+
 NETWORK ASSESSMENT
 ────────────────────────────
 
 Network: 192.168.10.0/24
+Interface: eth0
 
 4 devices discovered
+Summary: 1 camera, 1 NVR/DVR, 1 network device, 5 security findings
 
 CAMERAS
   Hikvision camera
@@ -44,3 +50,7 @@ This is a network/device discovery and exposure report, not a vulnerability
 scanner: no exploits, no brute-force or credential-guessing attempts, no CVE
 matching. Findings describe what a service EXPOSES to a normal connection,
 not whether it is actually vulnerable or exploitable.
+
+This report may contain sensitive network data (IP/MAC addresses, hostnames,
+vendor/model information, exposed service banners): handle and store it with
+the same care as the network inventory it describes.

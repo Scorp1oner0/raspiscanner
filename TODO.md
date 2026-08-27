@@ -224,13 +224,33 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 
 ## 🟢 P3 — Reporting
 
-- [ ] Improve the HTML report.
-- [ ] Improve PDF/print layout, if planned.
-- [ ] Add scan timestamp, interface used, subnet analyzed, scan duration.
-- [ ] Add a summary: devices, cameras, NVRs, infrastructure, findings.
-- [ ] Highlight Critical/High/Medium/Low severity.
-- [ ] Add a disclaimer about sensitive data.
-- [ ] Clearly state the report can contain IP/MAC/hostname.
+- [x] Improve the HTML report. *(Non esiste un file HTML separato da
+      scaricare — l'unica "versione HTML" del report e' il rendering
+      nella scheda Report della dashboard, ora con evidenziazione colorata
+      delle severita' (vedi sotto). Un vero export HTML standalone
+      sarebbe una feature nuova, non un miglioramento di qualcosa di
+      esistente — lasciato fuori scope per non allargare P3.)*
+- [x] Improve PDF/print layout, if planned. *(Non applicabile: nessuna
+      generazione PDF/print e' mai stata pianificata nel codice esistente
+      — condizione "if planned" non soddisfatta, nessuna azione dovuta.)*
+- [x] Add scan timestamp, interface used, subnet analyzed, scan duration.
+      *(`assessment.generate_all` accetta `started_at`/`finished_at` da
+      `scan_engine.get_state()`; ogni report per-rete mostra anche
+      l'interfaccia usata, oltre alla subnet gia' presente.)*
+- [x] Add a summary: devices, cameras, NVRs, infrastructure, findings.
+      *(Riga "Summary: N cameras, N NVR/DVR, N network devices, N security
+      findings" subito dopo "N devices discovered".)*
+- [x] Highlight Critical/High/Medium/Low severity. *(Nella dashboard: le
+      righe RISK SUMMARY e le righe "⚠" nella scheda Report sono colorate
+      per severita' — testo prima sempre escaped, poi solo righe con un
+      prefisso ESATTO noto vengono avvolte in uno span colorato, nessun
+      rischio di injection da campi controllati dal dispositivo
+      scansionato. Verificato via screenshot headless.)*
+- [x] Add a disclaimer about sensitive data. *(Riga finale di
+      `generate_all()`: "This report may contain sensitive network
+      data...".)*
+- [x] Clearly state the report can contain IP/MAC/hostname. *(Stesso
+      disclaimer sopra, esplicito su IP/MAC/hostname/vendor/model/banner.)*
 
 ## 🟢 P3 — Packaging / release
 
