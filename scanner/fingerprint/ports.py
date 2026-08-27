@@ -26,7 +26,17 @@ def scan_ports(ip, ports=None, timeout=config.PORT_SCAN_TIMEOUT):
         futures = {pool.submit(_check_port, ip, p, timeout): p for p in ports}
         for fut in futures:
             port = futures[fut]
-            if fut.result():
+            try:
+                is_open = fut.result()
+            except Exception:
+                # _check_port intercetta gia' OSError al suo interno: questo
+                # e' un ulteriore livello di sicurezza per qualunque altro
+                # errore inatteso in un singolo controllo di porta, che non
+                # deve far perdere il risultato delle altre porte dello
+                # stesso host (ne' l'intero host scan).
+                log.exception("controllo porta %s:%s fallito inaspettatamente", ip, port)
+                is_open = False
+            if is_open:
                 open_ports.append({"port": port, "service": ports[port]})
     return sorted(open_ports, key=lambda p: p["port"])
 

@@ -123,6 +123,21 @@ class TestClassifyByHostname(unittest.TestCase):
         label, reasons = classify_by_hostname("")
         self.assertIsNone(label)
 
+    def test_extremely_long_hostname_no_crash(self):
+        """Un hostname reverse-DNS/mDNS non e' garantito breve: nessun
+        limite di lunghezza va assunto ne' puo' causare un rallentamento
+        percepibile (nessuna regex qui, solo substring match)."""
+        label, reasons = classify_by_hostname("a" * 100_000 + "-iphone")
+        self.assertEqual(label, "Phone (iPhone)")
+
+    def test_unicode_hostname_no_crash(self):
+        label, reasons = classify_by_hostname("café-☕-desktop")
+        self.assertIsNone(label)
+
+    def test_control_characters_in_hostname_no_crash(self):
+        label, reasons = classify_by_hostname("weird\x00\x01\x02-iphone")
+        self.assertEqual(label, "Phone (iPhone)")
+
 
 class TestClassifyHost(unittest.TestCase):
     def test_vendor_hint_wins_over_port_hint(self):

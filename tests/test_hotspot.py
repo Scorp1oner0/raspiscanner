@@ -82,6 +82,29 @@ class TestStartHotspotSuccess(unittest.TestCase):
         self.assertIn("password123", self.calls[1])
 
 
+class TestMissingNmcli(unittest.TestCase):
+    """P3: nmcli assente (network-manager non installato, vedi install.sh
+    P2: e' un pacchetto opzionale) non deve far crashare le funzioni
+    hotspot — solo restituire un messaggio chiaro invece di un'eccezione."""
+
+    def setUp(self):
+        self._orig_run = hotspot._run
+        hotspot._run = lambda cmd, timeout=20: None
+
+    def tearDown(self):
+        hotspot._run = self._orig_run
+
+    def test_start_hotspot_missing_nmcli(self):
+        ok, message = hotspot.start_hotspot("wlan0", "MiaRete", "password123")
+        self.assertFalse(ok)
+        self.assertIn("not available", message)
+
+    def test_stop_hotspot_missing_nmcli(self):
+        ok, message = hotspot.stop_hotspot()
+        self.assertFalse(ok)
+        self.assertIn("not available", message)
+
+
 class TestGetHotspotStatus(unittest.TestCase):
     def setUp(self):
         self._orig_run = hotspot._run

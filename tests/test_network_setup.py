@@ -486,5 +486,71 @@ class TestExistingConfigProtected(unittest.TestCase):
         self.assertEqual(len(status["eth"]["addresses"]), 3)
 
 
+class TestMissingSystemCommands(unittest.TestCase):
+    """P3: dhclient/ip/nmcli assenti dal sistema (installazione minimale,
+    pacchetto non installato) non devono far crashare lo scanner — solo
+    degradare a "funzionalita' non disponibile", stesso trattamento di un
+    comando che fallisce per un motivo qualunque."""
+
+    def setUp(self):
+        self._orig_run = network_setup._run
+        self._orig_carrier = network_setup.has_carrier
+        self._orig_arp_scan = network_setup.arp_scan
+        self._orig_lock = network_setup._autoconfig_lock
+
+    def tearDown(self):
+        network_setup._run = self._orig_run
+        network_setup.has_carrier = self._orig_carrier
+        network_setup.arp_scan = self._orig_arp_scan
+        network_setup._autoconfig_lock = self._orig_lock
+
+    def test_run_returns_none_when_command_not_found(self):
+        import subprocess as subprocess_module
+        orig_subprocess_run = subprocess_module.run
+
+        def fake_subprocess_run(cmd, **kwargs):
+            raise FileNotFoundError(f"[Errno 2] No such file or directory: '{cmd[0]}'")
+
+        subprocess_module.run = fake_subprocess_run
+        try:
+            self.assertIsNone(network_setup._run(["dhclient", "-1", "eth0"]))
+        finally:
+            subprocess_module.run = orig_subprocess_run
+
+    def test_try_dhcp_missing_dhclient_returns_false_not_raise(self):
+        network_setup._run = lambda cmd, timeout=15: None
+        self.assertFalse(network_setup.try_dhcp("eth0", timeout=1))
+
+    def test_autoconfigure_falls_through_to_preset_probing_without_ip_or_dhclient(self):
+        """Con "ip"/"dhclient" entrambi assenti (_run sempre None), DHCP
+        fallisce, ogni classe preimpostata risulta "non raggiungibile" (il
+        probe stesso usa _run/arp_scan), e lo stato finale deve essere
+        "no-network" — mai un'eccezione non gestita."""
+        network_setup._run = lambda cmd, timeout=15: None
+        network_setup.has_carrier = lambda iface: True
+        network_setup.arp_scan = lambda cidr, iface, timeout=None, psrc=None: []
+        network_setup._autoconfig_lock = threading.Lock()
+        network_setup._status["eth"] = {
+            "iface": None, "up": False, "mode": None, "ip": None, "cidr": None,
+            "addresses": [], "reconfiguring": False, "error": None, "last_change": None,
+            "candidates": [], "probing": False, "probe_index": None, "probe_total": None,
+            "probe_cidr": None, "probe_timeout": None,
+        }
+        network_setup.autoconfigure_ethernet("eth0")
+        status = network_setup.get_status()
+        self.assertEqual(status["eth"]["mode"], "no-network")
+        self.assertIsNone(status["eth"]["error"])
+
+    def test_wifi_scan_networks_missing_nmcli_returns_empty_list(self):
+        network_setup._run = lambda cmd, timeout=15: None
+        self.assertEqual(network_setup.wifi_scan_networks(), [])
+
+    def test_wifi_connect_missing_nmcli_returns_friendly_message(self):
+        network_setup._run = lambda cmd, timeout=15: None
+        ok, message = network_setup.wifi_connect("CasaWifi", "password123")
+        self.assertFalse(ok)
+        self.assertIn("not available", message)
+
+
 if __name__ == "__main__":
     unittest.main()

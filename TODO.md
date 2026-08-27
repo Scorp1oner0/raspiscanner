@@ -191,15 +191,44 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 
 ## 🟢 P3 — Tests
 
-- [ ] Full integration test: Flask → scan → classification → report.
-- [ ] Concurrency tests: two simultaneous `/scan/start`, scan + network
-      reconfiguration, stop mid-scan.
-- [ ] Malicious-input tests: malformed ONVIF XML, malicious XAddr,
+- [x] Full integration test: Flask → scan → classification → report.
+      *(`tests/test_integration_scan_report.py`: discovery grezza mockata
+      al confine (ARP/ONVIF/mDNS/port scan/banner — richiederebbero
+      root/hardware reale), ma build_device, classificazione, security
+      findings e generazione del report sono codice vero, non stub.)*
+- [x] Concurrency tests: two simultaneous `/scan/start`, scan + network
+      reconfiguration, stop mid-scan. *(Due `/scan/start` gia' coperto in
+      P1 (`TestRunScanRaceCondition`). Aggiunto
+      `TestScanAndNetworkReconfigureConcurrently` (scan_engine +
+      network.setup in parallelo, nessun deadlock/crash) e
+      `test_stop_scan_mid_flight_leaves_state_consistent` (stop
+      deterministico via un Event, non un test "a tempo").)*
+- [x] Malicious-input tests: malformed ONVIF XML, malicious XAddr,
       malformed mDNS, odd hostnames, huge/malformed HTTP banners.
-- [ ] Test `nmcli` with unexpected output.
-- [ ] Test absence of system commands: `openssl`, `dhclient`, `nmcli`,
-      `ip`.
-- [ ] Installer/service tests.
+      *(ONVIF XML/XAddr e mDNS malformati gia' coperti in P2/sessioni
+      precedenti. Aggiunto `tests/test_fingerprint.py` per banner HTTP
+      enormi/troncati/non-UTF8/connessione rifiutata — trovato e corretto
+      un bug reale: un singolo controllo di porta che sollevava
+      un'eccezione inattesa faceva perdere il risultato di TUTTE le altre
+      porte dello stesso host. Aggiunti hostname "odd" (lunghezza
+      estrema, unicode, caratteri di controllo) in `tests/test_hosts.py`.)*
+- [x] Test `nmcli` with unexpected output. *(Gia' coperto in P2
+      (`tests/test_nmcli_util.py`, escape/righe malformate); qui aggiunta
+      la distinzione con "nmcli assente" (sotto), scenario diverso da
+      "nmcli presente ma output inatteso".)*
+- [x] Test absence of system commands: `openssl`, `dhclient`, `nmcli`,
+      `ip`. *(`openssl` gia' coperto in `test_tls.py`. Aggiunta
+      `TestMissingSystemCommands` in `tests/test_network_setup.py`
+      (dhclient/ip assenti: `_run` None -> `try_dhcp` False ->
+      autoconfigure_ethernet arriva comunque a "no-network" senza
+      eccezioni; nmcli assente per wifi_scan/wifi_connect) e
+      `TestMissingNmcli` in `tests/test_hotspot.py` (start/stop hotspot).)*
+- [x] Installer/service tests. *(`tests/test_installer.py`: sintassi bash
+      di install.sh, `systemd-analyze verify` sul unit file (validazione
+      statica reale, non solo grep), e guardrail di regressione espliciti
+      sui due bug scoperti dal vivo in questa sessione — esclusioni
+      rsync per data/users.json/tls_*.pem/oui.csv, e il chown esplicito
+      di data/.)*
 
 ## 🟢 P3 — Performance
 

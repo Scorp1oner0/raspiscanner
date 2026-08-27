@@ -2,6 +2,7 @@ import threading
 import unittest
 
 from scanner import scan_engine
+from scanner.network import setup as network_setup
 
 
 class TestRunScanRaceCondition(unittest.TestCase):
@@ -52,6 +53,59 @@ class TestRunScanRaceCondition(unittest.TestCase):
         ok2, message2 = scan_engine.run_scan()
         self.assertFalse(ok2)
         self.assertIn("already in progress", message2)
+
+
+class TestScanAndNetworkReconfigureConcurrently(unittest.TestCase):
+    """P3: run_scan() (scan_engine) e autoconfigure_ethernet() (network.setup)
+    sono due sottosistemi indipendenti con lock separati — non devono
+    corrompersi a vicenda ne' deadlockare se invocati in parallelo (es.
+    l'utente clicca "Riconfigura rete" nella dashboard mentre uno scan e'
+    gia' in corso). has_carrier=False forza autoconfigure_ethernet sul
+    percorso piu' rapido (nessun tentativo DHCP/probe reale), cosi' il test
+    resta veloce e deterministico: qui interessa solo l'assenza di
+    deadlock/crash, la logica DHCP/fallback e' gia' testata altrove."""
+
+    def setUp(self):
+        self._orig_run_thread = scan_engine._run_scan_thread
+        self._orig_active_networks = scan_engine._active_networks
+        scan_engine._run_scan_thread = lambda networks: None
+        scan_engine._active_networks = lambda: [("eth0", "192.168.1.0/24", "192.168.1.10")]
+        scan_engine._state.update(running=False, devices={})
+
+        self._orig_carrier = network_setup.has_carrier
+        network_setup.has_carrier = lambda iface: False
+
+    def tearDown(self):
+        scan_engine._run_scan_thread = self._orig_run_thread
+        scan_engine._active_networks = self._orig_active_networks
+        scan_engine._state.update(running=False, devices={})
+        network_setup.has_carrier = self._orig_carrier
+
+    def test_no_crash_or_deadlock_when_run_concurrently(self):
+        errors = []
+
+        def run_scan_repeatedly():
+            for _ in range(50):
+                scan_engine.run_scan()
+                scan_engine._state.update(running=False)
+
+        def reconfigure_repeatedly():
+            try:
+                for _ in range(50):
+                    network_setup.autoconfigure_ethernet("eth0")
+            except Exception as exc:
+                errors.append(exc)
+
+        t1 = threading.Thread(target=run_scan_repeatedly)
+        t2 = threading.Thread(target=reconfigure_repeatedly)
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        self.assertFalse(t1.is_alive(), "run_scan e' rimasto bloccato (deadlock?)")
+        self.assertFalse(t2.is_alive(), "autoconfigure_ethernet e' rimasto bloccato (deadlock?)")
+        self.assertEqual(errors, [])
 
 
 class TestActiveNetworks(unittest.TestCase):
