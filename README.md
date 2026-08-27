@@ -103,10 +103,7 @@ of its own discovery mechanisms, aimed at one specific use case.
    NVR/DVR, split into on-network vs. out-of-network), "Report" tab,
    "History" tab (past scans, MAC-based asset database, scan-to-scan
    diff, one-hop network topology from LLDP/CDP), "Settings" tab to
-   manage users/webhook/continuous monitoring, **CSV/JSON** export. A
-   "🛠 Technician view" toggle simplifies the layout for on-site use
-   (hides History/Settings, bigger touch targets) — a client-side-only
-   preference, no server state involved.
+   manage users/webhook/continuous monitoring, **CSV/JSON** export.
 
 5. **Wi-Fi hotspot** ("📡 Hotspot" popup on the chosen Wi-Fi adapter's
    card): turns that adapter from a client (connected to an existing

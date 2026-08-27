@@ -133,7 +133,7 @@ next checkpoint (not necessarily instantaneous).
 }
 ```
 
-### `GET /api/topology` — viewer
+### `GET /api/topology` — operator
 One-hop network adjacency from the last (or current) scan — not a
 multi-hop graph (that would need walking remote switches' MIBs via
 credentials this tool doesn't have, out of scope for a non-intrusive
@@ -167,7 +167,7 @@ Same shape, filtered to `is_camera: true` devices only (includes NVR/DVR).
 severity across every discovered device (same logic as the text report's
 risk summary).
 
-### `GET /api/report` — viewer
+### `GET /api/report` — operator
 `{"text": "NETWORK ASSESSMENT\n...", "scan_running": false}` — the full
 text report (see [`examples/sample_report.txt`](examples/sample_report.txt)
 for a real example). If a scan is still running, `text` is prefixed with a
@@ -201,15 +201,15 @@ not mean the same host next time — so they're excluded from asset
 tracking and from comparisons, though they still appear in each scan's
 own device list.
 
-### `GET /api/history/scans?limit=20` — viewer
+### `GET /api/history/scans?limit=20` — operator
 Past scans, most recent first (metadata only, no devices):
 `{"scans": [{"id": 7, "started_at": 1735000000.0, "finished_at": 1735000090.0, "device_count": 14}, ...]}`.
 
-### `GET /api/history/scans/<int:scan_id>/devices` — viewer
+### `GET /api/history/scans/<int:scan_id>/devices` — operator
 `{"devices": [device, ...]}` — the full device list from that one scan,
 same shape as `/api/devices`.
 
-### `GET /api/history/compare?old=<id>&new=<id>` — viewer
+### `GET /api/history/compare?old=<id>&new=<id>` — operator
 Diffs two past scans by MAC. `400` if either id is missing.
 ```json
 {
@@ -221,7 +221,7 @@ Diffs two past scans by MAC. `400` if either id is missing.
 `fields` lists which of `ip`, `vendor`, `model`, `device_type`,
 `open_ports` differ between the two snapshots.
 
-### `GET /api/history/assets?limit=500` — viewer
+### `GET /api/history/assets?limit=500` — operator
 Every MAC seen at least once, most recently seen first:
 `{"assets": [{"mac": "...", "first_seen": 1734000000.0, "last_seen": 1735000090.0, "last_ip": "...", "last_vendor": "...", "last_device_type": "...", "times_seen": 4}, ...]}`.
 
@@ -283,7 +283,7 @@ reproduces the exact same report, and automatically prepends a "CHANGES
 SINCE PREVIOUS SCAN" section (see **History**'s `compare` for the same
 data in JSON form).
 
-### `GET /api/audit/report?scan_id=<id>` — viewer
+### `GET /api/audit/report?scan_id=<id>` — operator
 `scan_id` optional, defaults to the most recently saved scan.
 ```json
 {"text": "CHANGES SINCE PREVIOUS SCAN\n...\n\nNETWORK ASSESSMENT\n...", "scan_id": 7, "compared_to_scan_id": 6}

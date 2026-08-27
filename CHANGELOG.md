@@ -18,7 +18,10 @@ status), so everything below is grouped under **Unreleased**.
   any other dashboard action is allowed.
 - Role-based access control (`viewer` / `operator` / `admin`) on every
   API route; user management restricted to admins, with a self-or-admin
-  exception for changing your own password.
+  exception for changing your own password. `viewer` is now scoped to
+  Devices/Cameras only — the report, history/asset/comparison, topology,
+  and audit-report endpoints (and their dashboard tabs) require
+  `operator` or higher.
 - CSRF/Origin validation on every mutating request.
 - Fixed the scan-start race condition: concurrent `/scan/start` requests
   could previously both begin scanning and corrupt shared state.
@@ -121,10 +124,6 @@ status), so everything below is grouped under **Unreleased**.
   **saved** scan (reproducible — unlike the live `/api/report`, which can
   be a partial snapshot mid-scan) with a "changes since previous scan"
   section prepended automatically.
-- Field Technician mode: a client-side-only "Technician view" toggle
-  that hides the History/Settings tabs and enlarges touch targets for
-  on-site use on a tablet/phone.
-
 ### Changed
 
 - `install.sh` now stops on failure to install required system packages

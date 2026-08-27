@@ -572,34 +572,6 @@ async function saveMonitoringConfig() {
   }
 }
 
-// Field Technician mode (P4): preferenza puramente client-side, nessuno
-// stato server — solo comodita' per chi guarda il dashboard in quel
-// momento, persistita per la prossima visita sullo stesso browser.
-function applyTechnicianMode(enabled) {
-  document.body.classList.toggle("technician-mode", enabled);
-  $("btn-technician-mode").classList.toggle("active", enabled);
-}
-
-function setupTechnicianMode() {
-  let enabled = false;
-  try {
-    enabled = localStorage.getItem("technicianMode") === "1";
-  } catch (e) {
-    // storage non disponibile (finestra privata, policy del browser):
-    // parte semplicemente disabilitata, non e' un errore bloccante.
-  }
-  applyTechnicianMode(enabled);
-  $("btn-technician-mode").addEventListener("click", () => {
-    enabled = !document.body.classList.contains("technician-mode");
-    applyTechnicianMode(enabled);
-    try {
-      localStorage.setItem("technicianMode", enabled ? "1" : "0");
-    } catch (e) {
-      // idem: se non si puo' salvare, la preferenza vale solo per questa sessione
-    }
-  });
-}
-
 async function viewAuditReport(scanId) {
   const box = $("audit-report-text");
   box.style.display = "block";
@@ -615,6 +587,17 @@ async function viewAuditReport(scanId) {
   } catch (e) {
     box.textContent = "Failed to load the audit report.";
   }
+}
+
+function applyRoleBasedTabs() {
+  // Viewer: solo Devices/Cameras (le uniche due tab visibili). Operator:
+  // tutto tranne Settings (report/history/topology sono anche a livello
+  // API "operator", non solo nascosti qui). Admin: tutto.
+  const isAtLeastOperator = CURRENT_USER.role === "operator" || CURRENT_USER.role === "admin";
+  const isAdmin = CURRENT_USER.role === "admin";
+  document.querySelector('.tab-btn[data-tab="report"]').classList.toggle("hidden", !isAtLeastOperator);
+  document.querySelector('.tab-btn[data-tab="history"]').classList.toggle("hidden", !isAtLeastOperator);
+  document.querySelector('.tab-btn[data-tab="settings"]').classList.toggle("hidden", !isAdmin);
 }
 
 function setupTabs() {
@@ -979,7 +962,7 @@ async function init() {
   }
 
   setupTabs();
-  setupTechnicianMode();
+  applyRoleBasedTabs();
   $("btn-scan-start").addEventListener("click", startScan);
   $("btn-scan-stop").addEventListener("click", stopScan);
   $("btn-rescan-net").addEventListener("click", rescanNetwork);

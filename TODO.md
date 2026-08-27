@@ -36,7 +36,13 @@ done — a small, solid, documented 1.0 beats an endlessly growing 0.x.
 - [x] User roles: `admin` / `operator` / `viewer`. *(`scanner.auth`: `ROLES`,
       `ROLE_RANK`, `has_role_at_least`; every route tagged via
       `@require_role(...)` in `raspi-scanner.py`; pre-existing users with no
-      role on disk default to `admin`, never silently downgraded.)*
+      role on disk default to `admin`, never silently downgraded.
+      Rifinito durante il test hardware (2026-08-27) su richiesta esplicita
+      dell'utente: `viewer` ora vede SOLO Devices/Cameras (tab nascoste in
+      dashboard via `applyRoleBasedTabs()`, non solo cosmetico —
+      `/api/report`, `/api/history/*`, `/api/topology`, `/api/audit/report`
+      sono stati alzati da `viewer` a `operator`); `operator` vede tutto
+      tranne Settings (che resta la sola tab admin-only).)*
 - [x] Restrict `/api/settings/users` (create/delete/password/account
       management) to admins only. *(`GET`/`POST /api/settings/users` and
       `DELETE /api/settings/users/<username>` are `@require_role("admin")`;
@@ -507,8 +513,8 @@ non e' un cambio di priorita' silenzioso.
       fermato a meta' o terminato con errore — resta un'istantanea reale),
       dentro `scan_engine._run_scan_thread`, mai bloccante per lo scan
       stesso se il salvataggio fallisce.)*
-- [x] Field Technician mode. Audit mode. Continuous Monitoring mode.
-      *(Nessuna specifica precedente esisteva per questi tre nomi:
+- [x] Audit mode. Continuous Monitoring mode.
+      *(Nessuna specifica precedente esisteva per questi due nomi:
       interpretazione minima, esplicita, che riusa l'infrastruttura P4
       gia' scritta invece di aprire un sottosistema nuovo per ciascuno.
 
@@ -532,11 +538,16 @@ non e' un cambio di priorita' silenzioso.
       get_previous_scan_id()). Pulsante "Audit report" per riga nella tab
       History.
 
-      **Field Technician mode**: toggle "🛠 Technician view" in
-      dashboard, puramente client-side (nessuno stato server): nasconde
-      le tab History/Settings (configurazione e analisi storica, non
-      utili sul campo davanti a un rack) e ingrandisce i target touch,
-      preferenza persistita in localStorage.
-
       425 -> 451 test (26 nuovi: scheduler, storage, sezione "changes"
       del report, route Flask). Nessuna regressione.)*
+- [ ] Field Technician mode. *(Tentato e rimosso nella stessa sessione:
+      un toggle client-side che nascondeva History/Settings via
+      `body.technician-mode` + CSS non si comportava in modo affidabile
+      sul browser reale usato per il test hardware (la classe risultava
+      applicata secondo la console, ma le tab restavano visibili —
+      causa non isolata prima che l'utente chiedesse di rimuoverlo).
+      Codice e pulsante rimossi da index.html/app.js/style.css per non
+      lasciare una feature visibile ma non funzionante. Da ripensare
+      (eventualmente con un approccio diverso, es. classe su un
+      contenitore piu' vicino invece che su `<body>`) solo se richiesto
+      di nuovo esplicitamente — non un blocker per la 1.0.)*

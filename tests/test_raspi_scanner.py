@@ -196,6 +196,17 @@ class TestRoleBasedAccessControl(RaspiScannerAppTestCase):
         resp = self.client.get("/api/settings/users", auth=self.viewer_auth)
         self.assertEqual(resp.status_code, 403)
 
+    def test_viewer_cannot_read_report(self):
+        """Su richiesta esplicita dell'utente, un viewer vede SOLO
+        Devices/Cameras: report/history/topology (dati "di analisi", non
+        l'inventario live) richiedono almeno operator."""
+        resp = self.client.get("/api/report", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_operator_can_read_report(self):
+        resp = self.client.get("/api/report", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 200)
+
     def test_admin_can_list_users_with_roles(self):
         resp = self.client.get("/api/settings/users", auth=self.admin_auth)
         self.assertEqual(resp.status_code, 200)
@@ -313,7 +324,12 @@ class TestHistoryRoutes(RaspiScannerAppTestCase):
     """P4 'comparative reports' / 'local asset database' / 'historical
     dashboard': le route leggono da scanner.storage, gia' testato a
     fondo in isolamento in tests/test_storage.py — qui interessano solo
-    ruoli richiesti e forma della risposta HTTP."""
+    ruoli richiesti e forma della risposta HTTP.
+
+    Ruolo minimo "operator", non "viewer": su richiesta esplicita
+    dell'utente, un viewer vede SOLO Devices/Cameras — history/report/
+    topology (dati "di analisi", non l'inventario live) richiedono almeno
+    operator."""
 
     def setUp(self):
         super().setUp()
@@ -326,31 +342,38 @@ class TestHistoryRoutes(RaspiScannerAppTestCase):
         device_v2 = dict(device_v1, open_ports=[{"port": 554, "service": "RTSP"}])
         self.scan_id_2 = storage.save_scan([device_v2], 2000.0, 2010.0)
 
+    def test_viewer_cannot_read_history(self):
+        for path in ("/api/history/scans", f"/api/history/scans/{self.scan_id_1}/devices",
+                      f"/api/history/compare?old={self.scan_id_1}&new={self.scan_id_2}",
+                      "/api/history/assets"):
+            resp = self.client.get(path, auth=self.viewer_auth)
+            self.assertEqual(resp.status_code, 403, path)
+
     def test_list_scans(self):
-        resp = self.client.get("/api/history/scans", auth=self.viewer_auth)
+        resp = self.client.get("/api/history/scans", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
         scans = resp.get_json()["scans"]
         self.assertEqual([s["id"] for s in scans], [self.scan_id_2, self.scan_id_1])
 
     def test_scan_devices(self):
-        resp = self.client.get(f"/api/history/scans/{self.scan_id_1}/devices", auth=self.viewer_auth)
+        resp = self.client.get(f"/api/history/scans/{self.scan_id_1}/devices", auth=self.operator_auth)
         devices = resp.get_json()["devices"]
         self.assertEqual(devices[0]["ip"], "192.168.1.21")
 
     def test_compare_requires_both_ids(self):
-        resp = self.client.get("/api/history/compare?old=1", auth=self.viewer_auth)
+        resp = self.client.get("/api/history/compare?old=1", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 400)
 
     def test_compare_detects_open_port_change(self):
         resp = self.client.get(
-            f"/api/history/compare?old={self.scan_id_1}&new={self.scan_id_2}", auth=self.viewer_auth,
+            f"/api/history/compare?old={self.scan_id_1}&new={self.scan_id_2}", auth=self.operator_auth,
         )
         diff = resp.get_json()
         self.assertEqual(len(diff["changed"]), 1)
         self.assertIn("open_ports", diff["changed"][0]["fields"])
 
     def test_list_assets(self):
-        resp = self.client.get("/api/history/assets", auth=self.viewer_auth)
+        resp = self.client.get("/api/history/assets", auth=self.operator_auth)
         assets = resp.get_json()["assets"]
         self.assertEqual(assets[0]["mac"], "AA:BB:CC:11:22:33")
         self.assertEqual(assets[0]["times_seen"], 2)
@@ -360,7 +383,7 @@ class TestTopologyRoute(RaspiScannerAppTestCase):
     """P4 'network topology map': la route legge scan_engine.get_state()
     direttamente, gia' testato a fondo in test_scan_engine.py e
     test_integration_scan_report.py — qui interessa solo che risponda con
-    la forma attesa."""
+    la forma attesa. Ruolo minimo "operator" (vedi TestHistoryRoutes)."""
 
     def setUp(self):
         super().setUp()
@@ -378,13 +401,17 @@ class TestTopologyRoute(RaspiScannerAppTestCase):
         self.scan_engine._state["topology"] = self._orig_topology
         super().tearDown()
 
-    def test_empty_before_any_scan(self):
+    def test_viewer_cannot_read_topology(self):
         resp = self.client.get("/api/topology", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_empty_before_any_scan(self):
+        resp = self.client.get("/api/topology", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json(), {})
 
-    def test_viewer_can_read_topology(self):
-        resp = self.client.get("/api/topology", auth=self.viewer_auth)
+    def test_operator_can_read_topology(self):
+        resp = self.client.get("/api/topology", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
 
 
@@ -457,7 +484,8 @@ class TestMonitoringSettings(RaspiScannerAppTestCase):
 class TestAuditReportRoute(RaspiScannerAppTestCase):
     """Audit mode (P4): report da uno scan SALVATO (non lo stato live di
     /api/report), con la sezione "changes since previous scan" calcolata
-    automaticamente rispetto al giro precedente."""
+    automaticamente rispetto al giro precedente. Ruolo minimo "operator"
+    (vedi TestHistoryRoutes)."""
 
     def setUp(self):
         super().setUp()
@@ -477,11 +505,11 @@ class TestAuditReportRoute(RaspiScannerAppTestCase):
         with sqlite3.connect(config.HISTORY_DB_PATH) as conn:
             conn.execute("DELETE FROM scans")
             conn.execute("DELETE FROM scan_devices")
-        resp = self.client.get("/api/audit/report", auth=self.viewer_auth)
+        resp = self.client.get("/api/audit/report", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 404)
 
     def test_defaults_to_latest_scan(self):
-        resp = self.client.get("/api/audit/report", auth=self.viewer_auth)
+        resp = self.client.get("/api/audit/report", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data["scan_id"], self.scan_id_2)
@@ -490,18 +518,22 @@ class TestAuditReportRoute(RaspiScannerAppTestCase):
         self.assertIn("192.168.1.30", data["text"])
 
     def test_explicit_scan_id_with_no_previous_scan(self):
-        resp = self.client.get(f"/api/audit/report?scan_id={self.scan_id_1}", auth=self.viewer_auth)
+        resp = self.client.get(f"/api/audit/report?scan_id={self.scan_id_1}", auth=self.operator_auth)
         data = resp.get_json()
         self.assertIsNone(data["compared_to_scan_id"])
         self.assertNotIn("CHANGES SINCE PREVIOUS SCAN", data["text"])
 
     def test_unknown_scan_id_returns_404(self):
-        resp = self.client.get("/api/audit/report?scan_id=999999", auth=self.viewer_auth)
+        resp = self.client.get("/api/audit/report?scan_id=999999", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 404)
 
-    def test_viewer_can_read_audit_report(self):
-        resp = self.client.get("/api/audit/report", auth=self.viewer_auth)
+    def test_operator_can_read_audit_report(self):
+        resp = self.client.get("/api/audit/report", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
+
+    def test_viewer_cannot_read_audit_report(self):
+        resp = self.client.get("/api/audit/report", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
 
 
 if __name__ == "__main__":

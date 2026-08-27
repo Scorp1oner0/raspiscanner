@@ -265,7 +265,7 @@ def api_scan_status():
 
 
 @app.route("/api/topology")
-@require_role("viewer")
+@require_role("operator")
 def api_topology():
     """P4 'network topology map': adiacenza a un salto per interfaccia
     (gateway + vicini LLDP/CDP visti), popolata dall'ultimo scan."""
@@ -298,7 +298,7 @@ def api_security_summary():
 
 
 @app.route("/api/report")
-@require_role("viewer")
+@require_role("operator")
 def api_report():
     state = scan_engine.get_state()
     text = assessment.generate_all(state["devices"], started_at=state["started_at"], finished_at=state["finished_at"])
@@ -361,7 +361,7 @@ def api_export():
 
 
 @app.route("/api/history/scans")
-@require_role("viewer")
+@require_role("operator")
 def api_history_scans():
     """P4 'historical dashboard': metadati (non i device) degli scan
     passati, piu' recenti prima."""
@@ -370,13 +370,13 @@ def api_history_scans():
 
 
 @app.route("/api/history/scans/<int:scan_id>/devices")
-@require_role("viewer")
+@require_role("operator")
 def api_history_scan_devices(scan_id):
     return jsonify({"devices": storage.get_scan_devices(scan_id)})
 
 
 @app.route("/api/history/compare")
-@require_role("viewer")
+@require_role("operator")
 def api_history_compare():
     """P4 'comparative reports': confronta due scan passati per MAC.
     ?old=<scan_id>&new=<scan_id>, entrambi richiesti."""
@@ -388,7 +388,7 @@ def api_history_compare():
 
 
 @app.route("/api/history/assets")
-@require_role("viewer")
+@require_role("operator")
 def api_history_assets():
     """P4 'local asset database': ogni MAC visto almeno una volta
     attraverso scan diversi, con first_seen/last_seen."""
@@ -426,7 +426,7 @@ def api_settings_monitoring_set():
 
 
 @app.route("/api/audit/report")
-@require_role("viewer")
+@require_role("operator")
 def api_audit_report():
     """Audit mode (P4): a differenza di /api/report (stato LIVE, puo'
     essere un'istantanea parziale se uno scan e' in corso), questo genera
