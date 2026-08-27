@@ -38,8 +38,8 @@ originally sequenced — see the P4 section header for the full note.
 
 Primo giro completo end-to-end su hardware fisico vero (non emulato):
 SD riscritta da zero, `install.sh` da zero, bootstrap, cambio password,
-systemd, HTTPS, scan reale (**~11s** per una `/24`, 4 host), report,
-Audit mode, topology, IPv6 discovery — tutto verificato via SSH/curl
+systemd, HTTPS, scan reale multi-interfaccia (**22,27s**, eth0+wlan0, 8
+host), report, Audit mode, topology, IPv6 discovery — tutto verificato via SSH/curl
 diretti contro il dashboard reale. Trovati e corretti **due bug reali**
 mai visibili testando solo su x86 (vedi i rispettivi punti P3
 Packaging/P4 e il commit dedicato):
@@ -313,15 +313,17 @@ P3 Tests chiuso: 6/6.
 ## 🟢 P3 — Performance
 
 - [x] Measure scan times on Raspberry Pi 3B+. *(Misurato dal vivo il
-      2026-08-27 su un Pi 3B+ reale (1GB RAM): scan completo di una
-      rete `/24` (254 host possibili, 4 realmente attivi) in **~11
-      secondi** (`started_at`/`finished_at` reali, non stimati),
-      classificazione completa inclusa (router MikroTik via
-      vendor+gateway, due Raspberry Pi via OUI, un PC via SMB/RDP).
-      Non e' un dato su una rete satura di centinaia di host (vedi la
-      voce "/16 networks" sotto, che resta un limite architetturale
-      distinto), ma la prima misura reale su questa classe di
-      hardware.)*
+      2026-08-27 su un Pi 3B+ reale (1GB RAM): scan completo e
+      **multi-interfaccia** (eth0 `192.168.88.0/24` + wlan0 hotspot
+      `172.20.10.0/28` insieme) in **22,27 secondi**
+      (`started_at`/`finished_at` reali, non stimati), 8 device trovati
+      e classificati (router MikroTik via vendor+gateway, tre Raspberry
+      Pi via OUI, tre PC via SMB/RDP), ciascuno correttamente etichettato
+      con l'interfaccia di provenienza. Non e' un dato su una rete
+      satura di centinaia di host (vedi la voce "/16 networks" sotto,
+      che resta un limite architetturale distinto), ma la prima misura
+      reale su questa classe di hardware — e la prima anche a coprire
+      piu' interfacce nello stesso scan.)*
 - [ ] Measure scan times on Raspberry Pi 4/5. *(Richiede hardware reale
       di quel modello specifico, non disponibile in questa sessione —
       solo un Pi 3B+ era disponibile.)*
@@ -463,8 +465,8 @@ P3 Reporting chiuso: 7/7.
       su un Raspberry Pi 3B+ reale, tutto verificato via SSH: pacchetti
       apt, venv, OUI database completo scaricato, servizio systemd
       avviato, password bootstrap generata e stampata, cambio password,
-      HTTPS raggiungibile, scan reale (~11s, vedi P3 Performance), Audit
-      mode e topology interrogati con successo. Trovati e corretti DUE
+      HTTPS raggiungibile, scan reale multi-interfaccia (22,27s, vedi P3
+      Performance), Audit mode e topology interrogati con successo. Trovati e corretti DUE
       bug reali mai visibili su x86 (vedi P3 Tests/CHANGELOG): il
       polling della password bootstrap troppo aggressivo per una CPU
       lenta, e un bug di round-trip JSON che degradava la severita' di
@@ -569,8 +571,8 @@ non e' un cambio di priorita' silenzioso.
       (fe80::...): la selezione dell'indirizzo sorgente IPv6 preferisce lo
       stesso scope della destinazione (RFC 6724), un indirizzo globale non
       emerge da questo probe. Verificato dal vivo il 2026-08-27 su hardware
-      reale (Raspberry Pi 3B+ + rete domestica): 2 dei 4 device dello scan
-      hanno risposto con un indirizzo link-local reale, uno dei quali
+      reale (Raspberry Pi 3B+ + rete domestica): 2 degli 8 device dello scan
+      multi-interfaccia hanno risposto con un indirizzo link-local reale, uno dei quali
       combacia esattamente con l'EUI-64 derivato dal suo MAC
       (`b8:27:eb:36:ba:b9` -> `fe80::ba27:ebff:fe36:bab9`) — comportamento
       SLAAC corretto, non solo teoricamente plausibile. Prima di quella
