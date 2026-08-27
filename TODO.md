@@ -405,7 +405,15 @@ non e' un cambio di priorita' silenzioso.
       prima; non aggiunte porte per altri vendor senza una fonte
       affidabile da verificare — un segnale sbagliato sarebbe peggio di
       nessun segnale.)*
-- [ ] VLAN awareness.
+- [x] VLAN awareness. *(`scanner/discovery/arp.py`: nuovo `extract_vlan_id()`
+      legge il layer Dot1Q (802.1Q) dal frame catturato, se presente.
+      Propagato fino al device finale (`vlan_id`), mostrato in dashboard
+      SOLO quando non None — la maggior parte delle porte sono "access"
+      (lo switch toglie il tag prima di consegnare il frame), quindi None
+      e' l'esito normale, non un errore: niente colonna sempre vuota.
+      Non verificabile con un vero switch trunk in questa sessione, ma la
+      logica di estrazione e' testata direttamente con un frame Dot1Q
+      costruito a mano — corretta a prescindere dall'hardware disponibile.)*
 - [ ] Optional SNMP discovery.
 - [ ] LLDP/CDP discovery.
 - [ ] IPv6 discovery.

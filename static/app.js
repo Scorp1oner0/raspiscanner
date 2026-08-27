@@ -175,6 +175,16 @@ async function refreshNetwork() {
   }
 }
 
+function renderNetworkCell(d) {
+  const base = escapeHtml(d.network) || "-";
+  // vlan_id (P4): quasi sempre assente (la maggior parte delle porte sono
+  // "access", lo switch toglie il tag 802.1Q prima di consegnare il
+  // frame) — mostrato solo quando c'e' davvero, non una colonna sempre
+  // visibile e vuota per il 99% degli scan.
+  if (d.vlan_id === null || d.vlan_id === undefined) return base;
+  return `${base} <span class="vlan-badge" title="802.1Q VLAN tag seen on this device's traffic">VLAN ${d.vlan_id}</span>`;
+}
+
 function renderPorts(device) {
   const openPorts = device.open_ports;
   if (openPorts && openPorts.length > 0) {
@@ -240,7 +250,7 @@ function renderAllTable(devices) {
       <td>${renderModelCell(d)}</td>
       <td>${escapeHtml(d.hostname)}</td>
       <td>${escapeHtml(d.iface)}</td>
-      <td>${escapeHtml(d.network) || "-"}</td>
+      <td>${renderNetworkCell(d)}</td>
       <td>${renderPorts(d)}</td>
       <td>${deviceTypeCell(d)}</td>
     </tr>

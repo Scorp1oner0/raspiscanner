@@ -13,12 +13,25 @@ from .. import config
 log = logging.getLogger("raspiscanner.discovery")
 
 try:
-    from scapy.all import ARP, AsyncSniffer, Ether, sendp, conf as scapy_conf
+    from scapy.all import ARP, AsyncSniffer, Dot1Q, Ether, sendp, conf as scapy_conf
     scapy_conf.verb = 0
     SCAPY_AVAILABLE = True
 except ImportError:  # scapy non installato: la discovery ARP non funzionera'
     SCAPY_AVAILABLE = False
     log.warning("scapy non disponibile: la scansione ARP e' disabilitata")
+
+
+def extract_vlan_id(received):
+    """Ritorna l'ID VLAN (802.1Q) se il frame catturato ne porta uno, None
+    altrimenti. La maggior parte delle porte di rete sono in modalita'
+    "access" (lo switch toglie il tag prima di consegnare il frame): un
+    None qui e' il caso normale, non un errore — l'informazione compare
+    solo se il probe gira su una porta "trunk" che lascia passare i tag,
+    o su un'interfaccia VLAN dedicata.
+    """
+    if SCAPY_AVAILABLE and received.haslayer(Dot1Q):
+        return received[Dot1Q].vlan
+    return None
 
 
 def parse_arp_reply(received, network):
@@ -87,7 +100,8 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     def _on_packet(received):
         parsed = parse_arp_reply(received, network)
         if parsed:
-            results[parsed[0]] = parsed[1]
+            ip, mac = parsed
+            results[ip] = (mac, extract_vlan_id(received))
 
     sniffer = None
     try:
@@ -124,7 +138,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
                 # completamente fallito e' indistinguibile da "rete vuota".
                 log.error("sniffer ARP terminato con errore su %s: %s", iface, exc)
 
-    return [{"ip": ip, "mac": mac} for ip, mac in results.items()]
+    return [{"ip": ip, "mac": mac, "vlan_id": vlan_id} for ip, (mac, vlan_id) in results.items()]
 
 
 def resolve_hostname(ip, timeout=config.HOSTNAME_TIMEOUT):

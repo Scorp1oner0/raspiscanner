@@ -321,6 +321,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
         "network_mismatch": True,
         "iface": iface,
         "network": None,
+        "vlan_id": None,
     }
 
 
@@ -368,13 +369,17 @@ def _run_scan_thread(networks):
                 hosts = arp_scan(cidr, iface, psrc=iface_ip)
             seen_ips = set()
             for h in hosts:
-                all_hosts.append((h["ip"], h["mac"], iface, cidr))
+                # vlan_id: solo arp_scan lo popola (802.1Q, vedi
+                # scanner.discovery.arp.extract_vlan_id); icmp_scan (link
+                # NOARP/VPN) non ha un concetto di VLAN a questo livello,
+                # .get() con default None copre entrambi i casi.
+                all_hosts.append((h["ip"], h["mac"], iface, cidr, h.get("vlan_id")))
                 seen_ips.add(h["ip"])
             if iface_ip not in seen_ips:
                 # Un host non riceve mai la propria richiesta ARP broadcast
                 # di ritorno: senza questo, la macchina su cui gira lo
                 # scanner non comparirebbe mai da sola nei risultati.
-                all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, cidr))
+                all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, cidr, None))
 
             # ONVIF e mDNS sono probe multicast indipendenti: in thread
             # separati invece che in sequenza, cosi' la loro attesa (3s +
@@ -408,18 +413,19 @@ def _run_scan_thread(networks):
         # configurato — trattalo come un host normale (mac ignoto, ma
         # port scan/classificazione completi), non come un fantasma.
         for ip, iface, cidr in in_range_orphans:
-            all_hosts.append((ip, None, iface, cidr))
+            all_hosts.append((ip, None, iface, cidr, None))
 
         total = len(all_hosts) + len(out_of_range_ips)
         _update(total=total)
 
-        for idx, (ip, mac, iface, cidr) in enumerate(all_hosts):
+        for idx, (ip, mac, iface, cidr, vlan_id) in enumerate(all_hosts):
             if _stop_flag.is_set():
                 break
             _update(progress=idx, current_ip=ip)
             device = _scan_host(ip, mac, onvif_results, mdns_results, gateways.get(iface))
             device["iface"] = iface
             device["network"] = cidr
+            device["vlan_id"] = vlan_id
             _set_device(ip, device)
 
         for idx, ip in enumerate(out_of_range_ips):

@@ -11,9 +11,9 @@ di filtraggio, che e' l'unica parte testabile senza socket raw reali.
 import ipaddress
 import unittest
 
-from scapy.all import ARP, Ether
+from scapy.all import ARP, Dot1Q, Ether
 
-from scanner.discovery.arp import parse_arp_reply
+from scanner.discovery.arp import extract_vlan_id, parse_arp_reply
 
 NETWORK = ipaddress.ip_network("192.168.1.0/24")
 
@@ -57,6 +57,26 @@ class TestParseArpReply(unittest.TestCase):
         self.assertIsNotNone(parse_arp_reply(_reply("192.168.1.1"), net))
         self.assertIsNotNone(parse_arp_reply(_reply("192.168.1.254"), net))
         self.assertIsNone(parse_arp_reply(_reply("192.168.2.1"), net))
+
+
+class TestExtractVlanId(unittest.TestCase):
+    """P4 'VLAN awareness': la maggior parte delle porte sono in modalita'
+    "access" (lo switch toglie il tag 802.1Q prima di consegnare il
+    frame) — None e' il caso normale, non un errore. L'informazione
+    compare solo se il probe gira su una porta trunk o un'interfaccia
+    VLAN dedicata, che lascia passare il tag intatto fino a scapy."""
+
+    def test_tagged_frame_returns_vlan_id(self):
+        tagged = Ether(dst="ff:ff:ff:ff:ff:ff") / Dot1Q(vlan=42) / ARP(op=2, psrc="192.168.1.50", hwsrc="aa:bb:cc:dd:ee:ff")
+        self.assertEqual(extract_vlan_id(tagged), 42)
+
+    def test_untagged_frame_returns_none(self):
+        untagged = _reply("192.168.1.50")
+        self.assertIsNone(extract_vlan_id(untagged))
+
+    def test_non_arp_untagged_packet_returns_none(self):
+        non_arp = Ether(dst="ff:ff:ff:ff:ff:ff") / (b"\x00" * 20)
+        self.assertIsNone(extract_vlan_id(non_arp))
 
 
 if __name__ == "__main__":

@@ -128,6 +128,11 @@ main { padding: 24px; max-width: 1180px; margin: 0 auto; }
 .net-probing.hidden { display: none; }
 .net-title { font-weight: 600; margin-bottom: 8px; font-size: 13.5px; }
 .iface-name { color: var(--text-faint); font-weight: 400; font-size: 12px; font-family: var(--font-mono); }
+.vlan-badge {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+  font-size: 10.5px; font-weight: 600; font-family: var(--font-mono);
+  background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border-soft);
+}
 .net-line { font-size: 13px; margin: 4px 0; color: var(--text-dim); }
 .net-line span { color: var(--text); font-family: var(--font-mono); }
 .addr-list { font-size: 13px; margin: 4px 0 8px 0; }

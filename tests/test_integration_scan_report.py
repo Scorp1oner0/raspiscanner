@@ -43,7 +43,7 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         # e RTSP (medium) esposti — attraversa classificazione camera +
         # security findings + generazione del report in un colpo solo.
         scan_engine.arp_scan = lambda cidr, iface, timeout=None, psrc=None: [
-            {"ip": "192.168.10.21", "mac": "AA:BB:CC:11:22:33"},
+            {"ip": "192.168.10.21", "mac": "AA:BB:CC:11:22:33", "vlan_id": 42},
         ]
         scan_engine.icmp_scan = lambda cidr, iface, timeout=None, psrc=None: []
         scan_engine.onvif_probe = lambda iface_ip=None, timeout=3: {}
@@ -84,12 +84,16 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         camera = devices["192.168.10.21"]
         self.assertTrue(camera["is_camera"])
         self.assertEqual(camera["device_type"], "Camera")
+        # vlan_id (P4): propagato da arp_scan fino al device finale, anche
+        # se _scan_host stesso non lo sa (aggiunto dopo, in _run_scan_thread).
+        self.assertEqual(camera["vlan_id"], 42)
 
         # L'host locale (iface_ip) non riceve mai la propria richiesta ARP
         # broadcast di ritorno: deve comunque comparire, aggiunto a parte.
         local_host = devices["192.168.10.253"]
         self.assertEqual(local_host["mac"], "AA:BB:CC:00:00:FE")
         self.assertFalse(local_host["is_camera"])
+        self.assertIsNone(local_host["vlan_id"])
 
     def test_scan_result_flows_through_real_classification_and_findings(self):
         from scanner.reporting import security
