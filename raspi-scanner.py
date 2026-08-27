@@ -311,7 +311,8 @@ def api_report():
 def api_export():
     kind = request.args.get("type", "all")
     fmt = request.args.get("format", "json")
-    devices = scan_engine.devices_cameras() if kind == "cameras" else scan_engine.devices_all()
+    state = scan_engine.get_state()
+    devices = scan_engine.devices_cameras() if kind == "cameras" else state["devices"]
 
     if fmt == "csv":
         buf = io.StringIO()
@@ -332,8 +333,20 @@ def api_export():
             headers={"Content-Disposition": f"attachment; filename=raspiscanner_{kind}.csv"},
         )
 
+    # P4 "structured JSON export": un envelope con metadati invece di un
+    # array nudo di device — un consumatore esterno (script, altro tool)
+    # sa cosi' QUANDO questi dati sono stati raccolti senza doverlo dedurre
+    # da un header HTTP o da un file system timestamp.
+    payload = {
+        "exported_at": time.time(),
+        "type": kind,
+        "count": len(devices),
+        "scan_started_at": state["started_at"],
+        "scan_finished_at": state["finished_at"],
+        "devices": devices,
+    }
     return Response(
-        json.dumps(devices, indent=2, ensure_ascii=False), mimetype="application/json",
+        json.dumps(payload, indent=2, ensure_ascii=False), mimetype="application/json",
         headers={"Content-Disposition": f"attachment; filename=raspiscanner_{kind}.json"},
     )
 

@@ -410,7 +410,14 @@ non e' un cambio di priorita' silenzioso.
 - [ ] LLDP/CDP discovery.
 - [ ] IPv6 discovery.
 - [ ] Network topology map.
-- [ ] Structured JSON export.
+- [x] Structured JSON export. *(`/api/export?format=json` ora ritorna un
+      envelope con metadati — `exported_at`, `type`, `count`,
+      `scan_started_at`/`scan_finished_at`, `devices` — invece di un
+      array nudo: un consumatore esterno sa quando i dati sono stati
+      raccolti senza doverlo dedurre da un header HTTP. CSV invariato
+      (resta tabellare per natura). Cambio di forma pre-1.0, nessun
+      consumatore esterno esisteva prima che l'API fosse documentata in
+      questa stessa sessione.)*
 - [x] Documented API. *(`API.md`, nuovo: ogni endpoint con ruolo richiesto,
       request/response, e lo schema completo del "device object". Test
       di regressione (`tests/test_api_docs.py`) che tiene la doc

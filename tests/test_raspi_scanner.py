@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scanner import auth, config
+from scanner import auth, config, scan_engine
 
 RASPI_SCANNER_PATH = Path(__file__).resolve().parent.parent / "raspi-scanner.py"
 
@@ -242,6 +242,58 @@ class TestPasswordChangeSelfOrAdmin(RaspiScannerAppTestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(auth.verify("operator1", "NuovaPassword123"))
+
+
+class TestExportStructuredJson(RaspiScannerAppTestCase):
+    """P4 'structured JSON export': l'export JSON e' un envelope con
+    metadati (quando lo scan e' stato raccolto, quanti device, che tipo di
+    export), non piu' un array nudo — un consumatore esterno non deve
+    dedurre il timing da un header HTTP o da un mtime del file scaricato."""
+
+    _FAKE_DEVICE = {
+        "ip": "192.168.1.21", "mac": "AA:BB:CC:11:22:33", "vendor": "Hikvision",
+        "model": "DS-2CD2043G0", "hostname": None, "device_type": "Camera",
+        "is_camera": True, "open_ports": [{"port": 554, "service": "RTSP"}],
+        "rtsp_url": "rtsp://192.168.1.21:554/", "admin_url": None,
+    }
+
+    def setUp(self):
+        super().setUp()
+        self._orig_state = dict(scan_engine._state)
+        scan_engine._state.update(
+            devices={"192.168.1.21": dict(self._FAKE_DEVICE)},
+            started_at=1000.0, finished_at=1090.0,
+        )
+
+    def tearDown(self):
+        scan_engine._state.clear()
+        scan_engine._state.update(self._orig_state)
+        super().tearDown()
+
+    def test_json_export_envelope_shape(self):
+        resp = self.client.get("/api/export?type=all&format=json", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload["type"], "all")
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["scan_started_at"], 1000.0)
+        self.assertEqual(payload["scan_finished_at"], 1090.0)
+        self.assertIn("exported_at", payload)
+        self.assertEqual(payload["devices"][0]["ip"], "192.168.1.21")
+
+    def test_json_export_cameras_only(self):
+        resp = self.client.get("/api/export?type=cameras&format=json", auth=self.viewer_auth)
+        payload = resp.get_json()
+        self.assertEqual(payload["type"], "cameras")
+        self.assertEqual(payload["count"], 1)
+
+    def test_csv_export_unaffected_by_envelope_change(self):
+        resp = self.client.get("/api/export?type=all&format=csv", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/csv", resp.content_type)
+        body = resp.get_data(as_text=True)
+        self.assertIn("192.168.1.21", body)
+        self.assertIn("Hikvision", body)
 
 
 if __name__ == "__main__":

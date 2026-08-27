@@ -153,9 +153,21 @@ partial-snapshot warning and `scan_running` is `true`.
 
 ### `GET /api/export?type=all&format=json` — viewer
 Downloads discovered devices as a file (`Content-Disposition: attachment`).
-`type`: `all` (default) or `cameras`. `format`: `json` (default, full
-device objects) or `csv` (a fixed column subset: `ip, mac, vendor, model,
-hostname, device_type, open_ports, rtsp_url, admin_url`).
+`type`: `all` (default) or `cameras`. `format`: `csv` (a fixed column
+subset: `ip, mac, vendor, model, hostname, device_type, open_ports,
+rtsp_url, admin_url`) or `json` (default) — a structured envelope, not a
+bare array:
+
+```json
+{
+  "exported_at": 1735000123.4,
+  "type": "all",
+  "count": 14,
+  "scan_started_at": 1735000000.0,
+  "scan_finished_at": 1735000090.0,
+  "devices": [ /* device objects, see below */ ]
+}
+```
 
 ## Settings
 
