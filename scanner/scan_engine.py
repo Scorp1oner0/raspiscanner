@@ -113,14 +113,23 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
     # ONVIF non risponde affatto — comune perche' ONVIF e' una cosa da
     # telecamere, non da telefoni/computer.
     model = None
+    # "onvif" | "mdns" | None: da dove viene il campo "model", mostrato in
+    # dashboard per distinguere un dato che il dispositivo ha dichiarato di
+    # se stesso via protocollo strutturato (ONVIF GetDeviceInformation, o
+    # il TXT "model=" di mDNS) da uno assente/indovinato altrove (OUI,
+    # banner) — la stessa distinzione "detected vs inferred" gia' fatta
+    # per RTSP/Admin URL, qui applicata al vendor/model.
+    model_source = None
     if onvif_info and onvif_info.get("xaddrs"):
         info = get_device_info_multi(onvif_info["xaddrs"])
         if info.get("model"):
             model = info["model"]
+            model_source = "onvif"
         if info.get("manufacturer"):
             device_vendor = info["manufacturer"]
     if not model and mdns_info and mdns_info.get("model"):
         model = mdns_info["model"]
+        model_source = "mdns"
 
     # Priorita': NVR e camera sono le classificazioni piu' specifiche e
     # affidabili (segnali di protocollo dedicati). Poi l'apparato di rete
@@ -159,6 +168,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
         "mac": mac,
         "vendor": device_vendor,
         "model": model,
+        "model_source": model_source,
         "hostname": hostname,
         "open_ports": open_ports,
         "http_banners": banners,
@@ -258,11 +268,13 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
     """
     xaddrs = onvif_info.get("xaddrs") or []
     model = None
+    model_source = None
     device_vendor = "Unknown"
     if xaddrs:
         info = get_device_info_multi(xaddrs)
         if info.get("model"):
             model = info["model"]
+            model_source = "onvif"
         if info.get("manufacturer"):
             device_vendor = info["manufacturer"]
 
@@ -271,6 +283,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
         "mac": None,
         "vendor": device_vendor,
         "model": model,
+        "model_source": model_source,
         "hostname": None,
         "open_ports": [],
         "http_banners": {},

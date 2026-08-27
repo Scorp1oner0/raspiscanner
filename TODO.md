@@ -274,14 +274,28 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 
 ## 🟢 P3 — Dashboard UX
 
-- [ ] Scan progress indicator.
-- [ ] Real-time network interface status.
-- [ ] VPN status. Wi-Fi status. Hotspot status.
-- [ ] Active-subnet indicator.
-- [ ] Device count.
-- [ ] Visual distinction: Camera / NVR-DVR / Router / PC / Printer /
-      Other.
-- [ ] Clearly show: Detected / Candidate / Inferred.
+- [x] Scan progress indicator. *(Gia' presente: barra di avanzamento +
+      percentuale + IP corrente, polling ogni 1.5s.)*
+- [x] Real-time network interface status. *(Gia' presente: polling ogni
+      5s su `/api/network`.)*
+- [x] VPN status. Wi-Fi status. Hotspot status. *(Gia' presenti: box VPN
+      per interfaccia, box Wi-Fi per scheda con reti visibili, modale
+      hotspot con stato/generazione password.)*
+- [x] Active-subnet indicator. *(Gia' coperto dai box di stato per
+      interfaccia — mostrano mode/IP/CIDR attivi; il P2 "Probing preset
+      network X/13" aggiunge anche il progresso durante la ricerca
+      attiva della subnet giusta.)*
+- [x] Device count. *(Gia' presente: tile KPI "DEVICES" in cima.)*
+- [x] Visual distinction: Camera / NVR-DVR / Router / PC / Printer /
+      Other. *(Gia' presente: `device_type` (ora piu' granulare da P2:
+      NVR/DVR/Video Encoder/Video Decoder distinti) + badge colorati.)*
+- [x] Clearly show: Detected / Candidate / Inferred. *(RTSP/Admin URL
+      gia' etichettati "(candidate)" in P2. Aggiunto qui: nuovo campo
+      `model_source` ("onvif"/"mdns"/None) su ogni device — il Model in
+      tabella non e' mai indovinato, e' sempre cio' che il dispositivo ha
+      dichiarato di se stesso via un protocollo strutturato; il tooltip
+      lo rende esplicito ("self-reported via ONVIF/mDNS") invece di
+      lasciarlo ambiguo. Verificato via screenshot headless.)*
 
 ## 🟢 P3 — Reporting
 

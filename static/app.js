@@ -188,6 +188,19 @@ function renderPorts(device) {
   return "-";
 }
 
+function renderModelCell(d) {
+  if (!d.model) return "-";
+  // model_source e' sempre valorizzato quando model lo e' (scan_engine
+  // popola entrambi insieme): il nome non e' mai indovinato/pattern-matchato
+  // da altri campi, e' esattamente cio' che il dispositivo ha dichiarato di
+  // se stesso — il tooltip lo rende esplicito invece di lasciarlo ambiguo.
+  const sourceLabel = d.model_source === "onvif" ? "self-reported via ONVIF"
+    : d.model_source === "mdns" ? "self-reported via mDNS/Bonjour"
+    : null;
+  const title = sourceLabel ? ` title="${escapeHtml(sourceLabel)}"` : "";
+  return `<span${title}>${escapeHtml(d.model)}</span>`;
+}
+
 function deviceTypeCell(d) {
   if (d.network_mismatch) {
     return '<span class="badge badge-warn">⚠️ ' + escapeHtml(d.device_type) + ' — out of network</span>';
@@ -210,7 +223,7 @@ function renderAllTable(devices) {
       <td>${escapeHtml(d.ip)}</td>
       <td>${escapeHtml(d.mac) || "-"}</td>
       <td>${escapeHtml(d.vendor)}</td>
-      <td>${escapeHtml(d.model) || "-"}</td>
+      <td>${renderModelCell(d)}</td>
       <td>${escapeHtml(d.hostname)}</td>
       <td>${escapeHtml(d.iface)}</td>
       <td>${escapeHtml(d.network) || "-"}</td>
@@ -226,7 +239,7 @@ function renderCameraRowOk(d) {
       <td>${escapeHtml(d.ip)}</td>
       <td>${escapeHtml(d.mac)}</td>
       <td>${escapeHtml(d.vendor)}</td>
-      <td>${escapeHtml(d.model) || "-"}</td>
+      <td>${renderModelCell(d)}</td>
       <td>${renderPorts(d)}</td>
       <td>${d.rtsp_url ? '<a class="link" title="Guessed from an open RTSP port, not a verified working stream" href="' + escapeHtml(d.rtsp_url) + '">' + escapeHtml(d.rtsp_url) + "</a>" : "-"}</td>
       <td>${d.admin_url ? '<a class="link" title="Guessed from an open web port, not confirmed to be the device\'s admin panel" target="_blank" href="' + escapeHtml(d.admin_url) + '">open</a>' : "-"}</td>
@@ -240,7 +253,7 @@ function renderCameraRowMismatch(d) {
     <tr>
       <td>${escapeHtml(d.ip)}</td>
       <td>${escapeHtml(d.vendor)}</td>
-      <td>${escapeHtml(d.model) || "-"}</td>
+      <td>${renderModelCell(d)}</td>
       <td>${escapeHtml(d.iface) || "-"}</td>
       <td>${d.onvif_xaddr ? '<a class="link" href="' + escapeHtml(d.onvif_xaddr) + '">' + escapeHtml(d.onvif_xaddr) + "</a>" : "-"}</td>
     </tr>

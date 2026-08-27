@@ -242,6 +242,54 @@ class TestClassifyOrphanIps(unittest.TestCase):
         self.assertEqual(scan_engine._classify_orphan_ips([], networks), ([], []))
 
 
+class TestScanHostModelSource(unittest.TestCase):
+    """P3 (dashboard UX "detected vs inferred"): model_source distingue un
+    "model" auto-dichiarato dal dispositivo via protocollo strutturato
+    (ONVIF/mDNS) da uno assente — la dashboard lo mostra diversamente
+    da un vendor/model indovinato da OUI/banner."""
+
+    def setUp(self):
+        self._orig = {
+            name: getattr(scan_engine, name)
+            for name in ("scan_ports", "grab_http_banner", "get_device_info_multi", "resolve_hostname")
+        }
+        scan_engine.scan_ports = lambda ip: []
+        scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
+        scan_engine.resolve_hostname = lambda ip, timeout=1: None
+
+    def tearDown(self):
+        for name, fn in self._orig.items():
+            setattr(scan_engine, name, fn)
+
+    def test_model_source_onvif_when_get_device_information_succeeds(self):
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {"model": "DS-2CD2043G0"}
+        onvif_results = {"10.0.0.5": {"xaddrs": ["http://10.0.0.5/onvif"], "types": ""}}
+        device = scan_engine._scan_host("10.0.0.5", "AA:BB:CC:00:00:01", onvif_results, {}, None)
+        self.assertEqual(device["model"], "DS-2CD2043G0")
+        self.assertEqual(device["model_source"], "onvif")
+
+    def test_model_source_mdns_when_onvif_has_no_model(self):
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
+        mdns_results = {"10.0.0.5": {"hostname": "livingroom.local", "model": "AppleTV11,1"}}
+        device = scan_engine._scan_host("10.0.0.5", "AA:BB:CC:00:00:01", {}, mdns_results, None)
+        self.assertEqual(device["model"], "AppleTV11,1")
+        self.assertEqual(device["model_source"], "mdns")
+
+    def test_model_source_none_when_no_model_available_anywhere(self):
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
+        device = scan_engine._scan_host("10.0.0.5", "AA:BB:CC:00:00:01", {}, {}, None)
+        self.assertIsNone(device["model"])
+        self.assertIsNone(device["model_source"])
+
+    def test_onvif_model_takes_priority_over_mdns(self):
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {"model": "DS-2CD2043G0"}
+        onvif_results = {"10.0.0.5": {"xaddrs": ["http://10.0.0.5/onvif"], "types": ""}}
+        mdns_results = {"10.0.0.5": {"hostname": "cam.local", "model": "SomeOtherModel"}}
+        device = scan_engine._scan_host("10.0.0.5", "AA:BB:CC:00:00:01", onvif_results, mdns_results, None)
+        self.assertEqual(device["model"], "DS-2CD2043G0")
+        self.assertEqual(device["model_source"], "onvif")
+
+
 class TestBuildOrphanOnvifDevice(unittest.TestCase):
     def setUp(self):
         self._orig_get_device_info_multi = scan_engine.get_device_info_multi
@@ -277,6 +325,13 @@ class TestBuildOrphanOnvifDevice(unittest.TestCase):
 
         self.assertEqual(device["vendor"], "Hikvision")
         self.assertEqual(device["model"], "DS-2CD2043G0")
+        self.assertEqual(device["model_source"], "onvif")
+
+    def test_model_source_is_none_when_no_model_available(self):
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
+        onvif_info = {"xaddrs": ["http://192.168.1.64/onvif/device_service"], "types": ""}
+        device = scan_engine._build_orphan_onvif_device("192.168.1.64", onvif_info, "eth0")
+        self.assertIsNone(device["model_source"])
 
     def test_no_xaddrs_skips_device_info_lookup(self):
         def fail(*a, **k):
