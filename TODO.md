@@ -232,13 +232,45 @@ formalmente in P2/P3 Architecture, non conta piu' come voce aperta di P1.
 
 ## 🟢 P3 — Performance
 
-- [ ] Measure scan times on Raspberry Pi 3B+.
-- [ ] Measure scan times on Raspberry Pi 4/5.
-- [ ] Optimize timeouts where possible.
-- [ ] Evaluate OUI lookup caching.
-- [ ] Avoid duplicate scans.
-- [ ] Measure RAM usage on large scans.
-- [ ] Measure behavior on `/16` networks.
+- [ ] Measure scan times on Raspberry Pi 3B+. *(Richiede hardware reale,
+      non riproducibile da qui.)*
+- [ ] Measure scan times on Raspberry Pi 4/5. *(Idem.)*
+- [x] Optimize timeouts where possible. *(Bug reale trovato e corretto:
+      `config.PORT_SCAN_THREADS = 60` era definita ma MAI letta dal
+      codice — `scan_ports()` usava sempre un valore fisso di 16 worker.
+      Con la lista di default (22 porte) questo significava due round da
+      `PORT_SCAN_TIMEOUT` invece di uno solo per ogni host. Fix + test
+      che verifica la dimensione del pool effettivamente usata.
+      L'opportunita' piu' grossa resta pero' un'altra, vedi nota sotto
+      su "/16 networks" — non e' un timeout da tarare, e' un cambio
+      architetturale piu' rischioso.)*
+- [x] Evaluate OUI lookup caching. *(Gia' corretto: `vendor.py` carica il
+      CSV in un dict UNA sola volta (flag `_loaded`), ogni lookup
+      successivo e' O(1) su dict gia' in memoria. Nessuna modifica
+      necessaria.)*
+- [x] Avoid duplicate scans. *(Gia' garantito dal fix P1 della race
+      condition su `run_scan()`: due `/scan/start` concorrenti non
+      possono piu' avviare due scan paralleli sovrapposti. All'interno
+      di un singolo scan, arp_scan/orphan-filtering gia' deduplicano per
+      IP, nessun host viene processato due volte.)*
+- [ ] Measure RAM usage on large scans. *(Richiede una rete reale grande
+      per una misura significativa — non riproducibile da qui.)*
+- [ ] Measure behavior on `/16` networks. *(Non misurabile senza una rete
+      reale di quella dimensione, ma revisionando il codice e' emerso un
+      limite architetturale concreto, non solo ipotetico: in
+      `scan_engine._run_scan_thread`, il loop che processa `all_hosts`
+      e' SEQUENZIALE, un host alla volta — il port scan interno a
+      ciascun host e' gia' parallelo (ThreadPoolExecutor), ma tra un
+      host e il successivo non c'e' parallelismo. Su una `/16` con
+      centinaia/migliaia di host vivi, questo e' il fattore dominante
+      sulla durata totale dello scan, molto piu' di qualunque singolo
+      timeout. Non parallelizzato qui: introdurrebbe rischi reali di
+      correttezza (thread-safety di onvif_results/mdns_results
+      condivisi, reattivita' dello stop-flag a meta' di un batch,
+      ordine di `_update(progress=...)`) che non posso verificare in
+      modo affidabile senza una rete grande reale su cui provarlo —
+      stessa cautela gia' applicata alla separazione dei privilegi in
+      P2/P3 Architecture.)*
 
 ## 🟢 P3 — Dashboard UX
 

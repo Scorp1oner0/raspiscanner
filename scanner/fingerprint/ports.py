@@ -22,7 +22,12 @@ def scan_ports(ip, ports=None, timeout=config.PORT_SCAN_TIMEOUT):
     """Ritorna la lista delle porte aperte tra quelle indicate, con etichetta."""
     ports = ports or config.PORTS_OF_INTEREST
     open_ports = []
-    with ThreadPoolExecutor(max_workers=min(len(ports), 16)) as pool:
+    # Bug reale (P3, performance): config.PORT_SCAN_THREADS esisteva ma non
+    # veniva mai letta, il pool restava fisso a 16 worker a prescindere. Con
+    # la lista di default (22 porte) questo significava DUE round da
+    # PORT_SCAN_TIMEOUT invece di uno solo per ogni host — su una rete
+    # grande (es. /16) il costo si moltiplica per il numero di host.
+    with ThreadPoolExecutor(max_workers=min(len(ports), config.PORT_SCAN_THREADS)) as pool:
         futures = {pool.submit(_check_port, ip, p, timeout): p for p in ports}
         for fut in futures:
             port = futures[fut]

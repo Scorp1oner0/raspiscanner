@@ -6,7 +6,9 @@ implicitamente dall'uso in produzione, qui interessa la logica attorno).
 """
 import http.client
 import unittest
+from unittest.mock import patch
 
+from scanner import config
 from scanner.fingerprint import ports
 
 
@@ -155,6 +157,16 @@ class TestScanPorts(unittest.TestCase):
         ports._check_port = lambda ip, port, timeout: False
         result = ports.scan_ports("10.0.0.5", ports={80: "HTTP"})
         self.assertEqual(result, [])
+
+    def test_uses_configured_thread_pool_size_not_a_hardcoded_one(self):
+        """Bug reale corretto: config.PORT_SCAN_THREADS esisteva ma non
+        veniva mai letta, il pool restava fisso a 16 worker a prescindere
+        da quante porte c'erano da controllare."""
+        ports._check_port = lambda ip, port, timeout: False
+        many_ports = {p: str(p) for p in range(20000, 20000 + config.PORT_SCAN_THREADS + 10)}
+        with patch("scanner.fingerprint.ports.ThreadPoolExecutor", wraps=ports.ThreadPoolExecutor) as spy:
+            ports.scan_ports("10.0.0.5", ports=many_ports)
+        spy.assert_called_once_with(max_workers=config.PORT_SCAN_THREADS)
 
     def test_one_port_raising_does_not_break_the_others(self):
         """Bug reale corretto scrivendo questo test: un singolo controllo
