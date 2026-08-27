@@ -26,3 +26,4 @@ data/tls_key.pem
 data/history.db
 data/webhooks.json
 data/monitoring.json
+data/targets.json

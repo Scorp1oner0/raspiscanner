@@ -572,6 +572,93 @@ async function saveMonitoringConfig() {
   }
 }
 
+// Scan targets (P4): stato locale non ancora salvato (l'utente puo'
+// aggiungere/rimuovere reti custom prima di premere "Save", che manda
+// tutta la lista in un colpo solo — vedi scanner.targets.set_config,
+// rifiuta l'intera lista se anche un solo CIDR non e' valido).
+let _pendingCustomTargets = [];
+
+function renderTargetsCustomList() {
+  const list = $("targets-custom-list");
+  list.innerHTML = _pendingCustomTargets.length
+    ? _pendingCustomTargets.map((cidr) => `
+        <div class="user-row">
+          <span class="mono">${escapeHtml(cidr)}</span>
+          <button class="btn small btn-remove-target" data-cidr="${escapeHtml(cidr)}">🗑 Remove</button>
+        </div>
+      `).join("")
+    : '<p class="modal-desc">No custom networks configured.</p>';
+}
+
+async function refreshScanTargets() {
+  try {
+    const res = await fetch("/api/settings/targets");
+    if (!res.ok) return;  // viewer: 403, la sezione resta comunque nascosta da applyRoleBasedTabs
+    const data = await res.json();
+    $("targets-auto-interfaces").checked = !!data.auto_interfaces;
+    _pendingCustomTargets = data.custom || [];
+    renderTargetsCustomList();
+  } catch (e) {
+    console.error("refreshScanTargets", e);
+  }
+  refreshScanTargetsPreview();
+}
+
+async function refreshScanTargetsPreview() {
+  const box = $("scan-targets-preview");
+  try {
+    const res = await fetch("/api/scan/targets");
+    if (!res.ok) return;
+    const data = await res.json();
+    const lines = [];
+    for (const n of data.interfaces) {
+      lines.push(`<div class="addr-row"><span>${escapeHtml(n.cidr)}</span><span class="iface-name">${escapeHtml(n.iface)}</span></div>`);
+    }
+    for (const n of data.routed) {
+      lines.push(`<div class="addr-row"><span>${escapeHtml(n.cidr)}</span><span class="iface-name">${escapeHtml(n.iface)} · routed (ICMP only)</span></div>`);
+    }
+    box.innerHTML = lines.length ? lines.join("") : '<div class="addr-empty">Nothing to scan right now.</div>';
+  } catch (e) {
+    console.error("refreshScanTargetsPreview", e);
+  }
+}
+
+function addTargetNetwork() {
+  const input = $("targets-custom-input");
+  const cidr = input.value.trim();
+  if (!cidr) return;
+  if (!_pendingCustomTargets.includes(cidr)) {
+    _pendingCustomTargets.push(cidr);
+    renderTargetsCustomList();
+  }
+  input.value = "";
+}
+
+function removeTargetNetwork(cidr) {
+  _pendingCustomTargets = _pendingCustomTargets.filter((c) => c !== cidr);
+  renderTargetsCustomList();
+}
+
+async function saveScanTargets() {
+  const msg = $("targets-msg");
+  msg.textContent = "Saving...";
+  try {
+    const res = await fetch("/api/settings/targets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        auto_interfaces: $("targets-auto-interfaces").checked,
+        custom: _pendingCustomTargets,
+      }),
+    });
+    const data = await res.json();
+    msg.textContent = data.message || "";
+    if (data.ok) refreshScanTargetsPreview();
+  } catch (e) {
+    msg.textContent = "Network error.";
+  }
+}
+
 async function viewAuditReport(scanId) {
   const box = $("audit-report-text");
   $("audit-report-box").classList.remove("hidden");
@@ -598,6 +685,10 @@ function applyRoleBasedTabs() {
   document.querySelector('.tab-btn[data-tab="report"]').classList.toggle("hidden", !isAtLeastOperator);
   document.querySelector('.tab-btn[data-tab="history"]').classList.toggle("hidden", !isAtLeastOperator);
   document.querySelector('.tab-btn[data-tab="settings"]').classList.toggle("hidden", !isAdmin);
+  // Scan targets e' operator-level lato API (chi puo' avviare uno scan
+  // puo' decidere cosa scansiona), non admin-only come il resto delle
+  // Settings — vive per questo nella card "Device scan", non li'.
+  $("scan-targets-section").classList.toggle("hidden", !isAtLeastOperator);
 }
 
 function setupTabs() {
@@ -987,6 +1078,15 @@ async function init() {
   $("btn-close-audit-report").addEventListener("click", () => {
     $("audit-report-box").classList.add("hidden");
   });
+  $("btn-targets-add").addEventListener("click", addTargetNetwork);
+  $("btn-targets-save").addEventListener("click", saveScanTargets);
+  $("targets-custom-input").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); addTargetNetwork(); }
+  });
+  $("targets-custom-list").addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".btn-remove-target");
+    if (btn) removeTargetNetwork(btn.dataset.cidr);
+  });
   $("settings-user-list").addEventListener("click", (ev) => {
     const btn = ev.target.closest(".btn-remove-user");
     if (btn) removeUser(btn.dataset.username);
@@ -1030,6 +1130,7 @@ async function init() {
   refreshNetwork();
   refreshScan();
   refreshSecurityStats();
+  refreshScanTargets();
   setInterval(refreshNetwork, 5000);
   setInterval(refreshScan, 1500);
   setInterval(refreshSecurityStats, 5000);

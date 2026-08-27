@@ -30,25 +30,29 @@ of some of the same discovery mechanisms.
    does, it won't guess: the dashboard lists every candidate (with host
    counts) and asks you to pick. Pre-existing IPs are left alone
    ("manual" mode). This step only decides the device's **own** address —
-   the device scan itself then runs automatically on whatever subnet the
-   interface ends up with, there's no separate list of networks to scan.
-   Runs continuously — unplug/replug the cable and it reconfigures on its
-   own.
+   what gets scanned is a separate, explicit setting (see below), not an
+   automatic side effect of this one. Runs continuously — unplug/replug
+   the cable and it reconfigures on its own.
 
-2. **Device scan** across every active subnet: all of Ethernet, every
-   Wi-Fi adapter present, and every active VPN tunnel (WireGuard,
-   OpenVPN, PPP, Tailscale, ZeroTier). ARP for regular links; ICMP sweep
-   on VPN interfaces the kernel marks NOARP, which have no MAC to report.
-   Per host: TCP port scan + HTTP banners, ONVIF WS-Discovery (real
-   vendor/model via `GetDeviceInformation` when available), mDNS/Bonjour
-   (friendly name, and for Apple devices the real hardware model from a
-   TXT record), offline OUI vendor lookup, reverse DNS. Classified by
-   specificity: **Camera**/**NVR-DVR** (protocol signals, not MAC vendor),
-   **Router**/**Switch**/**Access Point**, **Raspberry Pi**/other
-   recognized IoT hardware, **Phone**/**Tablet**/**Mac**/**PC** (from
-   hostname patterns), **PC (Windows/SMB)**/**Network printer** as a
-   fallback, or **Generic** if no signal is available at all — a
-   structural limit for locked-down devices, not a bug.
+2. **Device scan**, target networks configured independently of the
+   step above ("Scan targets" on the dashboard, next to "Start scan"):
+   by default, every network detected on an active interface — Ethernet,
+   every Wi-Fi adapter present, every active VPN tunnel (WireGuard,
+   OpenVPN, PPP, Tailscale, ZeroTier) — plus any custom network you add
+   explicitly. ARP for a network the device has an address in; ICMP
+   sweep for one it doesn't (a VPN tunnel the kernel marks NOARP, or a
+   custom network reachable only by routing) — no MAC there, ARP can't
+   cross a router. Per host: TCP port scan + HTTP banners, ONVIF
+   WS-Discovery (real vendor/model via `GetDeviceInformation` when
+   available), mDNS/Bonjour (friendly name, and for Apple devices the
+   real hardware model from a TXT record), offline OUI vendor lookup,
+   reverse DNS. Classified by specificity: **Camera**/**NVR-DVR**
+   (protocol signals, not MAC vendor), **Router**/**Switch**/**Access
+   Point**, **Raspberry Pi**/other recognized IoT hardware,
+   **Phone**/**Tablet**/**Mac**/**PC** (from hostname patterns), **PC
+   (Windows/SMB)**/**Network printer** as a fallback, or **Generic** if
+   no signal is available at all — a structural limit for locked-down
+   devices, not a bug.
 
 3. **"NETWORK ASSESSMENT" report**: per network, devices by category
    (cameras/NVR/network/other — every discovered device shows up
@@ -103,9 +107,12 @@ of some of the same discovery mechanisms.
   brute-force credential testing, no CVE matching. Findings describe what
   a service *exposes* to a normal connection, never whether it's actually
   exploitable — see [Security notes](#security-notes).
-- **It doesn't cross a router.** ARP-based discovery only sees the
-  directly connected L2 segment; a device on another VLAN/subnet needs to
-  be scanned from there, not found by proxy.
+- **It doesn't get MAC/vendor for anything beyond a router.** ARP only
+  works on a directly connected L2 segment. A custom scan target the
+  device has no address in (see "Scan targets" above) is still reached —
+  via an ICMP sweep routed through the kernel's own routing table — but
+  without a MAC, a vendor, or ONVIF/mDNS/LLDP-CDP/IPv6 for hosts found
+  there, same as a VPN tunnel today.
 - **It doesn't build a multi-hop network map.** Topology (`GET
   /api/topology`) is one hop — the gateway and directly observed LLDP/CDP
   neighbors — not a full network graph. That would need SNMP-walking

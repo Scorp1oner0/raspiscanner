@@ -25,7 +25,7 @@ from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from scanner import auth, monitoring, scan_engine, storage, tls, webhooks
+from scanner import auth, monitoring, scan_engine, storage, targets, tls, webhooks
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -272,6 +272,16 @@ def api_topology():
     return jsonify(scan_engine.get_state()["topology"])
 
 
+@app.route("/api/scan/targets")
+@require_role("viewer")
+def api_scan_targets_preview():
+    """Cosa scansionerebbe il prossimo scan ADESSO (reti da interfaccia +
+    reti custom gia' risolte su un'interfaccia di uscita reale), senza
+    avviare nulla — per mostrarlo in dashboard prima di premere "Start
+    scan". Configurazione vera e propria: GET/POST /api/settings/targets."""
+    return jsonify(scan_engine.preview_scan_targets())
+
+
 @app.route("/api/devices")
 @require_role("viewer")
 def api_devices():
@@ -422,6 +432,24 @@ def api_settings_monitoring_set():
     data = request.get_json(silent=True) or {}
     interval = data.get("interval_minutes", monitoring.DEFAULT_INTERVAL_MINUTES)
     ok, message = monitoring.set_config(bool(data.get("enabled")), interval)
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+
+@app.route("/api/settings/targets")
+@require_role("operator")
+def api_settings_targets_get():
+    return jsonify(targets.get_config())
+
+
+@app.route("/api/settings/targets", methods=["POST"])
+@require_role("operator")
+def api_settings_targets_set():
+    """Scan targets (P4): separato deliberatamente dal bootstrap/fallback
+    dell'indirizzo del Raspberry (scanner.network.setup, invariato) — vedi
+    scanner/targets.py. Stesso ruolo minimo di /api/scan/start: chi puo'
+    avviare uno scan puo' anche decidere cosa scansiona."""
+    data = request.get_json(silent=True) or {}
+    ok, message = targets.set_config(bool(data.get("auto_interfaces", True)), data.get("custom"))
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 

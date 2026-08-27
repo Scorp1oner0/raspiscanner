@@ -6,10 +6,11 @@ esterni: deve funzionare anche su reti isolate senza accesso a internet).
 """
 import ipaddress
 import logging
+import subprocess
 import threading
 import time
 
-from . import storage, vendor, webhooks
+from . import storage, targets, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import (
@@ -86,6 +87,57 @@ def _active_networks():
             if addr.get("ip") and addr.get("cidr"):
                 nets.append((info["iface"], addr["cidr"], addr["ip"]))
     return nets
+
+
+def _egress_interface_for(cidr):
+    """Interfaccia che il kernel userebbe per raggiungere `cidr` (via
+    tabella di routing reale, non un'ipotesi): serve per sapere su quale
+    interfaccia ascoltare le risposte ICMP di una rete target "custom"
+    (scanner.targets) che il Raspberry non ha come proprio indirizzo su
+    nessuna interfaccia — instradata attraverso un gateway, non
+    direttamente collegata via L2. None se il kernel non ha una rotta
+    (rete davvero irraggiungibile, o comando `ip` assente)."""
+    try:
+        network = ipaddress.ip_network(cidr, strict=False)
+        probe_ip = str(next(network.hosts(), network.network_address))
+        res = subprocess.run(
+            ["ip", "-4", "route", "get", probe_ip],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, StopIteration) as exc:
+        log.warning("route lookup fallita per il target custom %s: %s", cidr, exc)
+        return None
+    if res.returncode != 0:
+        return None
+    for line in res.stdout.splitlines():
+        parts = line.split()
+        if "dev" in parts:
+            return parts[parts.index("dev") + 1]
+    return None
+
+
+def _routed_target_networks(known_cidrs):
+    """Reti "custom" configurate in scanner.targets che NON corrispondono
+    gia' a una rete attiva su un'interfaccia (quelle sono gia' incluse da
+    _active_networks() — niente duplicati). Ritornate come
+    [(iface, cidr, None), ...]: `local_ip` e' sempre None perche', per
+    definizione, il Raspberry non ha un proprio indirizzo li' dentro —
+    scansionate SEMPRE via ICMP instradato in _run_scan_thread, mai ARP
+    (l'ARP non attraversa un router), niente ONVIF/mDNS/LLDP-CDP/IPv6
+    (richiederebbero un indirizzo locale in quella subnet per avere senso,
+    e ri-userebbero comunque la stessa interfaccia gia' sondata nel giro
+    "normale" di quell'iface, duplicando lavoro invece di aggiungerne)."""
+    cfg = targets.get_config()
+    routed = []
+    for cidr in cfg["custom"]:
+        if cidr in known_cidrs:
+            continue
+        iface = _egress_interface_for(cidr)
+        if not iface:
+            log.warning("nessuna rotta verso la rete target custom %s, saltata", cidr)
+            continue
+        routed.append((iface, cidr, None))
+    return routed
 
 
 def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
@@ -382,6 +434,22 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
     }
 
 
+def preview_scan_targets():
+    """Cosa scansionerebbe il PROSSIMO run_scan() in questo momento, senza
+    avviare nulla — per la dashboard (mostra all'operatore l'effetto della
+    configurazione scan targets prima di premere "Start scan", vedi
+    scanner.targets). Le reti "routed" sono gia' risolte (interfaccia di
+    uscita reale via `ip route get`), non solo elencate come stringhe."""
+    targets_cfg = targets.get_config()
+    interface_networks = _active_networks() if targets_cfg["auto_interfaces"] else []
+    routed_networks = _routed_target_networks({cidr for _, cidr, _ in interface_networks})
+    return {
+        "auto_interfaces": targets_cfg["auto_interfaces"],
+        "interfaces": [{"iface": iface, "cidr": cidr} for iface, cidr, _ in interface_networks],
+        "routed": [{"iface": iface, "cidr": cidr} for iface, cidr, _ in routed_networks],
+    }
+
+
 def run_scan():
     # Check-then-set atomico sotto lo stesso lock: senza tenerlo per tutto
     # il blocco, due richieste /api/scan/start concorrenti potevano
@@ -393,9 +461,18 @@ def run_scan():
     with _lock:
         if _state["running"]:
             return False, "Scan already in progress"
-        networks = _active_networks()
+        # Scan targets (separati dal bootstrap/fallback dell'indirizzo del
+        # Raspberry, vedi scanner.targets): di default coincidono con le
+        # interfacce attive (comportamento pre-esistente, invariato), ma
+        # "auto_interfaces: false" li esclude e/o l'operatore puo' aggiungere
+        # reti "custom" raggiungibili solo per instradamento (niente ARP
+        # possibile li', vedi _routed_target_networks).
+        targets_cfg = targets.get_config()
+        interface_networks = _active_networks() if targets_cfg["auto_interfaces"] else []
+        routed_networks = _routed_target_networks({cidr for _, cidr, _ in interface_networks})
+        networks = interface_networks + routed_networks
         if not networks:
-            return False, "No active network (eth/wifi) to scan"
+            return False, "No active network (eth/wifi) or configured scan target to scan"
         _stop_flag.clear()
         _state.update(running=True, progress=0, total=0, current_ip=None,
                        started_at=time.time(), finished_at=None, error=None, devices={})
@@ -416,13 +493,28 @@ def _run_scan_thread(networks):
         for iface, cidr, iface_ip in networks:
             if _stop_flag.is_set():
                 break
-            is_noarp_iface = network_setup.is_noarp(iface)
+            # iface_ip None = rete "custom" instradata (scanner.targets):
+            # il Raspberry non ha un proprio indirizzo li' dentro, quindi
+            # niente ARP possibile (l'ARP non attraversa un router) e
+            # niente probe che richiederebbero un indirizzo locale per
+            # avere senso (ONVIF/mDNS si legano a un indirizzo locale;
+            # LLDP/CDP e IPv6 discovery mandano/ascoltano frame L2, che
+            # su un link instradato non arriverebbero comunque) — stesso
+            # trattamento gia' riservato alle interfacce NOARP (VPN), qui
+            # esteso a "non ho affatto un indirizzo locale in questa rete".
+            is_routed_target = iface_ip is None
+            is_noarp_iface = is_routed_target or network_setup.is_noarp(iface)
             if is_noarp_iface:
-                # VPN instradata (WireGuard, OpenVPN tun, PPP...): niente
-                # dominio di broadcast L2, l'ARP scan non riceverebbe mai
-                # risposta indipendentemente da quanti host reali ci siano
-                # (verificato: il kernel marca queste interfacce NOARP).
-                log.info("discovery ICMP su %s (%s, interfaccia NOARP)", cidr, iface)
+                # VPN instradata (WireGuard, OpenVPN tun, PPP...) o rete
+                # target custom instradata: niente dominio di broadcast L2,
+                # l'ARP scan non riceverebbe mai risposta indipendentemente
+                # da quanti host reali ci siano (verificato per le VPN: il
+                # kernel le marca NOARP; le reti custom instradate sono
+                # per definizione fuori dal segmento L2 locale).
+                log.info(
+                    "discovery ICMP su %s (%s, %s)", cidr, iface,
+                    "target custom instradato" if is_routed_target else "interfaccia NOARP",
+                )
                 hosts = icmp_scan(cidr, iface, psrc=iface_ip)
             else:
                 log.info("discovery ARP su %s (%s)", cidr, iface)
@@ -431,15 +523,25 @@ def _run_scan_thread(networks):
             for h in hosts:
                 # vlan_id: solo arp_scan lo popola (802.1Q, vedi
                 # scanner.discovery.arp.extract_vlan_id); icmp_scan (link
-                # NOARP/VPN) non ha un concetto di VLAN a questo livello,
-                # .get() con default None copre entrambi i casi.
+                # NOARP/VPN/target custom) non ha un concetto di VLAN a
+                # questo livello, .get() con default None copre tutti i casi.
                 all_hosts.append((h["ip"], h["mac"], iface, cidr, h.get("vlan_id")))
                 seen_ips.add(h["ip"])
-            if iface_ip not in seen_ips:
+            if iface_ip is not None and iface_ip not in seen_ips:
                 # Un host non riceve mai la propria richiesta ARP broadcast
                 # di ritorno: senza questo, la macchina su cui gira lo
-                # scanner non comparirebbe mai da sola nei risultati.
+                # scanner non comparirebbe mai da sola nei risultati. Non
+                # si applica a una rete custom instradata: li' il
+                # Raspberry non ha nessun indirizzo proprio da aggiungere.
                 all_hosts.append((iface_ip, network_setup.get_interface_mac(iface), iface, cidr, None))
+
+            if is_routed_target:
+                # Nessun probe locale ha senso su una rete instradata (vedi
+                # sopra): niente ONVIF/mDNS/LLDP-CDP/IPv6, niente voce di
+                # topologia (l'interfaccia usata per instradare e' gia'
+                # coperta, con la sua vera subnet, dal giro "normale" sopra
+                # o in un'iterazione precedente di questo stesso loop).
+                continue
 
             # ONVIF, mDNS, LLDP/CDP e IPv6 sono probe indipendenti: in
             # thread separati invece che in sequenza, cosi' la loro attesa

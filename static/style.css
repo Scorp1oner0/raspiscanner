@@ -207,6 +207,7 @@ main { padding: 24px; max-width: 1180px; margin: 0 auto; }
 .tab-btn.hidden { display: none; }
 .tab-panel.hidden { display: none; }
 #audit-report-box.hidden { display: none; }
+#scan-targets-section.hidden { display: none; }
 
 .export-row { margin-bottom: 12px; }
 

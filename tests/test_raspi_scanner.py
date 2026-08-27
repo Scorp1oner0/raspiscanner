@@ -90,6 +90,7 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         self._orig_history_db = config.HISTORY_DB_PATH
         self._orig_webhooks_path = config.WEBHOOKS_JSON_PATH
         self._orig_monitoring_path = config.MONITORING_JSON_PATH
+        self._orig_targets_path = config.TARGETS_JSON_PATH
         self._orig_generate = auth.generate_initial_password
         config.DATA_DIR = self._tmp_dir
         config.USERS_JSON_PATH = str(Path(self._tmp_dir) / "users.json")
@@ -102,6 +103,7 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         config.HISTORY_DB_PATH = str(Path(self._tmp_dir) / "history.db")
         config.WEBHOOKS_JSON_PATH = str(Path(self._tmp_dir) / "webhooks.json")
         config.MONITORING_JSON_PATH = str(Path(self._tmp_dir) / "monitoring.json")
+        config.TARGETS_JSON_PATH = str(Path(self._tmp_dir) / "targets.json")
         auth.generate_initial_password = lambda: "BootstrapPassw0rd"
 
         self.module = _load_raspi_scanner_module()
@@ -128,6 +130,7 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         config.HISTORY_DB_PATH = self._orig_history_db
         config.WEBHOOKS_JSON_PATH = self._orig_webhooks_path
         config.MONITORING_JSON_PATH = self._orig_monitoring_path
+        config.TARGETS_JSON_PATH = self._orig_targets_path
         shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
 
@@ -479,6 +482,55 @@ class TestMonitoringSettings(RaspiScannerAppTestCase):
             json={"enabled": True, "interval_minutes": 1},
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class TestScanTargetsSettings(RaspiScannerAppTestCase):
+    """Scan targets (P4): a differenza di webhook/monitoring, ruolo minimo
+    "operator" non "admin" — chi puo' avviare uno scan (/api/scan/start,
+    gia' operator) puo' anche decidere cosa scansiona."""
+
+    def test_viewer_cannot_read_targets_config(self):
+        resp = self.client.get("/api/settings/targets", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_operator_can_get_and_set_targets_config(self):
+        resp = self.client.get("/api/settings/targets", auth=self.operator_auth)
+        self.assertEqual(resp.get_json(), {"auto_interfaces": True, "custom": []})
+
+        resp = self.client.post(
+            "/api/settings/targets", auth=self.operator_auth,
+            json={"auto_interfaces": False, "custom": ["192.168.20.0/24"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        resp = self.client.get("/api/settings/targets", auth=self.operator_auth)
+        self.assertEqual(resp.get_json(), {"auto_interfaces": False, "custom": ["192.168.20.0/24"]})
+
+    def test_invalid_custom_network_rejected(self):
+        resp = self.client.post(
+            "/api/settings/targets", auth=self.operator_auth,
+            json={"auto_interfaces": True, "custom": ["not-a-network"]},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_viewer_cannot_preview_scan_targets(self):
+        """La preview (/api/scan/targets) e' un endpoint DIVERSO dalla
+        configurazione: sola lettura, stesso ruolo minimo di /api/network
+        (viewer) — mostra cosa scansionerebbe il prossimo scan, non
+        permette di cambiarlo."""
+        resp = self.client.get("/api/scan/targets", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_preview_reflects_saved_config(self):
+        self.client.post(
+            "/api/settings/targets", auth=self.operator_auth,
+            json={"auto_interfaces": False, "custom": []},
+        )
+        resp = self.client.get("/api/scan/targets", auth=self.viewer_auth)
+        data = resp.get_json()
+        self.assertFalse(data["auto_interfaces"])
+        self.assertEqual(data["interfaces"], [])
+        self.assertEqual(data["routed"], [])
 
 
 class TestAuditReportRoute(RaspiScannerAppTestCase):

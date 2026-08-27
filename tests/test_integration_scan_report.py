@@ -38,8 +38,10 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         self._tmp_dir = tempfile.mkdtemp()
         self._orig_history_db = config.HISTORY_DB_PATH
         self._orig_webhooks_path = config.WEBHOOKS_JSON_PATH
+        self._orig_targets_path = config.TARGETS_JSON_PATH
         config.HISTORY_DB_PATH = str(Path(self._tmp_dir) / "history.db")
         config.WEBHOOKS_JSON_PATH = str(Path(self._tmp_dir) / "webhooks.json")
+        config.TARGETS_JSON_PATH = str(Path(self._tmp_dir) / "targets.json")
 
         scan_engine.network_setup.get_status = lambda: {
             "eth": {"up": True, "iface": "eth0",
@@ -80,6 +82,7 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         scan_engine._state.update(running=False, devices={}, topology={})
         config.HISTORY_DB_PATH = self._orig_history_db
         config.WEBHOOKS_JSON_PATH = self._orig_webhooks_path
+        config.TARGETS_JSON_PATH = self._orig_targets_path
         shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
     def _run_and_wait(self, timeout=5):
@@ -195,6 +198,130 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         # 3 host scopribili (2 ARP + l'host locale): lo stop deve averne
         # fermato la lavorazione prima che finissero tutti.
         self.assertLess(len(state["devices"]), 3)
+
+
+class TestRoutedTargetScanIntegration(unittest.TestCase):
+    """Scan target "custom" (scanner.targets): una rete che il Raspberry
+    NON ha come proprio indirizzo su nessuna interfaccia, raggiungibile
+    solo per instradamento — deve finire nello scan via ICMP (mai ARP),
+    senza probe ONVIF/mDNS/LLDP-CDP/IPv6 aggiuntivi per lei, insieme alla
+    rete "normale" gia' attiva sull'interfaccia (arp_scan)."""
+
+    def setUp(self):
+        self._orig = {
+            name: getattr(scan_engine, name)
+            for name in ("arp_scan", "icmp_scan", "onvif_probe", "mdns_probe", "lldp_cdp_probe",
+                         "ipv6_discovery", "get_device_info_multi", "scan_ports", "grab_http_banner",
+                         "resolve_hostname", "get_default_gateway", "_egress_interface_for")
+        }
+        self._orig_get_status = scan_engine.network_setup.get_status
+        self._orig_is_noarp = scan_engine.network_setup.is_noarp
+        self._orig_get_mac = scan_engine.network_setup.get_interface_mac
+
+        self._tmp_dir = tempfile.mkdtemp()
+        self._orig_history_db = config.HISTORY_DB_PATH
+        self._orig_webhooks_path = config.WEBHOOKS_JSON_PATH
+        self._orig_targets_path = config.TARGETS_JSON_PATH
+        config.HISTORY_DB_PATH = str(Path(self._tmp_dir) / "history.db")
+        config.WEBHOOKS_JSON_PATH = str(Path(self._tmp_dir) / "webhooks.json")
+        config.TARGETS_JSON_PATH = str(Path(self._tmp_dir) / "targets.json")
+
+        from scanner import targets
+        targets.set_config(True, ["10.20.0.0/24"])
+
+        scan_engine.network_setup.get_status = lambda: {
+            "eth": {"up": True, "iface": "eth0",
+                    "addresses": [{"ip": "192.168.10.253", "cidr": "192.168.10.0/24"}]},
+            "wifi": {}, "vpn": {},
+        }
+        scan_engine.network_setup.is_noarp = lambda iface: False
+        scan_engine.network_setup.get_interface_mac = lambda iface: "AA:BB:CC:00:00:FE"
+        scan_engine.get_default_gateway = lambda iface: "192.168.10.1"
+        scan_engine.resolve_hostname = lambda ip, timeout=1: None
+        scan_engine._egress_interface_for = lambda cidr: "eth0"
+
+        self.arp_calls = []
+        self.icmp_calls = []
+
+        def fake_arp_scan(cidr, iface, timeout=None, psrc=None):
+            self.arp_calls.append(cidr)
+            return [{"ip": "192.168.10.21", "mac": "AA:BB:CC:11:22:33", "vlan_id": None}]
+
+        def fake_icmp_scan(cidr, iface, timeout=None, psrc=None):
+            self.icmp_calls.append(cidr)
+            if cidr == "10.20.0.0/24":
+                return [{"ip": "10.20.0.55", "mac": None}]
+            return []
+
+        scan_engine.arp_scan = fake_arp_scan
+        scan_engine.icmp_scan = fake_icmp_scan
+        scan_engine.onvif_probe = lambda iface_ip=None, timeout=3: {}
+        scan_engine.mdns_probe = lambda iface_ip=None, timeout=2.5, reverse_ips=None: {}
+        scan_engine.lldp_cdp_probe = lambda iface, timeout=3: []
+        scan_engine.ipv6_discovery = lambda iface, timeout=None: []
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
+        scan_engine.scan_ports = lambda ip: []
+        scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
+
+        scan_engine._state.update(running=False, devices={}, progress=0, total=0,
+                                   current_ip=None, started_at=None, finished_at=None, error=None)
+
+    def tearDown(self):
+        for name, fn in self._orig.items():
+            setattr(scan_engine, name, fn)
+        scan_engine.network_setup.get_status = self._orig_get_status
+        scan_engine.network_setup.is_noarp = self._orig_is_noarp
+        scan_engine.network_setup.get_interface_mac = self._orig_get_mac
+        scan_engine._state.update(running=False, devices={}, topology={})
+        config.HISTORY_DB_PATH = self._orig_history_db
+        config.WEBHOOKS_JSON_PATH = self._orig_webhooks_path
+        config.TARGETS_JSON_PATH = self._orig_targets_path
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
+    def _run_and_wait(self, timeout=5):
+        ok, message = scan_engine.run_scan()
+        self.assertTrue(ok, message)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not scan_engine.get_state()["running"]:
+                return scan_engine.get_state()
+            time.sleep(0.02)
+        self.fail("scan did not finish within the test timeout")
+
+    def test_routed_target_scanned_via_icmp_alongside_the_active_interface(self):
+        state = self._run_and_wait()
+        devices = {d["ip"]: d for d in state["devices"]}
+
+        # La rete "normale" sull'interfaccia usa ARP, mai ICMP.
+        self.assertIn("192.168.10.0/24", self.arp_calls)
+        self.assertNotIn("192.168.10.0/24", self.icmp_calls)
+        # Il target custom instradato usa SEMPRE ICMP, mai ARP (l'ARP non
+        # attraversa un router).
+        self.assertIn("10.20.0.0/24", self.icmp_calls)
+        self.assertNotIn("10.20.0.0/24", self.arp_calls)
+
+        routed_device = devices["10.20.0.55"]
+        self.assertIsNone(routed_device["mac"])
+        self.assertEqual(routed_device["network"], "10.20.0.0/24")
+        self.assertEqual(routed_device["iface"], "eth0")
+
+    def test_routed_target_does_not_get_its_own_topology_entry(self):
+        """L'interfaccia di uscita e' gia' coperta, con la SUA vera
+        subnet, dal giro "normale" — il target instradato non deve
+        sovrascriverla con la propria cidr/gateway."""
+        state = self._run_and_wait()
+        self.assertIn("eth0", state["topology"])
+        self.assertEqual(state["topology"]["eth0"]["cidr"], "192.168.10.0/24")
+
+    def test_no_active_network_and_no_custom_targets_fails_clearly(self):
+        from scanner import targets
+        targets.set_config(True, [])
+        scan_engine.network_setup.get_status = lambda: {
+            "eth": {"up": False, "iface": "eth0", "addresses": []}, "wifi": {}, "vpn": {},
+        }
+        ok, message = scan_engine.run_scan()
+        self.assertFalse(ok)
+        self.assertIn("No active network", message)
 
 
 if __name__ == "__main__":

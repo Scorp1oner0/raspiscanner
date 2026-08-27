@@ -53,6 +53,7 @@ rsync -a --delete \
   --exclude "data/history.db" \
   --exclude "data/webhooks.json" \
   --exclude "data/monitoring.json" \
+  --exclude "data/targets.json" \
   "$SRC_DIR"/ "$DEST_DIR"/
 
 # data/oui.csv is excluded above specifically so a re-install never clobbers

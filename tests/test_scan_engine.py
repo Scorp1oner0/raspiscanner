@@ -1,7 +1,10 @@
+import shutil
+import tempfile
 import threading
 import unittest
+from pathlib import Path
 
-from scanner import scan_engine
+from scanner import config, scan_engine
 from scanner.network import setup as network_setup
 
 
@@ -154,6 +157,137 @@ class TestActiveNetworks(unittest.TestCase):
             ("wlan0", "192.168.1.0/24", "192.168.1.253"),
             ("wg0", "10.0.0.0/24", "10.0.0.3"),
         })
+
+
+class TestEgressInterfaceFor(unittest.TestCase):
+    """_egress_interface_for(): usata da _routed_target_networks per
+    sapere su quale interfaccia ascoltare le risposte ICMP di una rete
+    "custom" (scanner.targets) raggiungibile solo per instradamento —
+    subprocess.run mockato, mai un vero comando `ip` in un test."""
+
+    def setUp(self):
+        self._orig_run = scan_engine.subprocess.run
+
+    def tearDown(self):
+        scan_engine.subprocess.run = self._orig_run
+
+    def test_parses_dev_from_ip_route_get_output(self):
+        class _Result:
+            returncode = 0
+            stdout = "10.20.0.1 via 192.168.88.1 dev eth0 src 192.168.88.248 uid 1000 \n"
+        scan_engine.subprocess.run = lambda *a, **k: _Result()
+        self.assertEqual(scan_engine._egress_interface_for("10.20.0.0/24"), "eth0")
+
+    def test_directly_connected_route_without_via(self):
+        class _Result:
+            returncode = 0
+            stdout = "10.20.0.1 dev wlan0 src 10.20.0.5 \n"
+        scan_engine.subprocess.run = lambda *a, **k: _Result()
+        self.assertEqual(scan_engine._egress_interface_for("10.20.0.0/24"), "wlan0")
+
+    def test_no_route_returns_none(self):
+        class _Result:
+            returncode = 1
+            stdout = ""
+        scan_engine.subprocess.run = lambda *a, **k: _Result()
+        self.assertIsNone(scan_engine._egress_interface_for("10.20.0.0/24"))
+
+    def test_ip_command_missing_returns_none_instead_of_raising(self):
+        def _raise(*a, **k):
+            raise FileNotFoundError("ip: command not found")
+        scan_engine.subprocess.run = _raise
+        self.assertIsNone(scan_engine._egress_interface_for("10.20.0.0/24"))
+
+    def test_invalid_cidr_returns_none(self):
+        self.assertIsNone(scan_engine._egress_interface_for("not-a-network"))
+
+
+class TargetsConfigTestCase(unittest.TestCase):
+    """Base per i test che leggono scanner.targets: file di configurazione
+    su un percorso temporaneo, mai il vero data/targets.json."""
+
+    def setUp(self):
+        self._tmp_dir = tempfile.mkdtemp()
+        self._orig_path = config.TARGETS_JSON_PATH
+        config.TARGETS_JSON_PATH = str(Path(self._tmp_dir) / "targets.json")
+
+    def tearDown(self):
+        config.TARGETS_JSON_PATH = self._orig_path
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
+
+class TestRoutedTargetNetworks(TargetsConfigTestCase):
+    def setUp(self):
+        super().setUp()
+        self._orig_egress = scan_engine._egress_interface_for
+
+    def tearDown(self):
+        scan_engine._egress_interface_for = self._orig_egress
+        super().tearDown()
+
+    def test_no_custom_targets_returns_empty(self):
+        self.assertEqual(scan_engine._routed_target_networks(known_cidrs=set()), [])
+
+    def test_custom_target_already_covered_by_an_interface_is_skipped(self):
+        """Se una rete "custom" combacia con una gia' attiva su
+        un'interfaccia, e' gia' inclusa da _active_networks() — includerla
+        di nuovo qui la scansionerebbe due volte."""
+        from scanner import targets
+        targets.set_config(True, ["192.168.88.0/24"])
+        result = scan_engine._routed_target_networks(known_cidrs={"192.168.88.0/24"})
+        self.assertEqual(result, [])
+
+    def test_custom_target_resolved_to_its_egress_interface(self):
+        from scanner import targets
+        targets.set_config(True, ["10.20.0.0/24"])
+        scan_engine._egress_interface_for = lambda cidr: "eth0"
+        result = scan_engine._routed_target_networks(known_cidrs=set())
+        self.assertEqual(result, [("eth0", "10.20.0.0/24", None)])
+
+    def test_unreachable_custom_target_is_skipped_not_crashed(self):
+        from scanner import targets
+        targets.set_config(True, ["10.20.0.0/24"])
+        scan_engine._egress_interface_for = lambda cidr: None
+        result = scan_engine._routed_target_networks(known_cidrs=set())
+        self.assertEqual(result, [])
+
+
+class TestPreviewScanTargets(TargetsConfigTestCase):
+    def setUp(self):
+        super().setUp()
+        self._orig_get_status = scan_engine.network_setup.get_status
+        self._orig_egress = scan_engine._egress_interface_for
+        scan_engine.network_setup.get_status = lambda: {
+            "eth": {"up": True, "iface": "eth0", "addresses": [{"ip": "192.168.88.249", "cidr": "192.168.88.0/24"}]},
+            "wifi": {}, "vpn": {},
+        }
+        scan_engine._egress_interface_for = lambda cidr: "eth0"
+
+    def tearDown(self):
+        scan_engine.network_setup.get_status = self._orig_get_status
+        scan_engine._egress_interface_for = self._orig_egress
+        super().tearDown()
+
+    def test_auto_interfaces_only_by_default(self):
+        preview = scan_engine.preview_scan_targets()
+        self.assertTrue(preview["auto_interfaces"])
+        self.assertEqual(preview["interfaces"], [{"iface": "eth0", "cidr": "192.168.88.0/24"}])
+        self.assertEqual(preview["routed"], [])
+
+    def test_disabling_auto_interfaces_drops_them_from_the_preview(self):
+        from scanner import targets
+        targets.set_config(False, ["10.20.0.0/24"])
+        preview = scan_engine.preview_scan_targets()
+        self.assertFalse(preview["auto_interfaces"])
+        self.assertEqual(preview["interfaces"], [])
+        self.assertEqual(preview["routed"], [{"iface": "eth0", "cidr": "10.20.0.0/24"}])
+
+    def test_custom_target_added_alongside_auto_interfaces(self):
+        from scanner import targets
+        targets.set_config(True, ["10.20.0.0/24"])
+        preview = scan_engine.preview_scan_targets()
+        self.assertEqual(preview["interfaces"], [{"iface": "eth0", "cidr": "192.168.88.0/24"}])
+        self.assertEqual(preview["routed"], [{"iface": "eth0", "cidr": "10.20.0.0/24"}])
 
 
 class TestOrphanOnvifIps(unittest.TestCase):

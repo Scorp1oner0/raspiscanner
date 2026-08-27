@@ -12,6 +12,7 @@ raspi-scanner.py             Entry point: dashboard Flask (default) o CLI --repo
 │   ├── storage.py                 Storico scan/asset database (SQLite, data/history.db)
 │   ├── webhooks.py                 Notifica POST opzionale a fine scan
 │   ├── monitoring.py                Continuous Monitoring: scheduler di scan automatici
+│   ├── targets.py                    Scan targets: reti custom oltre a quelle di interfaccia
 │   │
 │   ├── discovery/                 Scoperta host su una subnet
 │   │   ├── arp.py                   ARP scan (scapy) + reverse DNS + tag VLAN 802.1Q
@@ -51,7 +52,13 @@ raspi-scanner.py             Entry point: dashboard Flask (default) o CLI --repo
 
 1. `scan_engine._active_networks()` legge da `network.setup.get_status()` ogni
    indirizzo IPv4 attivo su eth, su **ogni** scheda Wi-Fi presente e su ogni
-   tunnel VPN attivo (WireGuard/OpenVPN/PPP/Tailscale/ZeroTier).
+   tunnel VPN attivo (WireGuard/OpenVPN/PPP/Tailscale/ZeroTier). Se
+   `scanner.targets` ha `auto_interfaces: false`, questo passo viene
+   saltato del tutto (vedi "Scan targets vs. network bootstrap" sotto).
+   Le reti "custom" configurate in `scanner.targets` che NON corrispondono
+   gia' a un'interfaccia attiva vengono aggiunte da
+   `scan_engine._routed_target_networks()`, risolte alla vera interfaccia
+   di uscita via `ip route get` (`_egress_interface_for()`).
 2. Per ciascuna subnet, in parallelo: `discovery.arp_scan()` (o
    `discovery.icmp_scan()` sui link NOARP) trova IP+MAC/IP; contestualmente,
    in thread separati, `cameras.onvif.onvif_probe()` (WS-Discovery),
@@ -81,6 +88,29 @@ raspi-scanner.py             Entry point: dashboard Flask (default) o CLI --repo
 6. `monitoring.py` puo' ripetere questo intero flusso automaticamente a
    intervalli, chiamando la stessa `scan_engine.run_scan()` del pulsante
    "Start scan" — nessun percorso di scan separato per gli scan automatici.
+
+## Scan targets vs. network bootstrap
+
+Due concetti separati DELIBERATAMENTE, che prima di questa feature
+coincidevano implicitamente in un solo meccanismo:
+
+- **Network bootstrap/fallback** (`scanner/network/setup.py`, INVARIATO):
+  su quale indirizzo configurare il Raspberry stesso quando il DHCP non
+  risponde (classi preimpostate + probe ARP, vedi README).
+- **Scan targets** (`scanner/targets.py`): quali reti un'operazione di
+  scan analizza davvero. Di default coincidono con le reti rilevate sulle
+  interfacce attive (comportamento originale, invariato per chi non
+  tocca `data/targets.json`), ma un operatore puo' anche disattivare
+  quell'automatismo e/o aggiungere reti "custom".
+
+Una rete custom che il Raspberry non ha come proprio indirizzo su
+nessuna interfaccia non e' raggiungibile via ARP (limite di protocollo,
+non implementativo): `scan_engine._egress_interface_for()` chiede al
+kernel (`ip route get`) quale interfaccia userebbe per raggiungerla, e
+quella rete viene poi scansionata SOLO via ICMP sweep — stesso
+trattamento gia' riservato alle interfacce NOARP (VPN). Niente
+MAC/vendor, niente ONVIF/mDNS/LLDP-CDP/IPv6 per gli host trovati li'
+(richiederebbero un indirizzo locale in quella subnet per avere senso).
 
 ## Modello di accesso
 

@@ -133,6 +133,22 @@ next checkpoint (not necessarily instantaneous).
 }
 ```
 
+### `GET /api/scan/targets` — viewer
+What the *next* `run_scan()` would actually scan right now, without
+starting anything — networks from active interfaces plus any configured
+custom target, already resolved to a real egress interface. See
+**Scan targets** below for how to configure it.
+```json
+{
+  "auto_interfaces": true,
+  "interfaces": [{"iface": "eth0", "cidr": "192.168.1.0/24"}],
+  "routed": [{"iface": "eth0", "cidr": "10.20.0.0/24"}]
+}
+```
+`routed` entries are reached only through routing (no local address
+there), so they're scanned via ICMP, not ARP — no MAC/vendor for hosts
+found there, same limitation as a VPN tunnel (see **Scan targets**).
+
 ### `GET /api/topology` — operator
 One-hop network adjacency from the last (or current) scan — not a
 multi-hop graph (that would need walking remote switches' MIBs via
@@ -291,6 +307,38 @@ data in JSON form).
 `compared_to_scan_id` is `null` (and the report has no changes section)
 if `scan_id` is the first scan ever saved. `404` if `scan_id` doesn't
 exist, or if no scan has ever been saved and none was given.
+
+## Scan targets
+
+Two independent settings, deliberately not mixed together:
+
+- **Network bootstrap** (`scanner/network/setup.py`, no dedicated API
+  section — see the dashboard's "Network Status" card): decides what
+  address *this device* configures on `eth0` (DHCP, then preset-subnet
+  fallback). Unaffected by anything below.
+- **Scan targets** (this section): decides what a scan actually
+  *analyzes*. Defaults to every network detected on an active interface
+  (`auto_interfaces: true`, the original, only behavior before this was
+  configurable) — optionally combined with, or replaced by, networks the
+  operator adds explicitly.
+
+A custom network the device has no address in at all can't be reached by
+ARP (ARP doesn't cross a router — see README, "What it doesn't do"): it's
+scanned via an ICMP sweep routed through whatever interface the kernel's
+own routing table would use, same as an active VPN tunnel today. That
+means IP-only discovery there — no MAC, no vendor, no ONVIF/mDNS/LLDP-CDP/
+IPv6 (all of those need a local address on that segment to mean anything).
+Use `GET /api/scan/targets` to see exactly what the next scan would do
+before running it.
+
+### `GET /api/settings/targets` — operator
+`{"auto_interfaces": true, "custom": ["192.168.20.0/24"]}`.
+
+### `POST /api/settings/targets` — operator
+Body: `{"auto_interfaces": true, "custom": ["192.168.20.0/24", "10.0.5.0/24"]}`.
+Each entry in `custom` is normalized to its network address (`.5/24`
+becomes `.0/24`); `400` if any entry isn't a valid IPv4 CIDR — the whole
+list is rejected together rather than saving a partial one.
 
 ## Settings
 

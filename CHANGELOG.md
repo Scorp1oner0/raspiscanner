@@ -1,147 +1,149 @@
 # Changelog
 
 All notable changes to this project are documented here. Format loosely
-follows [Keep a Changelog](https://keepachangelog.com/); no version has
-been tagged yet, so everything below is grouped under **Unreleased**.
+follows [Keep a Changelog](https://keepachangelog.com/).
 
-## Unreleased
+## [1.0.0] - 2026-08-28
 
-### Security
+First stable release. Grouped by the priority phases used during
+development (P0 security → P1 hardening → P2 robustness → P3 tests/
+release → P4 extended discovery). See [ROADMAP.md](ROADMAP.md) for
+what's next.
 
-- Dashboard no longer starts over plain HTTP if the TLS certificate
-  can't be generated — it refuses to start instead of silently exposing
-  Basic Auth credentials in cleartext.
-- Removed the fixed default credentials: a random bootstrap password is
-  generated on first launch, printed once to the service log (and, since
-  the installer fix below, to the terminal), and must be changed before
-  any other dashboard action is allowed.
+### P0 — Security
+
+- No fixed default credentials: a random, single-use bootstrap password
+  is generated on first launch and printed to the service log; the
+  account is locked to nothing else until it's changed.
+- Dashboard refuses to start over plain HTTP if a TLS certificate can't
+  be generated, instead of silently exposing Basic Auth credentials in
+  cleartext.
+- ONVIF XAddr validated against SSRF: rejects any address that isn't a
+  private, non-special IPv4 literal before an outbound request is made.
+
+### P1 — Access control & hardening
+
 - Role-based access control (`viewer` / `operator` / `admin`) on every
-  API route; user management restricted to admins, with a self-or-admin
-  exception for changing your own password. `viewer` is now scoped to
-  Devices/Cameras only — the report, history/asset/comparison, topology,
-  and audit-report endpoints (and their dashboard tabs) require
-  `operator` or higher.
+  API route, enforced independently of the dashboard UI. `viewer` sees
+  Devices/Cameras only; `operator` adds Report/History/topology/Audit;
+  `admin` adds user, webhook, and monitoring management.
 - CSRF/Origin validation on every mutating request.
-- Fixed the scan-start race condition: concurrent `/scan/start` requests
-  could previously both begin scanning and corrupt shared state.
-- ONVIF XAddr SSRF guard: rejects any address that isn't a private,
-  non-special IPv4 literal before making an outbound request.
-- Replaced ONVIF's hand-rolled string parsing with `xml.etree.ElementTree`,
+- systemd hardening (`NoNewPrivileges`, `ProtectSystem`, `ProtectHome`,
+  `PrivateTmp`, a minimal `CapabilityBoundingSet`) while keeping
+  `User=root` (required for raw-socket discovery and network
+  reconfiguration).
+- Fixed a scan-start race condition where two concurrent
+  `/api/scan/start` requests could both begin scanning and corrupt
+  shared state.
+
+### P2 — Discovery, ONVIF, and reporting robustness
+
+- Replaced hand-rolled ONVIF XML parsing with `xml.etree.ElementTree`,
   with an explicit `<!DOCTYPE` rejection (entity-expansion/"billion
   laughs" mitigation) — this data arrives from an unauthenticated
-  multicast probe.
-- systemd hardening (`NoNewPrivileges`, `ProtectSystem`, `ProtectHome`,
-  `PrivateTmp`, a minimal `CapabilityBoundingSet`, and more) on the
-  installed service, while keeping `User=root` (required for raw-socket
-  discovery and network reconfiguration).
-
-### Fixed
-
-- `install.sh`'s `rsync --delete` was not excluding `data/users.json`,
-  `data/tls_cert.pem`, `data/tls_key.pem`, or `data/oui.csv` — every
-  reinstall/upgrade would have wiped dashboard users, the TLS
-  certificate, and any downloaded full vendor database.
-- `data/`'s ownership could revert to the installing user instead of
-  root on reinstall, which — combined with the systemd capability
-  hardening above — would silently break every future write (password
-  changes, new users) after looking fine at first boot.
-- A malformed/prefixed closing tag (e.g. `</tds:Manufacturer>`) in a
-  device's ONVIF response left trailing garbage (`"Hikvision</tds:"`) in
-  the extracted manufacturer/model.
-- `nmcli`'s terse output escaping (`\:`, `\\`) wasn't handled: a Wi-Fi
-  SSID containing a literal `:` corrupted the parsed signal/security
-  fields on the same line.
-- IP address collisions during the preset-subnet DHCP fallback: the
-  scanner now ARP-probes a candidate "high" address before assigning it
-  to itself, instead of assuming it's always free.
-- A single failing port check in the TCP port scanner could raise and
-  discard the results for every other port on that host.
-- `PORT_SCAN_THREADS` was defined but never actually used — the port
-  scanner's thread pool was hardcoded to 16 workers regardless.
-- `install.sh` could wrongly report "no bootstrap account was created"
-  on a slow CPU (Raspberry Pi 3B+): it checked the log too soon after
-  restarting the service, before the account had actually been created
-  and logged — found testing on real Pi hardware.
-- Audit mode (`GET /api/audit/report`) could show a lower severity than
-  the live report for the exact same scan: `find_security_issues()`
-  looked up `http_banners` by an integer port key, but a device that
-  had gone through `storage.save_scan()`/`get_scan_devices()` had that
-  same dict with string keys (a JSON round-trip artifact — JSON object
-  keys are always strings), so the lookup silently missed and an "HTTP
-  admin panel exposed" finding degraded to a generic "HTTP service"
-  one. Found testing Audit mode end-to-end on real Pi hardware.
-
-### Added
-
-- Full user management in the dashboard's Settings tab (add/remove
-  users, change password, per-user role).
-- mDNS/Bonjour discovery, used both for hostnames/models and as a
-  fallback identification signal when a device doesn't respond to ONVIF.
-- VPN discovery and scanning: NOARP interfaces (WireGuard, OpenVPN tun,
-  PPP) are scanned via ICMP instead of ARP, detected from the kernel's
-  own interface flags rather than guessed from the interface name.
-- Device classification for phones/tablets/PCs/Macs via hostname
-  patterns, in addition to the existing camera/NVR/network-gear
-  detection.
-- More granular NVR/DVR classification (NVR / DVR / Video Encoder /
-  Video Decoder, where the device's own banner indicates it) instead of
-  a single "NVR/DVR" label.
-- More precise HTTP security findings (admin-panel vs. generic service,
+  multicast probe. Fixed a related bug where a malformed/prefixed
+  closing tag left trailing garbage in the extracted vendor/model.
+  mDNS/Bonjour discovery added as a second identification signal
+  alongside ONVIF.
+- VPN-aware scanning: NOARP interfaces (WireGuard, OpenVPN, PPP) are
+  scanned via ICMP instead of ARP, detected from the kernel's own
+  interface flags.
+- IP collision avoidance during the DHCP-fallback path: the scanner now
+  ARP-probes a candidate address before assigning it to itself, instead
+  of assuming it's free.
+- `nmcli`'s terse-output escaping (`\:`, `\\`) is now handled correctly;
+  a Wi-Fi SSID containing a literal `:` no longer corrupts the parsed
+  signal/security fields on the same line.
+- More precise HTTP security findings (admin panel vs. generic service,
   HTTPS-available vs. not) instead of a flat "medium" for any open HTTP
   port; a new "RTSP exposed" finding.
-- Report now includes scan start/end timestamps, duration, the
-  interface used per network, and a per-network summary line; the
-  dashboard's Report tab highlights severity levels and finding lines
-  by color.
-- Progress feedback during the preset-subnet DHCP fallback probe
-  ("Probing preset network 7/13: 192.168.x.0/24").
-- Full English translation of the dashboard, CLI output, and generated
-  report; redesigned as a clean, professional dashboard.
-- `uninstall.sh` (with an optional `--keep-data` flag).
-- Richer vendor fingerprinting: HTTP banner-based vendor/model guessing
-  (`vendor_source`/`model_source` shown in the dashboard) used as a
-  fallback when the local OUI (MAC) database has no match, covering
-  Hikvision/Dahua/Axis/Bosch/Ksenia/Reolink/Foscam/Vivotek and generic
-  OEM DVR/NVR boards.
-- VLAN awareness: the 802.1Q tag seen on a device's ARP traffic, when
-  present (most switch ports are "access" mode and strip it).
-- Optional SNMP discovery (`sysDescr`/`sysName`, community `public`,
-  read-only) on hosts already classified as network infrastructure.
-- LLDP/CDP discovery: passive listening for network gear's own
-  periodic announcements, correlated to ARP-discovered devices by MAC.
-- One-hop network topology map (`GET /api/topology`, new "Topology"
-  section in the dashboard) — gateway + LLDP/CDP neighbors per
-  interface, deliberately not a multi-hop graph (would require
-  SNMP-walking remote switches with credentials this tool doesn't have).
-- IPv6 discovery: ICMPv6 Echo Request to the link-local all-nodes
-  multicast (`ff02::1`), a supplementary signal alongside the primary
-  IPv4/ARP scan.
-- Structured JSON export (`/api/export?format=json`) as a metadata
-  envelope (`exported_at`, `scan_started_at`/`finished_at`, `count`)
-  instead of a bare device array.
-- Full API reference (`API.md`), kept in sync with the real routes by a
-  regression test in both directions.
-- Optional webhook: `POST`s a JSON summary (including a
-  `changes_since_previous_scan` diff) to one configured URL after every
-  scan; `http`/`https` only.
-- Local scan history (SQLite, `data/history.db`): every completed scan
-  is saved, a local asset database tracks every MAC ever seen, and two
-  past scans can be diffed ("first scan vs. current scan") — new
-  "History" tab in the dashboard.
-- Continuous Monitoring mode: optionally runs a scan automatically every
-  N minutes (skipping a cycle instead of overlapping if one is already
-  running) instead of always requiring a manual start.
-- Audit mode (`GET /api/audit/report`): a report generated from a
-  **saved** scan (reproducible — unlike the live `/api/report`, which can
-  be a partial snapshot mid-scan) with a "changes since previous scan"
-  section prepended automatically.
-
-### Changed
-
-- `install.sh` now stops on failure to install required system packages
-  (`python3-venv`, `python3-pip`, `isc-dhcp-client`, `iproute2`,
-  `openssl`) instead of silently continuing; `network-manager` remains
-  optional (Wi-Fi/hotspot only) and only warns on failure.
-- RTSP and admin-panel URLs in the dashboard are now explicitly labeled
-  "(candidate)" — they're a best-effort guess from an open port, never a
+- More granular NVR/DVR classification (NVR / DVR / Video Encoder /
+  Video Decoder) instead of one umbrella label; classification extended
+  to phones/tablets/PCs/Macs via hostname patterns.
+- RTSP and admin-panel URLs in the dashboard are explicitly labeled
+  "(candidate)" — a best-effort guess from an open port, never a
   verified working stream or confirmed admin panel.
+
+### P3 — Testing & release packaging
+
+- Full test suite: integration tests (discovery → classification →
+  report), concurrency tests, and malformed-input tests (ONVIF XML,
+  mDNS, HTTP banners). Fixed a bug found by the latter: a single
+  failing port check could discard the port-scan results for every
+  other port on the same host.
+- `PORT_SCAN_THREADS` was defined but never read — the port scanner's
+  thread pool was hardcoded to 16 workers regardless of the setting.
+- `install.sh`: required system packages now stop the install on
+  failure instead of continuing silently; `network-manager` stays
+  optional (Wi-Fi/hotspot only). `rsync --delete` now excludes
+  `data/users.json`, TLS certs, and the OUI database, so a
+  reinstall/upgrade no longer wipes dashboard users, the certificate,
+  or a downloaded full vendor database. Ownership of `data/` is fixed
+  explicitly to `root:root` on install — without it, the P1 systemd
+  capability hardening silently breaks every future write after
+  looking fine at first boot.
+- `uninstall.sh` (with an optional `--keep-data` flag), `SECURITY.md`,
+  `CONTRIBUTING.md`.
+- Full English translation of the dashboard, CLI output, and generated
+  report.
+
+### P4 — Extended discovery & operations
+
+- Richer vendor identification: HTTP banner-based vendor/model guessing
+  as a fallback when the OUI (MAC) database has no match, covering
+  common camera/NVR vendors and generic OEM DVR/NVR boards.
+- 802.1Q VLAN tag awareness on ARP traffic, when present.
+- Optional SNMP probing (`sysDescr`/`sysName`, community `public`,
+  read-only) on hosts already classified as network infrastructure.
+- Passive LLDP/CDP listening, correlated to ARP-discovered devices by
+  MAC, surfaced as a one-hop network topology map (`GET /api/topology`)
+  — deliberately not multi-hop (see [ROADMAP.md](ROADMAP.md)).
+- IPv6 discovery: ICMPv6 Echo Request to the link-local all-nodes
+  multicast, a supplementary signal alongside the primary IPv4/ARP
+  scan.
+- Local scan history (SQLite): every completed scan is saved, a local
+  asset database tracks every MAC ever seen, and two scans can be
+  diffed.
+- Optional webhook notification after each scan (including what
+  changed since the previous one); Continuous Monitoring mode runs
+  scans automatically on an interval instead of requiring a manual
+  start.
+- Audit mode (`GET /api/audit/report`): a report generated from a
+  saved scan — reproducible, unlike the live `/api/report`, which can
+  be a partial snapshot mid-scan.
+- Structured JSON export (metadata envelope instead of a bare device
+  array) and a full API reference (`API.md`), kept in sync with the
+  real routes by an automated test.
+- Scan targets, separated from network bootstrap: what a scan analyzes
+  is now an explicit setting (`GET`/`POST /api/settings/targets`),
+  independent of what network this device configures itself on. Custom
+  networks the device has no address in are scanned via a routed ICMP
+  sweep (kernel routing table, `ip route get`) instead of ARP — no
+  MAC/vendor there, same limitation as a VPN tunnel. Previously the two
+  concepts were implicitly the same thing.
+
+### Found only on real Raspberry Pi hardware
+
+458 automated tests never caught either of these — both needed a real,
+resource-constrained device to surface:
+
+- The installer could report "no bootstrap account was created" on a
+  slow CPU: it checked the log only 3 seconds after restarting the
+  service, before Flask/scapy had actually finished starting and
+  logging the account. Now polls for up to 15 seconds.
+- Audit mode could show a *lower* severity than the live report for the
+  identical scan. A device round-tripped through the SQLite-backed
+  history (`storage.save_scan()` → `get_scan_devices()`) has its
+  `http_banners` port keys turned from integers into strings — JSON
+  object keys are always strings — silently breaking an admin-panel
+  detection lookup keyed by integer, and degrading a real "HTTP admin
+  panel, no HTTPS" finding to a generic, lower-severity one.
+
+### Known limitations
+
+- Hosts within one scan are processed sequentially, not in parallel —
+  not tuned for very large (`/16`-scale) networks. See
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- RAM usage has not been profiled on a large scan.
+- Scan timing verified on a real Raspberry Pi 3B+ (22.3s for a
+  multi-interface scan, 8 hosts); Pi 4/5 not yet benchmarked.

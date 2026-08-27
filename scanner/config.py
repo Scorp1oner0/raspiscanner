@@ -15,6 +15,9 @@ HISTORY_DB_PATH = os.path.join(DATA_DIR, "history.db")
 WEBHOOKS_JSON_PATH = os.path.join(DATA_DIR, "webhooks.json")
 # Continuous Monitoring mode (P4): stesso trattamento di webhooks.json.
 MONITORING_JSON_PATH = os.path.join(DATA_DIR, "monitoring.json")
+# Scan target networks (extra reti da scansionare oltre a quelle rilevate
+# sulle interfacce attive): stesso trattamento di webhooks.json.
+TARGETS_JSON_PATH = os.path.join(DATA_DIR, "targets.json")
 
 # Interfacce di rete gestite (nomi tipici su Raspberry Pi OS / kernel Linux)
 ETH_IFACE_PREFIXES = ("eth", "en")
