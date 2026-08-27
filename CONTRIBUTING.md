@@ -8,8 +8,8 @@ beyond a small, self-contained fix before investing time in a PR — that
 avoids spending effort on something that doesn't fit the project's scope
 (see the "not a vulnerability scanner" boundary in
 [README, "Security notes"](README.md#security-notes) and
-[SECURITY.md](SECURITY.md)) or duplicates work already tracked in
-[TODO.md](TODO.md).
+[SECURITY.md](SECURITY.md)) or duplicates something already listed in
+[ROADMAP.md](ROADMAP.md).
 
 **Security issues**: do not open a public issue or PR that describes a
 vulnerability — follow [SECURITY.md](SECURITY.md) instead.
@@ -56,12 +56,10 @@ discovery, and `ip`/`dhclient`/`nmcli` for network reconfiguration.
   anything user-facing at runtime — dashboard UI text, CLI `--help` and
   printed output, the generated report, JSON error messages returned by
   the API — is in English. Match whichever you're editing.
-- **Don't scope-creep into new features.** [TODO.md](TODO.md) tracks
-  priorities (P0 security → P1 hardening → P2 robustness → P3
-  tests/release → P4 future features, all closed for 1.0 → P5 backlog
-  for anything beyond it). A PR that quietly adds P5-flavored
-  functionality to what should be a small, focused fix will likely be
-  asked to split it out.
+- **Don't scope-creep into new features.** [ROADMAP.md](ROADMAP.md)
+  tracks ideas deliberately deferred beyond 1.0. A PR that quietly adds
+  roadmap-flavored functionality to what should be a small, focused fix
+  will likely be asked to split it out.
 
 ## Reporting bugs
 

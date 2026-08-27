@@ -2,8 +2,7 @@
 
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/); no version has
-been tagged yet (pre-1.0, see [TODO.md](TODO.md) for release-readiness
-status), so everything below is grouped under **Unreleased**.
+been tagged yet, so everything below is grouped under **Unreleased**.
 
 ## Unreleased
 

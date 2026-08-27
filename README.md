@@ -8,92 +8,50 @@ style report.
 
 ## Why RaspiScanner?
 
-It's not just another ARP scanner or another ONVIF client: great tools
-already exist for generic network discovery (Nmap, Netdiscover, arp-scan)
-and for connecting to individual cameras via ONVIF/RTSP. RaspiScanner
-exists for a more specific use case that neither covers on its own:
-bundling into a single portable tool — a Raspberry Pi that auto-configures
-itself on an unfamiliar network on the fly, without needing to know the
-subnet/gateway in advance — network discovery, ARP/port/ONVIF
-fingerprinting, **distinguishing between camera, NVR/DVR and network
-gear**, and a security report (active but non-intrusive probes) built for
-surveying an existing video surveillance installation, not for a generic
-network audit. It doesn't reinvent Nmap: it builds a layer on top of some
-of its own discovery mechanisms, aimed at one specific use case.
+Good tools already exist for generic network discovery (Nmap, Netdiscover,
+arp-scan) and for talking to individual cameras via ONVIF/RTSP. Neither
+covers RaspiScanner's use case on its own: a portable device that
+auto-configures itself on an unfamiliar network without knowing the
+subnet/gateway in advance, discovers what's on it, **distinguishes camera
+from NVR/DVR from network gear**, and produces a security assessment built
+for surveying an existing video surveillance installation — not a generic
+network audit. It doesn't reinvent Nmap; it builds a focused layer on top
+of some of the same discovery mechanisms.
 
 ## What it does
 
-1. **Ethernet auto-configuration.** When the `eth0` interface detects the
-   cable plugged in and doesn't already have an address, it first tries a
-   **DHCP** lease. If none arrives within the timeout, it tries **all**
-   the **preset private classes** (192.168.1.0/24, 192.168.0.0/24,
-   10.0.0.0/24, etc. — see `scanner/config.py`), not just the first one:
-   for each, it assigns a "high" static IP and checks with an ARP probe
-   whether any hosts respond. If only one class turns out to be alive, it
-   gets assigned directly. If **more than one** is alive (e.g. several
-   private subnets manually configured on the same segment), the tool
-   does not pick one on its own based on an arbitrary priority order: the
-   interface stays without an address and the dashboard shows all the
-   candidate classes found (with how many hosts each one saw), asking you
-   to pick one to scan. The monitor runs continuously: if you unplug and
-   replug the cable (maybe on a different network), it redoes everything
-   automatically.
+1. **Ethernet auto-configuration.** Tries **DHCP** first; if none arrives,
+   probes **all** preset private classes (192.168.1.0/24, 10.0.0.0/24,
+   etc. — see `scanner/config.py`) with an ARP check and assigns the one
+   that's actually alive. If more than one subnet responds, it doesn't
+   guess: the dashboard lists every candidate (with host counts) and asks
+   you to pick one. Pre-existing IPs the tool didn't assign are left
+   alone ("manual" mode). Runs continuously — unplug/replug the cable and
+   it reconfigures on its own.
 
-   If the interface **already** has one or more IPv4 addresses that the
-   tool didn't assign itself (e.g. secondary IPs manually configured to
-   reach multiple subnets over the same cable), it leaves them alone: it
-   detects them and uses them as they are ("manual" mode in the
-   dashboard). The "Reconfigure network" button has a "force" option to
-   wipe everything anyway and restart DHCP/fallback from scratch.
+2. **Device scan** across every active subnet: all of Ethernet, every
+   Wi-Fi adapter present, and every active VPN tunnel (WireGuard,
+   OpenVPN, PPP, Tailscale, ZeroTier). ARP for regular links; ICMP sweep
+   on VPN interfaces the kernel marks NOARP, which have no MAC to report.
+   Per host: TCP port scan + HTTP banners, ONVIF WS-Discovery (real
+   vendor/model via `GetDeviceInformation` when available), mDNS/Bonjour
+   (friendly name, and for Apple devices the real hardware model from a
+   TXT record), offline OUI vendor lookup, reverse DNS. Classified by
+   specificity: **Camera**/**NVR-DVR** (protocol signals, not MAC vendor),
+   **Router**/**Switch**/**Access Point**, **Raspberry Pi**/other
+   recognized IoT hardware, **Phone**/**Tablet**/**Mac**/**PC** (from
+   hostname patterns), **PC (Windows/SMB)**/**Network printer** as a
+   fallback, or **Generic** if no signal is available at all — a
+   structural limit for locked-down devices, not a bug.
 
-2. **Device scan** across **all** active subnets on eth, on **every**
-   Wi-Fi adapter present (a device can have more than one — e.g. one used
-   as a client to reach an existing network, another dedicated to the
-   hotspot — and all of them are tracked/scanned, not just the first one
-   found; every configured IPv4 address, not just the first), and on
-   **active VPN tunnels** (WireGuard, OpenVPN, PPP, Tailscale, ZeroTier):
-   ARP scan for IP/MAC on regular links, **ICMP sweep** instead on VPN
-   interfaces the kernel marks NOARP (point-to-point/routed tunnels have
-   no L2 broadcast domain to ARP into — verified on a real WireGuard
-   interface: ARP-based discovery finds nothing there no matter what,
-   while a plain ping to a real peer works fine; ICMP sweep has no MAC to
-   report, only IP), targeted port scan + HTTP banners, **ONVIF WS-Discovery** probe
-   (with `GetDeviceInformation` for real vendor/model when available),
-   **mDNS/Bonjour** probe (`_device-info._tcp.local` and other common
-   service types — gives a friendly name and, for Apple devices, the real
-   hardware model straight from a TXT record, e.g. "iPhone14,2"), offline
-   OUI vendor lookup, reverse DNS hostname (mDNS name as fallback when
-   reverse DNS resolves nothing, common for personal devices on home
-   networks). Each device is classified, in order of specificity:
-   **Camera**/**NVR-DVR** (protocol signals — ONVIF, typical ports RTSP
-   554/Hikvision 8000/Dahua 37777/34567, HTTP banners — not on the MAC
-   vendor, unreliable offline), **Router**/**Switch**/**Access Point** (IP
-   == default gateway, or banner/vendor), **Raspberry Pi**/other IoT
-   hardware recognized by vendor, **Phone**/**Tablet**/**Mac**/**PC
-   (Windows)** recognized from hostname patterns (e.g. "iPhone-di-Mario",
-   "Galaxy-A34-5G", "MacBook-Pro", "DESKTOP-7K2N9QP" — useful mainly for
-   Apple devices, whose shared OUI can't otherwise distinguish a Mac from
-   an iPhone from an iPad), **PC (Windows/SMB)**/**Network printer**
-   (typical SMB/RDP/IPP/JetDirect ports) as a fallback when no hostname is
-   resolved, or **Generic** if none of these signals is available — a
-   structural limit, not a bug: a device with no open ports, no
-   distinctive vendor, no mDNS reply and no resolvable hostname (rare in
-   practice once mDNS is in the mix, but still possible for locked-down
-   devices) exposes nothing to read, and this tool doesn't go as far as
-   active TCP/IP stack fingerprinting `nmap -O`-style.
-
-3. **"NETWORK ASSESSMENT" report**: for each scanned network, a text
-   report with devices found by category (cameras/NVR/network/other —
-   Raspberry Pi, PCs, printers show up under "OTHER DEVICES", so no
-   discovered device stays invisible in the report text while still being
-   counted in "N devices discovered"), security findings from active but
-   non-intrusive probes (Telnet exposed, RTSP exposed, HTTP without HTTPS,
-   HTTP admin interface, default-looking service) and a risk summary
-   (Critical/High/Medium/Low). If requested
-   while a scan is still running, the report says so explicitly (it's a
-   partial snapshot, counts will increase). See `examples/sample_report.txt`
-   for a full example. Available both from the dashboard ("Report" tab)
-   and from the command line (`--report`).
+3. **"NETWORK ASSESSMENT" report**: per network, devices by category
+   (cameras/NVR/network/other — every discovered device shows up
+   somewhere), security findings from active but non-intrusive probes
+   (Telnet exposed, RTSP exposed, HTTP without HTTPS, admin interfaces,
+   default-looking services), and a risk summary (Critical/High/Medium/
+   Low). Flags itself as a partial snapshot if requested mid-scan. See
+   `examples/sample_report.txt`. Available from the dashboard's "Report"
+   tab and from the command line (`--report`).
 
 4. **Web dashboard** (port `7332`, HTTP polling, no external CDN
    dependency — works offline too; protected by a login, see
@@ -105,20 +63,13 @@ of its own discovery mechanisms, aimed at one specific use case.
    diff, one-hop network topology from LLDP/CDP), "Settings" tab to
    manage users/webhook/continuous monitoring, **CSV/JSON** export.
 
-5. **Wi-Fi hotspot** ("📡 Hotspot" popup on the chosen Wi-Fi adapter's
-   card): turns that adapter from a client (connected to an existing
-   network) into an access point, useful for reaching the dashboard
-   without a cable when the device is installed somewhere hard to wire
-   (e.g. inside a box up high). SSID/password configurable from the popup
-   (password can be auto-generated); once active the profile stays saved
-   and reactivates itself on subsequent reboots, so the device stays
-   reachable over Wi-Fi even after a power outage. **Activating it
-   disconnects that adapter from whatever network it was on** — the same
-   radio can't be a client and an access point at the same time — with
-   **two Wi-Fi adapters** this is worked around by dedicating one to the
-   hotspot and leaving the other as a client toward the existing network.
-   Requires NetworkManager (`nmcli`), already used for the Wi-Fi client
-   connection.
+5. **Wi-Fi hotspot** ("📡 Hotspot" popup on a Wi-Fi adapter's card): turns
+   that adapter into an access point for reaching the dashboard without a
+   cable. SSID/password configurable (auto-generatable); the profile
+   persists across reboots. Activating it disconnects that radio from
+   whatever network it was on — with two Wi-Fi adapters, dedicate one to
+   the hotspot and keep the other as a client. Requires NetworkManager
+   (`nmcli`).
 
 6. **Supplementary discovery signals**: 802.1Q **VLAN tag** on ARP
    traffic when present; optional **SNMP** (`sysDescr`/`sysName`,
@@ -206,7 +157,8 @@ discover:
   dominant factor in total scan time, more than any single timeout.
   Not parallelized further without a real large network to validate
   correctness against (shared state across concurrent hosts, stop-flag
-  responsiveness mid-batch) — see `TODO.md` for the full reasoning.
+  responsiveness mid-batch) — see
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full reasoning.
 - **RAM usage on large scans.** Not measured against a real network big
   enough to matter; each device's data is modest, but hasn't been
   profiled at scale.
