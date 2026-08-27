@@ -21,12 +21,12 @@ originally sequenced — see the P4 section header for the full note.
 - **P2/P3 Architecture**: 0/2, deliberatamente rimandati (non bloccano
   la 1.0 — vedi la sezione dedicata).
 - **P2 (Networking/ONVIF/Security assessment)**: chiuso 14/14.
-- **P3 Tests**: chiuso 7/7.
+- **P3 Tests**: chiuso 6/6.
 - **P3 Dashboard UX**: chiuso 7/7.
 - **P3 Reporting**: chiuso 7/7.
 - **P3 Performance**: chiuso 4/7 — misurato dal vivo il tempo di scan su
   Pi 3B+ (vedi sotto); restano Pi 4/5, RAM su scan grandi, reti `/16`.
-- **P3 Packaging/release**: chiuso 12/14 — verificato dal vivo
+- **P3 Packaging/release**: chiuso 13/14 — verificato dal vivo
   l'installer da zero su Raspberry Pi OS reale (Pi 3B+); resta solo la
   decisione finale "assegnare 1.0.0", che spetta all'utente.
 - **P4 (Future evolution)**: chiuso 15/15 delle voci pianificate per la
@@ -308,7 +308,7 @@ P2 Security assessment chiuso: 4/4.
       rsync per data/users.json/tls_*.pem/oui.csv, e il chown esplicito
       di data/.)*
 
-P3 Tests chiuso: 7/7.
+P3 Tests chiuso: 6/6.
 
 ## 🟢 P3 — Performance
 
@@ -362,9 +362,11 @@ P3 Tests chiuso: 7/7.
       stessa cautela gia' applicata alla separazione dei privilegi in
       P2/P3 Architecture.)*
 
-P3 Performance chiuso: 3/7 — le 4 voci aperte richiedono TUTTE hardware
-reale (vedi "Cosa manca solo per hardware reale" in cima al file), non
-sono lavoro software rimasto.
+P3 Performance chiuso: 4/7 — misurato dal vivo il tempo di scan su Pi
+3B+ (vedi sopra). Le 3 voci ancora aperte (Pi 4/5, RAM su scan grandi,
+reti `/16`) richiedono TUTTE hardware/scala reale non disponibile in
+questa sessione (vedi "Cosa manca ancora solo per hardware reale" in
+cima al file), non sono lavoro software rimasto.
 
 ## 🟢 P3 — Dashboard UX
 
@@ -485,10 +487,11 @@ P3 Reporting chiuso: 7/7.
       `sudo ./install.sh`, sicuro da rieseguire grazie alle esclusioni
       rsync gia' corrette in P2/questa sessione.)*
 
-P3 Packaging/release chiuso: 10/14 — le 4 voci aperte sono 3 verifiche
-hardware (Pi reale, Debian/RPi OS puro, installer da zero su hardware)
-piu' la decisione finale "assegnare la versione 1.0.0", che spetta
-esplicitamente all'utente, non e' automatica.
+P3 Packaging/release chiuso: 13/14 — le 3 verifiche hardware (Pi reale,
+Debian/RPi OS puro, installer da zero su hardware) sono state fatte dal
+vivo il 2026-08-27 su un Raspberry Pi 3B+ reale. Resta solo la decisione
+finale "assegnare la versione 1.0.0", che spetta esplicitamente
+all'utente, non e' automatica.
 
 ## 🚀 P4 — Future evolution
 

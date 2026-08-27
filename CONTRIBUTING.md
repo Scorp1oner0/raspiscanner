@@ -56,10 +56,12 @@ discovery, and `ip`/`dhclient`/`nmcli` for network reconfiguration.
   anything user-facing at runtime — dashboard UI text, CLI `--help` and
   printed output, the generated report, JSON error messages returned by
   the API — is in English. Match whichever you're editing.
-- **Don't scope-creep into P4.** [TODO.md](TODO.md) tracks priorities
-  (P0 security → P1 hardening → P2 robustness → P3 tests/release → P4
-  future features). A PR that quietly adds P4-flavored functionality
-  while the project isn't at 1.0 yet will likely be asked to wait.
+- **Don't scope-creep into new features.** [TODO.md](TODO.md) tracks
+  priorities (P0 security → P1 hardening → P2 robustness → P3
+  tests/release → P4 future features, all closed for 1.0 → P5 backlog
+  for anything beyond it). A PR that quietly adds P5-flavored
+  functionality to what should be a small, focused fix will likely be
+  asked to split it out.
 
 ## Reporting bugs
 
