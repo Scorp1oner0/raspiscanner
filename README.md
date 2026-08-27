@@ -128,6 +128,10 @@ sudo python3 raspi-scanner.py
 sudo python3 raspi-scanner.py --report
 ```
 
+The dashboard is a client of RaspiScanner's own JSON HTTP API — see
+[API.md](API.md) if you want to script against it (same HTTP Basic Auth
+credentials, no separate token).
+
 ## Requirements
 
 - Linux (built for Raspberry Pi OS) with Python 3.9+.

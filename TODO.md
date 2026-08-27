@@ -411,7 +411,11 @@ non e' un cambio di priorita' silenzioso.
 - [ ] IPv6 discovery.
 - [ ] Network topology map.
 - [ ] Structured JSON export.
-- [ ] Documented API.
+- [x] Documented API. *(`API.md`, nuovo: ogni endpoint con ruolo richiesto,
+      request/response, e lo schema completo del "device object". Test
+      di regressione (`tests/test_api_docs.py`) che tiene la doc
+      sincronizzata con le route reali in entrambe le direzioni — nessuna
+      route nuova non documentata, nessuna route documentata ma rimossa.)*
 - [ ] Webhooks.
 - [ ] Comparative reports between scans ("first scan vs current scan").
 - [ ] Local asset database.
