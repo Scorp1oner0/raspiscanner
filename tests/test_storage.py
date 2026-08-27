@@ -100,6 +100,34 @@ class TestAssetDatabase(StorageTestCase):
         self.assertEqual(asset["last_vendor"], "Hikvision Updated")
 
 
+class TestScanMetaAndPreviousScan(StorageTestCase):
+    """get_scan_meta()/get_previous_scan_id(): usati dall'Audit mode per
+    generare un report a partire da uno scan salvato invece che dallo
+    stato live, con il confronto rispetto al giro precedente."""
+
+    def test_get_scan_meta_returns_metadata(self):
+        scan_id = storage.save_scan([_DEVICE_A, _DEVICE_B], 1000.0, 1010.0)
+        meta = storage.get_scan_meta(scan_id)
+        self.assertEqual(meta["id"], scan_id)
+        self.assertEqual(meta["started_at"], 1000.0)
+        self.assertEqual(meta["finished_at"], 1010.0)
+        self.assertEqual(meta["device_count"], 2)
+
+    def test_get_scan_meta_unknown_id_returns_none(self):
+        self.assertIsNone(storage.get_scan_meta(999))
+
+    def test_get_previous_scan_id_none_for_first_scan(self):
+        id1 = storage.save_scan([_DEVICE_A], 1000.0, 1010.0)
+        self.assertIsNone(storage.get_previous_scan_id(id1))
+
+    def test_get_previous_scan_id_returns_immediately_preceding_scan(self):
+        id1 = storage.save_scan([_DEVICE_A], 1000.0, 1010.0)
+        id2 = storage.save_scan([_DEVICE_A, _DEVICE_B], 2000.0, 2010.0)
+        id3 = storage.save_scan([_DEVICE_A], 3000.0, 3010.0)
+        self.assertEqual(storage.get_previous_scan_id(id2), id1)
+        self.assertEqual(storage.get_previous_scan_id(id3), id2)
+
+
 class TestCompareScans(StorageTestCase):
     def test_no_changes_between_identical_scans(self):
         id1 = storage.save_scan([_DEVICE_A, _DEVICE_B], 1000.0, 1010.0)

@@ -240,7 +240,32 @@ def generate(network_cidr, devices):
     return "\n".join(lines)
 
 
-def generate_all(devices, started_at=None, finished_at=None):
+def _format_changes_section(changes):
+    """`changes`: il dict ritornato da storage.compare_scans() (added/
+    removed/changed). Usata dall'Audit mode per rendere esplicito, in
+    testa al report, cosa e' cambiato rispetto allo scan salvato
+    precedente — senza dover aprire separatamente la tab History."""
+    added, removed, changed = changes["added"], changes["removed"], changes["changed"]
+    lines = ["CHANGES SINCE PREVIOUS SCAN", _HEADER_RULE]
+    if not added and not removed and not changed:
+        lines.append("No changes since the previous saved scan.")
+        return "\n".join(lines)
+    if added:
+        lines.append(f"\n{len(added)} new device(s):")
+        for d in added:
+            lines.append(f"  + {d.get('ip')} ({d.get('mac')}) {d.get('vendor') or 'Unknown vendor'}")
+    if removed:
+        lines.append(f"\n{len(removed)} device(s) no longer seen:")
+        for d in removed:
+            lines.append(f"  - {d.get('ip')} ({d.get('mac')}) {d.get('vendor') or 'Unknown vendor'}")
+    if changed:
+        lines.append(f"\n{len(changed)} device(s) changed:")
+        for c in changed:
+            lines.append(f"  ~ {c['new'].get('ip')} ({c['mac']}): {', '.join(c['fields'])}")
+    return "\n".join(lines)
+
+
+def generate_all(devices, started_at=None, finished_at=None, changes=None):
     """devices: lista piatta di tutti i dispositivi trovati (con campo
     "network" gia' valorizzato da scan_engine). Raggruppa per rete e
     concatena un report per ciascuna. Ritorna la stringa completa, o un
@@ -249,6 +274,13 @@ def generate_all(devices, started_at=None, finished_at=None):
     started_at/finished_at: timestamp epoch dello scan (scan_engine.get_state()),
     opzionali — omessi (es. chiamate dirette nei test) non producono un
     header di timing invece di un errore.
+
+    changes: dict di storage.compare_scans() rispetto allo scan salvato
+    precedente, opzionale — usato dall'Audit mode (vedi
+    raspi-scanner.py:/api/audit/report). None (il default, usato dal
+    report "live" della dashboard) non aggiunge nessuna sezione: il
+    report normale descrive lo stato attuale, non una differenza nel
+    tempo che richiederebbe uno storico salvato.
     """
     if not devices:
         return "No data yet — run a scan first."
@@ -270,5 +302,7 @@ def generate_all(devices, started_at=None, finished_at=None):
         timing_lines.append(f"Duration:      {_format_duration(finished_at - started_at)}")
     timing_header = "\n".join(timing_lines)
 
-    parts = [p for p in (timing_header, combined, _SCOPE_DISCLAIMER, _SENSITIVE_DATA_DISCLAIMER) if p]
+    changes_section = _format_changes_section(changes) if changes is not None else None
+
+    parts = [p for p in (timing_header, changes_section, combined, _SCOPE_DISCLAIMER, _SENSITIVE_DATA_DISCLAIMER) if p]
     return "\n\n".join(parts)

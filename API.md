@@ -243,8 +243,54 @@ Body: `{"url": "https://...", "enabled": true}`. `400` if `enabled: true`
 with no URL, or the URL isn't `http(s)`. On a completed scan, the payload
 posted is:
 ```json
-{"scan_id": 7, "started_at": 1735000000.0, "finished_at": 1735000090.0, "device_count": 14, "camera_count": 3}
+{
+  "scan_id": 7, "started_at": 1735000000.0, "finished_at": 1735000090.0,
+  "device_count": 14, "camera_count": 3,
+  "changes_since_previous_scan": {"added": 1, "removed": 0, "changed": 2}
+}
 ```
+`changes_since_previous_scan` is `null` if this is the very first scan
+ever saved (nothing to compare against yet); otherwise it's always
+present, computed against the previously saved scan regardless of
+whether this scan was started manually or by Continuous Monitoring.
+
+## Continuous Monitoring mode
+
+Optional: instead of always requiring a human to click "Start scan",
+automatically runs a scan every `interval_minutes` — the same
+`scan_engine.run_scan()` a manual click triggers, not a separate scan
+path. If a scan (manual or automatic) is already in progress when it's
+time for the next automatic one, that cycle is skipped rather than
+queued or forced. Off by default. Combine with the webhook above to get
+notified of `changes_since_previous_scan` without watching the dashboard.
+
+### `GET /api/settings/monitoring` — admin
+`{"enabled": false, "interval_minutes": 60}`.
+
+### `POST /api/settings/monitoring` — admin
+Body: `{"enabled": true, "interval_minutes": 30}`. `400` if
+`interval_minutes` isn't a whole number `>= 5` — an interval shorter than
+a typical scan's own duration would just make every automatic cycle find
+the previous one still running and skip itself, giving the illusion of
+monitoring without the substance.
+
+## Audit mode
+
+`/api/report` reflects **live** state — if a scan is still running, it's
+an admittedly partial snapshot. Audit mode instead generates a report
+from a scan already **saved** to history, so the same `scan_id` always
+reproduces the exact same report, and automatically prepends a "CHANGES
+SINCE PREVIOUS SCAN" section (see **History**'s `compare` for the same
+data in JSON form).
+
+### `GET /api/audit/report?scan_id=<id>` — viewer
+`scan_id` optional, defaults to the most recently saved scan.
+```json
+{"text": "CHANGES SINCE PREVIOUS SCAN\n...\n\nNETWORK ASSESSMENT\n...", "scan_id": 7, "compared_to_scan_id": 6}
+```
+`compared_to_scan_id` is `null` (and the report has no changes section)
+if `scan_id` is the first scan ever saved. `404` if `scan_id` doesn't
+exist, or if no scan has ever been saved and none was given.
 
 ## Settings
 

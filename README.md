@@ -101,7 +101,12 @@ of its own discovery mechanisms, aimed at one specific use case.
    one card per **each** detected Wi-Fi adapter with independent
    listing/connection, "Devices" table, "Cameras" table (also includes
    NVR/DVR, split into on-network vs. out-of-network), "Report" tab,
-   "Settings" tab to manage users, **CSV/JSON** export.
+   "History" tab (past scans, MAC-based asset database, scan-to-scan
+   diff, one-hop network topology from LLDP/CDP), "Settings" tab to
+   manage users/webhook/continuous monitoring, **CSV/JSON** export. A
+   "🛠 Technician view" toggle simplifies the layout for on-site use
+   (hides History/Settings, bigger touch targets) — a client-side-only
+   preference, no server state involved.
 
 5. **Wi-Fi hotspot** ("📡 Hotspot" popup on the chosen Wi-Fi adapter's
    card): turns that adapter from a client (connected to an existing
@@ -117,6 +122,26 @@ of its own discovery mechanisms, aimed at one specific use case.
    hotspot and leaving the other as a client toward the existing network.
    Requires NetworkManager (`nmcli`), already used for the Wi-Fi client
    connection.
+
+6. **Supplementary discovery signals**: 802.1Q **VLAN tag** on ARP
+   traffic when present; optional **SNMP** (`sysDescr`/`sysName`,
+   community `public`, read-only, only on hosts already suspected to be
+   network gear) as a vendor/hostname fallback; passive **LLDP/CDP**
+   listening, correlated to devices by MAC and shown as a one-hop
+   **network topology map** (`GET /api/topology`); **IPv6** discovery via
+   ICMPv6 Echo to the link-local all-nodes multicast. All best-effort and
+   additive to the primary IPv4/ARP scan, never required for a device to
+   show up.
+
+7. **History, monitoring, and audit** (SQLite-backed, `data/history.db`,
+   never committed): every completed scan is saved, an optional
+   **webhook** notifies a URL of the result (including what changed since
+   the previous scan) — combine it with **Continuous Monitoring mode** to
+   get scans run automatically every N minutes without a human clicking
+   "Start scan". **Audit mode** (`GET /api/audit/report`) generates a
+   report from a saved scan (reproducible, unlike the live "Report" tab)
+   with a changes-since-previous-scan section prepended automatically.
+   Full reference: [`API.md`](API.md).
 
 ## Usage
 
@@ -354,10 +379,16 @@ scanner/
   vendor.py                   Vendor lookup from offline OUI
   hosts.py                     Classification "is it a phone/tablet/Mac/PC/printer?"
   scan_engine.py                Scan orchestration + state for the dashboard
+  storage.py                     Scan history/asset database (SQLite, data/history.db)
+  webhooks.py                    Optional POST notification after each scan
+  monitoring.py                  Continuous Monitoring mode (scheduled automatic scans)
   discovery/
-    arp.py                       ARP scan (scapy) + reverse DNS
+    arp.py                       ARP scan (scapy) + reverse DNS + VLAN tag
     icmp.py                       ICMP sweep for NOARP links (VPN tunnels)
     mdns.py                       mDNS/Bonjour probe (friendly name + Apple model)
+    snmp.py                       Optional SNMP probe (sysDescr/sysName)
+    lldp_cdp.py                   Passive LLDP/CDP listening (network topology)
+    ipv6.py                       IPv6 discovery (ICMPv6 Echo to ff02::1)
   fingerprint/
     ports.py                      TCP port scan + HTTP banners
   cameras/
@@ -380,6 +411,9 @@ scripts/update_oui.py        Updates oui.csv from the IEEE registry (requires in
 data/oui.csv                 Offline OUI database (best effort)
 data/users.json              Dashboard users (password hashes, generated on first launch, gitignored)
 data/tls_cert.pem, tls_key.pem  Self-signed TLS certificate (generated on first launch, gitignored)
+data/history.db              Scan history/asset database (SQLite, generated on first scan, gitignored)
+data/webhooks.json           Webhook config (generated on first save, gitignored)
+data/monitoring.json         Continuous Monitoring config (generated on first save, gitignored)
 templates/, static/          Dashboard (HTML/CSS/JS, no external CDN: works offline)
 install.sh                   Installer (venv + systemd)
 raspiscanner.service         systemd unit file

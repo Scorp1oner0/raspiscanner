@@ -534,12 +534,26 @@ def _run_scan_thread(networks):
         try:
             state = get_state()
             scan_id = storage.save_scan(state["devices"], state["started_at"], state["finished_at"])
+            # Continuous Monitoring (P4): il valore di uno scan automatico
+            # e' sapere COSA e' cambiato, non solo che uno scan e' finito
+            # — calcolato per OGNI scan (manuale o automatico), non solo
+            # quando il continuous monitoring e' abilitato: e' informazione
+            # utile a prescindere da chi ha avviato lo scan, e riusa
+            # compare_scans() gia' scritto per i report comparativi.
+            previous_id = storage.get_previous_scan_id(scan_id)
+            changes_summary = None
+            if previous_id is not None:
+                diff = storage.compare_scans(previous_id, scan_id)
+                changes_summary = {
+                    "added": len(diff["added"]), "removed": len(diff["removed"]), "changed": len(diff["changed"]),
+                }
             webhooks.notify_scan_complete({
                 "scan_id": scan_id,
                 "started_at": state["started_at"],
                 "finished_at": state["finished_at"],
                 "device_count": len(state["devices"]),
                 "camera_count": sum(1 for d in state["devices"] if d.get("is_camera")),
+                "changes_since_previous_scan": changes_summary,
             })
         except Exception:
             log.exception("salvataggio storico scan fallito (non bloccante)")

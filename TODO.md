@@ -507,4 +507,36 @@ non e' un cambio di priorita' silenzioso.
       fermato a meta' o terminato con errore — resta un'istantanea reale),
       dentro `scan_engine._run_scan_thread`, mai bloccante per lo scan
       stesso se il salvataggio fallisce.)*
-- [ ] Field Technician mode. Audit mode. Continuous Monitoring mode.
+- [x] Field Technician mode. Audit mode. Continuous Monitoring mode.
+      *(Nessuna specifica precedente esisteva per questi tre nomi:
+      interpretazione minima, esplicita, che riusa l'infrastruttura P4
+      gia' scritta invece di aprire un sottosistema nuovo per ciascuno.
+
+      **Continuous Monitoring**: `scanner/monitoring.py`, uno scheduler
+      che chiama scan_engine.run_scan() — la STESSA funzione del pulsante
+      "Start scan" — a intervalli configurabili (minimo 5 minuti, per
+      non far accavallare scan su reti con molti host). Se uno scan e'
+      gia' in corso, il giro viene saltato (mai forzato/in coda). Ogni
+      scan salvato (manuale o automatico) calcola ora un diff col
+      precedente (storage.compare_scans) incluso nel payload webhook
+      (`changes_since_previous_scan`), cosi' il continuous monitoring ha
+      un senso concreto insieme al webhook gia' esistente: sapere COSA e'
+      cambiato, non solo che uno scan e' finito.
+
+      **Audit mode**: nuovo `GET /api/audit/report`, distinto da
+      `/api/report` (stato LIVE, puo' essere un'istantanea parziale a
+      scan in corso) — genera invece da uno scan gia' SALVATO
+      (riproducibile: lo stesso scan_id da' sempre lo stesso report), con
+      la sezione "CHANGES SINCE PREVIOUS SCAN" anteposta automaticamente
+      (stesso compare_scans, nuovi storage.get_scan_meta()/
+      get_previous_scan_id()). Pulsante "Audit report" per riga nella tab
+      History.
+
+      **Field Technician mode**: toggle "🛠 Technician view" in
+      dashboard, puramente client-side (nessuno stato server): nasconde
+      le tab History/Settings (configurazione e analisi storica, non
+      utili sul campo davanti a un rack) e ingrandisce i target touch,
+      preferenza persistita in localStorage.
+
+      425 -> 451 test (26 nuovi: scheduler, storage, sezione "changes"
+      del report, route Flask). Nessuna regressione.)*

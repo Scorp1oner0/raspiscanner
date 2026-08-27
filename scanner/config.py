@@ -13,6 +13,8 @@ TLS_KEY_PATH = os.path.join(DATA_DIR, "tls_key.pem")
 # committato, escluso da install.sh (vedi li').
 HISTORY_DB_PATH = os.path.join(DATA_DIR, "history.db")
 WEBHOOKS_JSON_PATH = os.path.join(DATA_DIR, "webhooks.json")
+# Continuous Monitoring mode (P4): stesso trattamento di webhooks.json.
+MONITORING_JSON_PATH = os.path.join(DATA_DIR, "monitoring.json")
 
 # Interfacce di rete gestite (nomi tipici su Raspberry Pi OS / kernel Linux)
 ETH_IFACE_PREFIXES = ("eth", "en")

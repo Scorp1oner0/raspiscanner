@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scanner import auth, config, scan_engine
+from scanner import auth, config, monitoring, scan_engine, storage
 
 RASPI_SCANNER_PATH = Path(__file__).resolve().parent.parent / "raspi-scanner.py"
 
@@ -89,6 +89,7 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         self._orig_tls_key = config.TLS_KEY_PATH
         self._orig_history_db = config.HISTORY_DB_PATH
         self._orig_webhooks_path = config.WEBHOOKS_JSON_PATH
+        self._orig_monitoring_path = config.MONITORING_JSON_PATH
         self._orig_generate = auth.generate_initial_password
         config.DATA_DIR = self._tmp_dir
         config.USERS_JSON_PATH = str(Path(self._tmp_dir) / "users.json")
@@ -100,6 +101,7 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         # reali in data/.
         config.HISTORY_DB_PATH = str(Path(self._tmp_dir) / "history.db")
         config.WEBHOOKS_JSON_PATH = str(Path(self._tmp_dir) / "webhooks.json")
+        config.MONITORING_JSON_PATH = str(Path(self._tmp_dir) / "monitoring.json")
         auth.generate_initial_password = lambda: "BootstrapPassw0rd"
 
         self.module = _load_raspi_scanner_module()
@@ -125,6 +127,7 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         config.TLS_KEY_PATH = self._orig_tls_key
         config.HISTORY_DB_PATH = self._orig_history_db
         config.WEBHOOKS_JSON_PATH = self._orig_webhooks_path
+        config.MONITORING_JSON_PATH = self._orig_monitoring_path
         shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
 
@@ -416,6 +419,89 @@ class TestWebhookSettings(RaspiScannerAppTestCase):
             json={"url": "file:///etc/passwd", "enabled": True},
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class TestMonitoringSettings(RaspiScannerAppTestCase):
+    def test_viewer_cannot_read_monitoring_config(self):
+        resp = self.client.get("/api/settings/monitoring", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_admin_can_get_and_set_monitoring_config(self):
+        resp = self.client.get("/api/settings/monitoring", auth=self.admin_auth)
+        self.assertEqual(resp.get_json(), {"enabled": False, "interval_minutes": monitoring.DEFAULT_INTERVAL_MINUTES})
+
+        resp = self.client.post(
+            "/api/settings/monitoring", auth=self.admin_auth,
+            json={"enabled": True, "interval_minutes": 30},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        resp = self.client.get("/api/settings/monitoring", auth=self.admin_auth)
+        self.assertEqual(resp.get_json(), {"enabled": True, "interval_minutes": 30})
+
+    def test_operator_cannot_set_monitoring_config(self):
+        resp = self.client.post(
+            "/api/settings/monitoring", auth=self.operator_auth,
+            json={"enabled": True, "interval_minutes": 30},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_interval_below_minimum_rejected(self):
+        resp = self.client.post(
+            "/api/settings/monitoring", auth=self.admin_auth,
+            json={"enabled": True, "interval_minutes": 1},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+
+class TestAuditReportRoute(RaspiScannerAppTestCase):
+    """Audit mode (P4): report da uno scan SALVATO (non lo stato live di
+    /api/report), con la sezione "changes since previous scan" calcolata
+    automaticamente rispetto al giro precedente."""
+
+    def setUp(self):
+        super().setUp()
+        device_v1 = {"ip": "192.168.1.21", "mac": "AA:BB:CC:11:22:33", "vendor": "Hikvision",
+                     "model": None, "device_type": "Camera", "is_camera": True, "is_nvr": False,
+                     "network": "192.168.1.0/24", "open_ports": []}
+        self.scan_id_1 = storage.save_scan([device_v1], 1000.0, 1010.0)
+        device_v2 = dict(device_v1, ip="192.168.1.30", mac="AA:BB:CC:99:88:77")
+        self.scan_id_2 = storage.save_scan([device_v1, device_v2], 2000.0, 2010.0)
+
+    def test_no_saved_scans_returns_404(self):
+        """Un DB vuoto (nessuno scan mai salvato) e nessuno scan_id
+        esplicito: non c'e' nulla da mostrare, 404 con un messaggio
+        chiaro invece di un report vuoto o un errore 500."""
+        storage.get_scan_meta(self.scan_id_1)  # sanity: il fixture esiste
+        import sqlite3
+        with sqlite3.connect(config.HISTORY_DB_PATH) as conn:
+            conn.execute("DELETE FROM scans")
+            conn.execute("DELETE FROM scan_devices")
+        resp = self.client.get("/api/audit/report", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_defaults_to_latest_scan(self):
+        resp = self.client.get("/api/audit/report", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["scan_id"], self.scan_id_2)
+        self.assertEqual(data["compared_to_scan_id"], self.scan_id_1)
+        self.assertIn("CHANGES SINCE PREVIOUS SCAN", data["text"])
+        self.assertIn("192.168.1.30", data["text"])
+
+    def test_explicit_scan_id_with_no_previous_scan(self):
+        resp = self.client.get(f"/api/audit/report?scan_id={self.scan_id_1}", auth=self.viewer_auth)
+        data = resp.get_json()
+        self.assertIsNone(data["compared_to_scan_id"])
+        self.assertNotIn("CHANGES SINCE PREVIOUS SCAN", data["text"])
+
+    def test_unknown_scan_id_returns_404(self):
+        resp = self.client.get("/api/audit/report?scan_id=999999", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_viewer_can_read_audit_report(self):
+        resp = self.client.get("/api/audit/report", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
 
 
 if __name__ == "__main__":

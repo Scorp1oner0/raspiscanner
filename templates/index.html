@@ -28,8 +28,11 @@
 
 <header class="topbar">
   <div class="brand-row">
-    <div class="brand"><span class="brand-mark">📡</span> RaspiScanner</div>
-    <div class="subtitle">Network &amp; IP camera scanner — with automated security assessment</div>
+    <div class="brand-block">
+      <div class="brand"><span class="brand-mark">📡</span> RaspiScanner</div>
+      <div class="subtitle">Network &amp; IP camera scanner — with automated security assessment</div>
+    </div>
+    <button class="btn small" id="btn-technician-mode" title="Simplified view for on-site work: hides History/Settings, larger touch targets">🛠 Technician view</button>
   </div>
 </header>
 
@@ -198,10 +201,17 @@
       <h3 class="settings-subtitle">Past scans</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th>Devices</th></tr></thead>
+          <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th>Devices</th><th></th></tr></thead>
           <tbody id="table-history-scans"></tbody>
         </table>
       </div>
+      <p class="modal-desc">
+        "Audit report" generates a report from that SAVED scan (unlike the
+        Report tab, which reflects live state and can be a partial
+        snapshot mid-scan) with a "changes since previous scan" section
+        prepended automatically.
+      </p>
+      <pre id="audit-report-text" class="report-text" style="display:none;"></pre>
 
       <h3 class="settings-subtitle">Compare two scans</h3>
       <div class="modal-row">
@@ -264,6 +274,23 @@
           <button class="btn small" id="btn-save-webhook">💾 Save</button>
         </div>
         <span id="webhook-msg" class="msg"></span>
+
+        <h3 class="settings-subtitle">Continuous Monitoring</h3>
+        <p class="modal-desc">
+          Optional: automatically run a scan every N minutes instead of
+          always starting one by hand. If a scan is already running when
+          the next automatic one is due, that cycle is skipped, not
+          queued. Combine with the webhook above to get notified of
+          what changed without watching the dashboard.
+        </p>
+        <div class="modal-row">
+          <label class="iface-name"><input type="checkbox" id="monitoring-enabled"> Enabled</label>
+          <span class="iface-name">every</span>
+          <input type="number" id="monitoring-interval" class="modal-input" style="max-width:90px" min="5" step="5" value="60">
+          <span class="iface-name">minutes</span>
+          <button class="btn small" id="btn-save-monitoring">💾 Save</button>
+        </div>
+        <span id="monitoring-msg" class="msg"></span>
       </div>
 
       <h3 class="settings-subtitle">Change password</h3>

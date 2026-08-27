@@ -25,7 +25,7 @@ from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from scanner import auth, scan_engine, storage, tls, webhooks
+from scanner import auth, monitoring, scan_engine, storage, tls, webhooks
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -141,6 +141,7 @@ def _ensure_startup():
         _started = True
         network_setup.start_monitor()
         log.info("monitor rete avviato")
+        monitoring.start_scheduler()
 
 
 @app.route("/")
@@ -407,6 +408,51 @@ def api_settings_webhook_set():
     data = request.get_json(silent=True) or {}
     ok, message = webhooks.set_config(data.get("url"), bool(data.get("enabled")))
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+
+@app.route("/api/settings/monitoring")
+@require_role("admin")
+def api_settings_monitoring_get():
+    return jsonify(monitoring.get_config())
+
+
+@app.route("/api/settings/monitoring", methods=["POST"])
+@require_role("admin")
+def api_settings_monitoring_set():
+    data = request.get_json(silent=True) or {}
+    interval = data.get("interval_minutes", monitoring.DEFAULT_INTERVAL_MINUTES)
+    ok, message = monitoring.set_config(bool(data.get("enabled")), interval)
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+
+@app.route("/api/audit/report")
+@require_role("viewer")
+def api_audit_report():
+    """Audit mode (P4): a differenza di /api/report (stato LIVE, puo'
+    essere un'istantanea parziale se uno scan e' in corso), questo genera
+    un report a partire da uno scan gia' SALVATO — riproducibile in
+    qualunque momento a partire dallo stesso scan_id, con la sezione
+    "CHANGES SINCE PREVIOUS SCAN" calcolata automaticamente rispetto allo
+    scan salvato subito prima. Senza scan_id esplicito, usa l'ultimo
+    salvato."""
+    scan_id = request.args.get("scan_id", type=int)
+    if scan_id is None:
+        latest = storage.list_scans(limit=1)
+        if not latest:
+            return jsonify({
+                "error": "no_scans", "message": "No saved scans yet — run a scan first.",
+            }), 404
+        scan_id = latest[0]["id"]
+    meta = storage.get_scan_meta(scan_id)
+    if meta is None:
+        return jsonify({"error": "not_found", "message": f"Scan #{scan_id} not found."}), 404
+    devices = storage.get_scan_devices(scan_id)
+    previous_id = storage.get_previous_scan_id(scan_id)
+    changes = storage.compare_scans(previous_id, scan_id) if previous_id is not None else None
+    text = assessment.generate_all(
+        devices, started_at=meta["started_at"], finished_at=meta["finished_at"], changes=changes,
+    )
+    return jsonify({"text": text, "scan_id": scan_id, "compared_to_scan_id": previous_id})
 
 
 @app.route("/api/settings/users")

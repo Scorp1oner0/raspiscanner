@@ -202,6 +202,41 @@ class TestAssessmentReport(unittest.TestCase):
         report = assessment.generate_all([CAMERA])
         self.assertIn("sensitive network data", report)
 
+    def test_changes_section_omitted_when_not_provided(self):
+        """Il report "live" della dashboard (changes=None, il default) non
+        ha una sezione di confronto: non ha senso senza uno storico
+        salvato rispetto a cui confrontare."""
+        report = assessment.generate_all([CAMERA])
+        self.assertNotIn("CHANGES SINCE PREVIOUS SCAN", report)
+
+    def test_changes_section_shown_when_provided(self):
+        changes = {
+            "added": [{"ip": "192.168.10.99", "mac": "AA:BB:CC:00:00:99", "vendor": "Hikvision"}],
+            "removed": [], "changed": [],
+        }
+        report = assessment.generate_all([CAMERA], changes=changes)
+        self.assertIn("CHANGES SINCE PREVIOUS SCAN", report)
+        self.assertIn("1 new device(s):", report)
+        self.assertIn("192.168.10.99", report)
+
+    def test_changes_section_no_changes_message(self):
+        changes = {"added": [], "removed": [], "changed": []}
+        report = assessment.generate_all([CAMERA], changes=changes)
+        self.assertIn("No changes since the previous saved scan.", report)
+
+    def test_changes_section_lists_changed_fields(self):
+        changes = {
+            "added": [], "removed": [],
+            "changed": [{
+                "mac": "AA:BB:CC:11:22:33",
+                "old": {"ip": "192.168.10.21"}, "new": {"ip": "192.168.10.21"},
+                "fields": ["open_ports"],
+            }],
+        }
+        report = assessment.generate_all([CAMERA], changes=changes)
+        self.assertIn("1 device(s) changed:", report)
+        self.assertIn("open_ports", report)
+
     def test_other_devices_section_lists_recognized_types(self):
         """Bug reale: un Raspberry Pi o un PC (Windows/SMB) non finivano in
         NESSUNA sezione del report pur essendo contati in "N devices

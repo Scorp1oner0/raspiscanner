@@ -123,6 +123,30 @@ def list_scans(limit=20):
     return [dict(r) for r in rows]
 
 
+def get_scan_meta(scan_id):
+    """Metadati (senza device) di UN singolo scan salvato, o None se
+    l'id non esiste. Usato dall'Audit mode per generare un report a
+    partire da uno scan storico invece che dallo stato live."""
+    with closing(_connect()) as conn:
+        row = conn.execute(
+            "SELECT id, started_at, finished_at, device_count FROM scans WHERE id = ?",
+            (scan_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_previous_scan_id(scan_id):
+    """Id dello scan salvato immediatamente prima di `scan_id` (per
+    started_at/id crescenti), o None se `scan_id` e' il primo scan mai
+    salvato. Usato dall'Audit mode per calcolare automaticamente cosa e'
+    cambiato rispetto al giro precedente."""
+    with closing(_connect()) as conn:
+        row = conn.execute(
+            "SELECT id FROM scans WHERE id < ? ORDER BY id DESC LIMIT 1", (scan_id,),
+        ).fetchone()
+    return row["id"] if row else None
+
+
 def get_scan_devices(scan_id):
     with closing(_connect()) as conn:
         rows = conn.execute(

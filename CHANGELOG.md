@@ -84,6 +84,46 @@ status), so everything below is grouped under **Unreleased**.
 - Full English translation of the dashboard, CLI output, and generated
   report; redesigned as a clean, professional dashboard.
 - `uninstall.sh` (with an optional `--keep-data` flag).
+- Richer vendor fingerprinting: HTTP banner-based vendor/model guessing
+  (`vendor_source`/`model_source` shown in the dashboard) used as a
+  fallback when the local OUI (MAC) database has no match, covering
+  Hikvision/Dahua/Axis/Bosch/Ksenia/Reolink/Foscam/Vivotek and generic
+  OEM DVR/NVR boards.
+- VLAN awareness: the 802.1Q tag seen on a device's ARP traffic, when
+  present (most switch ports are "access" mode and strip it).
+- Optional SNMP discovery (`sysDescr`/`sysName`, community `public`,
+  read-only) on hosts already classified as network infrastructure.
+- LLDP/CDP discovery: passive listening for network gear's own
+  periodic announcements, correlated to ARP-discovered devices by MAC.
+- One-hop network topology map (`GET /api/topology`, new "Topology"
+  section in the dashboard) — gateway + LLDP/CDP neighbors per
+  interface, deliberately not a multi-hop graph (would require
+  SNMP-walking remote switches with credentials this tool doesn't have).
+- IPv6 discovery: ICMPv6 Echo Request to the link-local all-nodes
+  multicast (`ff02::1`), a supplementary signal alongside the primary
+  IPv4/ARP scan.
+- Structured JSON export (`/api/export?format=json`) as a metadata
+  envelope (`exported_at`, `scan_started_at`/`finished_at`, `count`)
+  instead of a bare device array.
+- Full API reference (`API.md`), kept in sync with the real routes by a
+  regression test in both directions.
+- Optional webhook: `POST`s a JSON summary (including a
+  `changes_since_previous_scan` diff) to one configured URL after every
+  scan; `http`/`https` only.
+- Local scan history (SQLite, `data/history.db`): every completed scan
+  is saved, a local asset database tracks every MAC ever seen, and two
+  past scans can be diffed ("first scan vs. current scan") — new
+  "History" tab in the dashboard.
+- Continuous Monitoring mode: optionally runs a scan automatically every
+  N minutes (skipping a cycle instead of overlapping if one is already
+  running) instead of always requiring a manual start.
+- Audit mode (`GET /api/audit/report`): a report generated from a
+  **saved** scan (reproducible — unlike the live `/api/report`, which can
+  be a partial snapshot mid-scan) with a "changes since previous scan"
+  section prepended automatically.
+- Field Technician mode: a client-side-only "Technician view" toggle
+  that hides the History/Settings tabs and enlarges touch targets for
+  on-site use on a tablet/phone.
 
 ### Changed
 

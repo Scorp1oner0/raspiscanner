@@ -39,7 +39,10 @@ body {
   border-bottom: 1px solid var(--border);
   padding: 16px 24px;
 }
-.brand-row { max-width: 1180px; margin: 0 auto; }
+.brand-row {
+  max-width: 1180px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
 .brand {
   color: var(--text);
   font-size: 17px;
@@ -353,4 +356,29 @@ a.link:hover { text-decoration: underline; }
   padding: 12px 14px;
   font-size: 13px;
   margin-bottom: 8px;
+}
+
+/* ---------- Field Technician mode ----------
+   Vista semplificata per lavoro sul campo: nasconde le tab piu'
+   "da scrivania" (History, Settings — configurazione e analisi storica,
+   non cio' che serve mentre si e' davanti a un rack), ingrandisce i
+   target touch per l'uso su tablet/telefono. Preferenza puramente
+   client-side (localStorage): nessuno stato server, e' solo comodita'
+   per chi guarda in quel momento. */
+body.technician-mode .tab-btn[data-tab="history"],
+body.technician-mode .tab-btn[data-tab="settings"] {
+  display: none;
+}
+body.technician-mode .btn {
+  padding: 10px 16px;
+  font-size: 15px;
+}
+body.technician-mode .tab-btn {
+  padding: 12px 18px;
+  font-size: 14.5px;
+}
+#btn-technician-mode.active {
+  background: var(--accent);
+  color: #06231a;
+  border-color: var(--accent);
 }

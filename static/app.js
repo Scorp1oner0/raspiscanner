@@ -368,7 +368,7 @@ async function refreshScan() {
   }
 }
 
-function renderReportText(text) {
+function renderReportText(text, targetId = "report-text") {
   // Evidenzia solo righe con un prefisso ESATTO e noto (il testo e'
   // sempre escaped PRIMA di questo controllo, quindi anche se un campo
   // controllato dal dispositivo scansionato coincidesse per caso con uno
@@ -385,7 +385,7 @@ function renderReportText(text) {
     if (trimmed.startsWith("⚠")) return `<span class="sev-line sev-warn">${line}</span>`;
     return line;
   }).join("\n");
-  $("report-text").innerHTML = html;
+  $(targetId).innerHTML = html;
 }
 
 async function refreshReport() {
@@ -416,9 +416,10 @@ async function refreshHistory() {
             <td>${formatTimestamp(s.started_at)}</td>
             <td>${formatTimestamp(s.finished_at)}</td>
             <td>${s.device_count}</td>
+            <td><button class="btn small btn-audit-report" data-scan-id="${s.id}">📋 Audit report</button></td>
           </tr>
         `).join("")
-      : '<tr><td colspan="4" class="empty">No saved scans yet — run one first.</td></tr>';
+      : '<tr><td colspan="5" class="empty">No saved scans yet — run one first.</td></tr>';
 
     const options = scans.map((s) => `<option value="${s.id}">#${s.id} — ${formatTimestamp(s.started_at)}</option>`).join("");
     $("compare-old-scan").innerHTML = options;
@@ -540,6 +541,82 @@ async function saveWebhookConfig() {
   }
 }
 
+async function refreshMonitoringConfig() {
+  try {
+    const res = await fetch("/api/settings/monitoring");
+    if (!res.ok) return;  // non-admin: 403, il campo resta nascosto insieme al resto della sezione
+    const data = await res.json();
+    $("monitoring-enabled").checked = !!data.enabled;
+    $("monitoring-interval").value = data.interval_minutes;
+  } catch (e) {
+    console.error("refreshMonitoringConfig", e);
+  }
+}
+
+async function saveMonitoringConfig() {
+  const msg = $("monitoring-msg");
+  msg.textContent = "Saving...";
+  try {
+    const res = await fetch("/api/settings/monitoring", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: $("monitoring-enabled").checked,
+        interval_minutes: $("monitoring-interval").value,
+      }),
+    });
+    const data = await res.json();
+    msg.textContent = data.message || "";
+  } catch (e) {
+    msg.textContent = "Network error.";
+  }
+}
+
+// Field Technician mode (P4): preferenza puramente client-side, nessuno
+// stato server — solo comodita' per chi guarda il dashboard in quel
+// momento, persistita per la prossima visita sullo stesso browser.
+function applyTechnicianMode(enabled) {
+  document.body.classList.toggle("technician-mode", enabled);
+  $("btn-technician-mode").classList.toggle("active", enabled);
+}
+
+function setupTechnicianMode() {
+  let enabled = false;
+  try {
+    enabled = localStorage.getItem("technicianMode") === "1";
+  } catch (e) {
+    // storage non disponibile (finestra privata, policy del browser):
+    // parte semplicemente disabilitata, non e' un errore bloccante.
+  }
+  applyTechnicianMode(enabled);
+  $("btn-technician-mode").addEventListener("click", () => {
+    enabled = !document.body.classList.contains("technician-mode");
+    applyTechnicianMode(enabled);
+    try {
+      localStorage.setItem("technicianMode", enabled ? "1" : "0");
+    } catch (e) {
+      // idem: se non si puo' salvare, la preferenza vale solo per questa sessione
+    }
+  });
+}
+
+async function viewAuditReport(scanId) {
+  const box = $("audit-report-text");
+  box.style.display = "block";
+  box.textContent = "Loading...";
+  try {
+    const res = await fetch(`/api/audit/report?scan_id=${scanId}`);
+    const data = await res.json();
+    if (!res.ok) {
+      box.textContent = data.message || "Failed to load the audit report.";
+      return;
+    }
+    renderReportText(data.text, "audit-report-text");
+  } catch (e) {
+    box.textContent = "Failed to load the audit report.";
+  }
+}
+
 function setupTabs() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -577,6 +654,7 @@ async function refreshUsers() {
   }
   select.disabled = false;
   refreshWebhookConfig();
+  refreshMonitoringConfig();
 
   const list = $("settings-user-list");
   try {
@@ -901,6 +979,7 @@ async function init() {
   }
 
   setupTabs();
+  setupTechnicianMode();
   $("btn-scan-start").addEventListener("click", startScan);
   $("btn-scan-stop").addEventListener("click", stopScan);
   $("btn-rescan-net").addEventListener("click", rescanNetwork);
@@ -917,6 +996,11 @@ async function init() {
   $("btn-change-password").addEventListener("click", changePassword);
   $("btn-save-webhook").addEventListener("click", saveWebhookConfig);
   $("btn-compare-scans").addEventListener("click", compareScans);
+  $("btn-save-monitoring").addEventListener("click", saveMonitoringConfig);
+  $("table-history-scans").addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".btn-audit-report");
+    if (btn) viewAuditReport(btn.dataset.scanId);
+  });
   $("settings-user-list").addEventListener("click", (ev) => {
     const btn = ev.target.closest(".btn-remove-user");
     if (btn) removeUser(btn.dataset.username);
