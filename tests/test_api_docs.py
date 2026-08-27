@@ -32,12 +32,16 @@ class TestApiDocsInSync(unittest.TestCase):
         """L'inverso: un path con "/api/" citato in API.md che non esiste
         piu' nel codice — es. un endpoint rinominato senza aggiornare la
         doc vecchia invece di scriverne una nuova."""
-        routes = set(_real_routes())
+        # Normalizza qualunque placeholder Flask (<username>, <int:scan_id>,
+        # ...) a un token comune su ENTRAMBI i lati: interessa solo la forma
+        # del path, non il nome/tipo esatto del parametro documentato.
+        def _normalize(path):
+            return re.sub(r"/<[^>]+>", "/<param>", path)
+
+        routes = {_normalize(r) for r in _real_routes()}
         api_md_text = API_MD.read_text()
         mentioned = set(re.findall(r'`(?:GET|POST|PUT|PATCH|DELETE) (/api/[^`\s?]+)', api_md_text))
-        # Le route con parametro (<username>) sono documentate col placeholder
-        # letterale, non con un valore reale: normalizzalo prima del confronto.
-        mentioned = {re.sub(r"/<[^>]+>", "/<username>", m) for m in mentioned}
+        mentioned = {_normalize(m) for m in mentioned}
         stale = [m for m in mentioned if m not in routes]
         self.assertEqual(stale, [], f"API.md cita route che non esistono piu': {stale}")
 

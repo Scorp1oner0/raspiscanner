@@ -169,6 +169,61 @@ bare array:
 }
 ```
 
+## History
+
+Every completed scan (including one stopped early or ended in error — a
+partial snapshot is still real data) is saved to a local SQLite database
+(`data/history.db`). Devices without a MAC (VPN/NOARP links, orphaned
+ONVIF-only cameras) can't be tracked reliably across scans — their IP may
+not mean the same host next time — so they're excluded from asset
+tracking and from comparisons, though they still appear in each scan's
+own device list.
+
+### `GET /api/history/scans?limit=20` — viewer
+Past scans, most recent first (metadata only, no devices):
+`{"scans": [{"id": 7, "started_at": 1735000000.0, "finished_at": 1735000090.0, "device_count": 14}, ...]}`.
+
+### `GET /api/history/scans/<int:scan_id>/devices` — viewer
+`{"devices": [device, ...]}` — the full device list from that one scan,
+same shape as `/api/devices`.
+
+### `GET /api/history/compare?old=<id>&new=<id>` — viewer
+Diffs two past scans by MAC. `400` if either id is missing.
+```json
+{
+  "added": [device, ...],
+  "removed": [device, ...],
+  "changed": [{"mac": "AA:BB:CC:11:22:33", "old": device, "new": device, "fields": ["ip", "open_ports"]}]
+}
+```
+`fields` lists which of `ip`, `vendor`, `model`, `device_type`,
+`open_ports` differ between the two snapshots.
+
+### `GET /api/history/assets?limit=500` — viewer
+Every MAC seen at least once, most recently seen first:
+`{"assets": [{"mac": "...", "first_seen": 1734000000.0, "last_seen": 1735000090.0, "last_ip": "...", "last_vendor": "...", "last_device_type": "...", "times_seen": 4}, ...]}`.
+
+## Webhook
+
+Optional: notifies one configured URL by `POST`ing a JSON summary after
+every scan. Off by default; the URL is set deliberately by an admin, not
+influenced by anything a scanned device sends — but only `http://`/`https://`
+URLs are accepted (never `file://`, even for an admin-supplied value).
+Delivery is best-effort with a 5s timeout: a failed webhook is logged, it
+never affects the scan that triggered it.
+
+### `GET /api/settings/webhook` — admin
+`{"url": "https://example.com/hook", "enabled": true}` (`enabled` is
+always `false` if `url` is empty, regardless of what was last saved).
+
+### `POST /api/settings/webhook` — admin
+Body: `{"url": "https://...", "enabled": true}`. `400` if `enabled: true`
+with no URL, or the URL isn't `http(s)`. On a completed scan, the payload
+posted is:
+```json
+{"scan_id": 7, "started_at": 1735000000.0, "finished_at": 1735000090.0, "device_count": 14, "camera_count": 3}
+```
+
 ## Settings
 
 ### `GET /api/settings/me`

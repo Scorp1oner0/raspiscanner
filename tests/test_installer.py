@@ -31,9 +31,12 @@ class TestInstallShSyntax(unittest.TestCase):
     def test_rsync_excludes_runtime_state_files(self):
         """Regressione concreta scoperta dal vivo: senza queste esclusioni,
         `rsync --delete` cancella utenti/password, certificato TLS e
-        database vendor scaricato a OGNI reinstallazione/upgrade."""
+        database vendor scaricato a OGNI reinstallazione/upgrade. history.db
+        e webhooks.json (P4, storico/webhook) seguono lo stesso trattamento:
+        stato runtime locale, mai committato, mai sovrascritto a un reinstall."""
         text = INSTALL_SH.read_text()
-        for excluded in ("data/users.json", "data/tls_cert.pem", "data/tls_key.pem", "data/oui.csv"):
+        for excluded in ("data/users.json", "data/tls_cert.pem", "data/tls_key.pem",
+                          "data/oui.csv", "data/history.db", "data/webhooks.json"):
             self.assertIn(f'--exclude "{excluded}"', text)
 
     def test_data_directory_ownership_fixed_explicitly(self):

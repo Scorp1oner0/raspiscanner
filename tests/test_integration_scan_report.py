@@ -9,11 +9,14 @@ probe ONVIF/mDNS, port scan, banner HTTP, reverse DNS): tutto il resto
 (scan_engine._scan_host, la classificazione, scanner.reporting) e'
 codice vero, non stub.
 """
+import shutil
+import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 
-from scanner import scan_engine
+from scanner import config, scan_engine
 from scanner.reporting import assessment
 
 
@@ -28,6 +31,15 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         self._orig_get_status = scan_engine.network_setup.get_status
         self._orig_is_noarp = scan_engine.network_setup.is_noarp
         self._orig_get_mac = scan_engine.network_setup.get_interface_mac
+
+        # run_scan() salva lo storico (scanner.storage) e notifica un
+        # eventuale webhook a fine scan: mai il vero data/history.db in
+        # un test, redirect su un file temporaneo.
+        self._tmp_dir = tempfile.mkdtemp()
+        self._orig_history_db = config.HISTORY_DB_PATH
+        self._orig_webhooks_path = config.WEBHOOKS_JSON_PATH
+        config.HISTORY_DB_PATH = str(Path(self._tmp_dir) / "history.db")
+        config.WEBHOOKS_JSON_PATH = str(Path(self._tmp_dir) / "webhooks.json")
 
         scan_engine.network_setup.get_status = lambda: {
             "eth": {"up": True, "iface": "eth0",
@@ -65,6 +77,9 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         scan_engine.network_setup.is_noarp = self._orig_is_noarp
         scan_engine.network_setup.get_interface_mac = self._orig_get_mac
         scan_engine._state.update(running=False, devices={})
+        config.HISTORY_DB_PATH = self._orig_history_db
+        config.WEBHOOKS_JSON_PATH = self._orig_webhooks_path
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
     def _run_and_wait(self, timeout=5):
         ok, message = scan_engine.run_scan()

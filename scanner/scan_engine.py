@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 
-from . import vendor
+from . import storage, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import arp_scan, icmp_scan, mdns_probe, resolve_hostname
@@ -442,6 +442,23 @@ def _run_scan_thread(networks):
         _update(error=str(exc))
     finally:
         _update(running=False, finished_at=time.time())
+        # Storico (P4): salvato anche per uno scan fermato a meta' o
+        # terminato con errore — e' comunque un'istantanea reale di cosa
+        # e' stato trovato, utile per l'asset database anche se
+        # incompleta. Un fallimento qui (disco pieno, permessi) non deve
+        # mai far sembrare fallito lo scan appena completato.
+        try:
+            state = get_state()
+            scan_id = storage.save_scan(state["devices"], state["started_at"], state["finished_at"])
+            webhooks.notify_scan_complete({
+                "scan_id": scan_id,
+                "started_at": state["started_at"],
+                "finished_at": state["finished_at"],
+                "device_count": len(state["devices"]),
+                "camera_count": sum(1 for d in state["devices"] if d.get("is_camera")),
+            })
+        except Exception:
+            log.exception("salvataggio storico scan fallito (non bloccante)")
 
 
 def stop_scan():

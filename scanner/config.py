@@ -7,6 +7,12 @@ OUI_CSV_PATH = os.path.join(DATA_DIR, "oui.csv")
 USERS_JSON_PATH = os.path.join(DATA_DIR, "users.json")
 TLS_CERT_PATH = os.path.join(DATA_DIR, "tls_cert.pem")
 TLS_KEY_PATH = os.path.join(DATA_DIR, "tls_key.pem")
+# Storico scan (P4): asset database, report comparativi, dashboard storica.
+# sqlite3 e' stdlib, nessuna nuova dipendenza. Stato runtime generato al
+# primo scan salvato, stesso trattamento di users.json/tls_*.pem: mai
+# committato, escluso da install.sh (vedi li').
+HISTORY_DB_PATH = os.path.join(DATA_DIR, "history.db")
+WEBHOOKS_JSON_PATH = os.path.join(DATA_DIR, "webhooks.json")
 
 # Interfacce di rete gestite (nomi tipici su Raspberry Pi OS / kernel Linux)
 ETH_IFACE_PREFIXES = ("eth", "en")

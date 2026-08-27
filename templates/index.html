@@ -120,6 +120,7 @@
       <button class="tab-btn active" data-tab="all">Devices (<span id="count-all">0</span>)</button>
       <button class="tab-btn" data-tab="cameras">Cameras (<span id="count-cameras">0</span>)</button>
       <button class="tab-btn" data-tab="report">Report</button>
+      <button class="tab-btn" data-tab="history">History</button>
       <button class="tab-btn" data-tab="settings">Settings</button>
     </div>
 
@@ -185,6 +186,41 @@
       <pre id="report-text" class="report-text">No data yet — start a scan, then open this tab.</pre>
     </div>
 
+    <div class="tab-panel hidden" id="panel-history">
+      <p class="modal-desc">
+        Every completed scan is saved locally (SQLite): a history of past
+        scans, an asset list of every MAC seen over time, and a way to
+        compare two scans to see what changed. Devices without a MAC
+        (VPN links, orphaned ONVIF-only cameras) aren't tracked here —
+        their IP alone isn't a reliable identity across scans.
+      </p>
+
+      <h3 class="settings-subtitle">Past scans</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th>Devices</th></tr></thead>
+          <tbody id="table-history-scans"></tbody>
+        </table>
+      </div>
+
+      <h3 class="settings-subtitle">Compare two scans</h3>
+      <div class="modal-row">
+        <select id="compare-old-scan" class="modal-input"></select>
+        <span class="iface-name">vs</span>
+        <select id="compare-new-scan" class="modal-input"></select>
+        <button class="btn small" id="btn-compare-scans">🔀 Compare</button>
+      </div>
+      <div id="compare-result" class="report-text" style="display:none;"></div>
+
+      <h3 class="settings-subtitle">Known assets</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>MAC</th><th>Vendor</th><th>Type</th><th>First seen</th><th>Last seen</th><th>Times seen</th></tr></thead>
+          <tbody id="table-history-assets"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="tab-panel hidden" id="panel-settings">
       <p class="modal-desc">
         Users with dashboard access (HTTP Basic Auth: the browser asks for
@@ -210,6 +246,15 @@
           <button class="btn small" id="btn-add-user">➕ Add</button>
         </div>
         <span id="add-user-msg" class="msg"></span>
+
+        <h3 class="settings-subtitle">Webhook</h3>
+        <p class="modal-desc">Optional: notify a URL with a JSON summary after every scan.</p>
+        <div class="modal-row">
+          <input type="text" id="webhook-url" class="modal-input" placeholder="https://example.com/hook">
+          <label class="iface-name"><input type="checkbox" id="webhook-enabled"> Enabled</label>
+          <button class="btn small" id="btn-save-webhook">💾 Save</button>
+        </div>
+        <span id="webhook-msg" class="msg"></span>
       </div>
 
       <h3 class="settings-subtitle">Change password</h3>

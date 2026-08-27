@@ -87,11 +87,19 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         self._orig_users_path = config.USERS_JSON_PATH
         self._orig_tls_cert = config.TLS_CERT_PATH
         self._orig_tls_key = config.TLS_KEY_PATH
+        self._orig_history_db = config.HISTORY_DB_PATH
+        self._orig_webhooks_path = config.WEBHOOKS_JSON_PATH
         self._orig_generate = auth.generate_initial_password
         config.DATA_DIR = self._tmp_dir
         config.USERS_JSON_PATH = str(Path(self._tmp_dir) / "users.json")
         config.TLS_CERT_PATH = str(Path(self._tmp_dir) / "tls_cert.pem")
         config.TLS_KEY_PATH = str(Path(self._tmp_dir) / "tls_key.pem")
+        # /api/scan/start avvia un vero thread in background (scan_engine
+        # non e' mockato in questa base class): se arriva a salvare lo
+        # storico o a notificare un webhook, non deve MAI toccare i file
+        # reali in data/.
+        config.HISTORY_DB_PATH = str(Path(self._tmp_dir) / "history.db")
+        config.WEBHOOKS_JSON_PATH = str(Path(self._tmp_dir) / "webhooks.json")
         auth.generate_initial_password = lambda: "BootstrapPassw0rd"
 
         self.module = _load_raspi_scanner_module()
@@ -115,6 +123,8 @@ class RaspiScannerAppTestCase(unittest.TestCase):
         config.USERS_JSON_PATH = self._orig_users_path
         config.TLS_CERT_PATH = self._orig_tls_cert
         config.TLS_KEY_PATH = self._orig_tls_key
+        config.HISTORY_DB_PATH = self._orig_history_db
+        config.WEBHOOKS_JSON_PATH = self._orig_webhooks_path
         shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
 
@@ -294,6 +304,86 @@ class TestExportStructuredJson(RaspiScannerAppTestCase):
         body = resp.get_data(as_text=True)
         self.assertIn("192.168.1.21", body)
         self.assertIn("Hikvision", body)
+
+
+class TestHistoryRoutes(RaspiScannerAppTestCase):
+    """P4 'comparative reports' / 'local asset database' / 'historical
+    dashboard': le route leggono da scanner.storage, gia' testato a
+    fondo in isolamento in tests/test_storage.py — qui interessano solo
+    ruoli richiesti e forma della risposta HTTP."""
+
+    def setUp(self):
+        super().setUp()
+        from scanner import storage
+        self.storage = storage
+        device_v1 = {"ip": "192.168.1.21", "mac": "AA:BB:CC:11:22:33", "vendor": "Hikvision",
+                     "model": None, "device_type": "Camera", "is_camera": True, "is_nvr": False,
+                     "network": "192.168.1.0/24", "open_ports": []}
+        self.scan_id_1 = storage.save_scan([device_v1], 1000.0, 1010.0)
+        device_v2 = dict(device_v1, open_ports=[{"port": 554, "service": "RTSP"}])
+        self.scan_id_2 = storage.save_scan([device_v2], 2000.0, 2010.0)
+
+    def test_list_scans(self):
+        resp = self.client.get("/api/history/scans", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+        scans = resp.get_json()["scans"]
+        self.assertEqual([s["id"] for s in scans], [self.scan_id_2, self.scan_id_1])
+
+    def test_scan_devices(self):
+        resp = self.client.get(f"/api/history/scans/{self.scan_id_1}/devices", auth=self.viewer_auth)
+        devices = resp.get_json()["devices"]
+        self.assertEqual(devices[0]["ip"], "192.168.1.21")
+
+    def test_compare_requires_both_ids(self):
+        resp = self.client.get("/api/history/compare?old=1", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_compare_detects_open_port_change(self):
+        resp = self.client.get(
+            f"/api/history/compare?old={self.scan_id_1}&new={self.scan_id_2}", auth=self.viewer_auth,
+        )
+        diff = resp.get_json()
+        self.assertEqual(len(diff["changed"]), 1)
+        self.assertIn("open_ports", diff["changed"][0]["fields"])
+
+    def test_list_assets(self):
+        resp = self.client.get("/api/history/assets", auth=self.viewer_auth)
+        assets = resp.get_json()["assets"]
+        self.assertEqual(assets[0]["mac"], "AA:BB:CC:11:22:33")
+        self.assertEqual(assets[0]["times_seen"], 2)
+
+
+class TestWebhookSettings(RaspiScannerAppTestCase):
+    def test_viewer_cannot_read_webhook_config(self):
+        resp = self.client.get("/api/settings/webhook", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_admin_can_get_and_set_webhook_config(self):
+        resp = self.client.get("/api/settings/webhook", auth=self.admin_auth)
+        self.assertEqual(resp.get_json(), {"url": None, "enabled": False})
+
+        resp = self.client.post(
+            "/api/settings/webhook", auth=self.admin_auth,
+            json={"url": "https://example.com/hook", "enabled": True},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        resp = self.client.get("/api/settings/webhook", auth=self.admin_auth)
+        self.assertEqual(resp.get_json(), {"url": "https://example.com/hook", "enabled": True})
+
+    def test_operator_cannot_set_webhook_config(self):
+        resp = self.client.post(
+            "/api/settings/webhook", auth=self.operator_auth,
+            json={"url": "https://example.com/hook", "enabled": True},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_invalid_scheme_rejected(self):
+        resp = self.client.post(
+            "/api/settings/webhook", auth=self.admin_auth,
+            json={"url": "file:///etc/passwd", "enabled": True},
+        )
+        self.assertEqual(resp.status_code, 400)
 
 
 if __name__ == "__main__":

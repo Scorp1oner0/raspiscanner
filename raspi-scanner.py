@@ -25,7 +25,7 @@ from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from scanner import auth, scan_engine, tls
+from scanner import auth, scan_engine, storage, tls, webhooks
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -349,6 +349,56 @@ def api_export():
         json.dumps(payload, indent=2, ensure_ascii=False), mimetype="application/json",
         headers={"Content-Disposition": f"attachment; filename=raspiscanner_{kind}.json"},
     )
+
+
+@app.route("/api/history/scans")
+@require_role("viewer")
+def api_history_scans():
+    """P4 'historical dashboard': metadati (non i device) degli scan
+    passati, piu' recenti prima."""
+    limit = request.args.get("limit", 20, type=int)
+    return jsonify({"scans": storage.list_scans(limit=limit)})
+
+
+@app.route("/api/history/scans/<int:scan_id>/devices")
+@require_role("viewer")
+def api_history_scan_devices(scan_id):
+    return jsonify({"devices": storage.get_scan_devices(scan_id)})
+
+
+@app.route("/api/history/compare")
+@require_role("viewer")
+def api_history_compare():
+    """P4 'comparative reports': confronta due scan passati per MAC.
+    ?old=<scan_id>&new=<scan_id>, entrambi richiesti."""
+    old_id = request.args.get("old", type=int)
+    new_id = request.args.get("new", type=int)
+    if not old_id or not new_id:
+        return jsonify({"error": "bad_request", "message": "'old' and 'new' scan ids are required"}), 400
+    return jsonify(storage.compare_scans(old_id, new_id))
+
+
+@app.route("/api/history/assets")
+@require_role("viewer")
+def api_history_assets():
+    """P4 'local asset database': ogni MAC visto almeno una volta
+    attraverso scan diversi, con first_seen/last_seen."""
+    limit = request.args.get("limit", 500, type=int)
+    return jsonify({"assets": storage.list_assets(limit=limit)})
+
+
+@app.route("/api/settings/webhook")
+@require_role("admin")
+def api_settings_webhook_get():
+    return jsonify(webhooks.get_config())
+
+
+@app.route("/api/settings/webhook", methods=["POST"])
+@require_role("admin")
+def api_settings_webhook_set():
+    data = request.get_json(silent=True) or {}
+    ok, message = webhooks.set_config(data.get("url"), bool(data.get("enabled")))
+    return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 
 @app.route("/api/settings/users")

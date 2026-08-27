@@ -388,6 +388,119 @@ async function refreshReport() {
   }
 }
 
+function formatTimestamp(ts) {
+  if (!ts) return "-";
+  return new Date(ts * 1000).toLocaleString();
+}
+
+async function refreshHistory() {
+  try {
+    const res = await fetch("/api/history/scans?limit=20");
+    const data = await res.json();
+    const scans = data.scans || [];
+
+    $("table-history-scans").innerHTML = scans.length
+      ? scans.map((s) => `
+          <tr>
+            <td>${s.id}</td>
+            <td>${formatTimestamp(s.started_at)}</td>
+            <td>${formatTimestamp(s.finished_at)}</td>
+            <td>${s.device_count}</td>
+          </tr>
+        `).join("")
+      : '<tr><td colspan="4" class="empty">No saved scans yet — run one first.</td></tr>';
+
+    const options = scans.map((s) => `<option value="${s.id}">#${s.id} — ${formatTimestamp(s.started_at)}</option>`).join("");
+    $("compare-old-scan").innerHTML = options;
+    $("compare-new-scan").innerHTML = options;
+    if (scans.length > 1) {
+      $("compare-old-scan").value = scans[1].id;
+      $("compare-new-scan").value = scans[0].id;
+    }
+  } catch (e) {
+    console.error("refreshHistory (scans)", e);
+  }
+
+  try {
+    const res = await fetch("/api/history/assets?limit=500");
+    const data = await res.json();
+    const assets = data.assets || [];
+    $("table-history-assets").innerHTML = assets.length
+      ? assets.map((a) => `
+          <tr>
+            <td>${escapeHtml(a.mac)}</td>
+            <td>${escapeHtml(a.last_vendor) || "-"}</td>
+            <td>${escapeHtml(a.last_device_type) || "-"}</td>
+            <td>${formatTimestamp(a.first_seen)}</td>
+            <td>${formatTimestamp(a.last_seen)}</td>
+            <td>${a.times_seen}</td>
+          </tr>
+        `).join("")
+      : '<tr><td colspan="6" class="empty">No known assets yet.</td></tr>';
+  } catch (e) {
+    console.error("refreshHistory (assets)", e);
+  }
+}
+
+async function compareScans() {
+  const oldId = $("compare-old-scan").value;
+  const newId = $("compare-new-scan").value;
+  const box = $("compare-result");
+  if (!oldId || !newId) {
+    box.style.display = "block";
+    box.textContent = "Pick two scans to compare.";
+    return;
+  }
+  box.style.display = "block";
+  box.textContent = "Comparing...";
+  try {
+    const res = await fetch(`/api/history/compare?old=${oldId}&new=${newId}`);
+    const diff = await res.json();
+    const lines = [];
+    lines.push(`Comparing scan #${oldId} -> #${newId}`);
+    lines.push("");
+    lines.push(`${diff.added.length} device(s) added:`);
+    diff.added.forEach((d) => lines.push(`  + ${d.ip} (${d.mac}) ${d.vendor || ""}`));
+    lines.push("");
+    lines.push(`${diff.removed.length} device(s) removed:`);
+    diff.removed.forEach((d) => lines.push(`  - ${d.ip} (${d.mac}) ${d.vendor || ""}`));
+    lines.push("");
+    lines.push(`${diff.changed.length} device(s) changed:`);
+    diff.changed.forEach((c) => lines.push(`  ~ ${c.new.ip} (${c.mac}): ${c.fields.join(", ")}`));
+    box.textContent = lines.join("\n");
+  } catch (e) {
+    box.textContent = "Failed to compare scans.";
+  }
+}
+
+async function refreshWebhookConfig() {
+  try {
+    const res = await fetch("/api/settings/webhook");
+    if (!res.ok) return;  // non-admin: 403, il campo resta nascosto insieme al resto della sezione
+    const data = await res.json();
+    $("webhook-url").value = data.url || "";
+    $("webhook-enabled").checked = !!data.enabled;
+  } catch (e) {
+    console.error("refreshWebhookConfig", e);
+  }
+}
+
+async function saveWebhookConfig() {
+  const msg = $("webhook-msg");
+  msg.textContent = "Saving...";
+  try {
+    const res = await fetch("/api/settings/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: $("webhook-url").value.trim(), enabled: $("webhook-enabled").checked }),
+    });
+    const data = await res.json();
+    msg.textContent = data.message || "";
+  } catch (e) {
+    msg.textContent = "Network error.";
+  }
+}
+
 function setupTabs() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -397,8 +510,10 @@ function setupTabs() {
       $("panel-all").classList.toggle("hidden", tab !== "all");
       $("panel-cameras").classList.toggle("hidden", tab !== "cameras");
       $("panel-report").classList.toggle("hidden", tab !== "report");
+      $("panel-history").classList.toggle("hidden", tab !== "history");
       $("panel-settings").classList.toggle("hidden", tab !== "settings");
       if (tab === "report") refreshReport();
+      if (tab === "history") refreshHistory();
       if (tab === "settings") refreshUsers();
     });
   });
@@ -422,6 +537,7 @@ async function refreshUsers() {
     return;
   }
   select.disabled = false;
+  refreshWebhookConfig();
 
   const list = $("settings-user-list");
   try {
@@ -760,6 +876,8 @@ async function init() {
   $("btn-hotspot-stop").addEventListener("click", stopHotspot);
   $("btn-add-user").addEventListener("click", addUser);
   $("btn-change-password").addEventListener("click", changePassword);
+  $("btn-save-webhook").addEventListener("click", saveWebhookConfig);
+  $("btn-compare-scans").addEventListener("click", compareScans);
   $("settings-user-list").addEventListener("click", (ev) => {
     const btn = ev.target.closest(".btn-remove-user");
     if (btn) removeUser(btn.dataset.username);

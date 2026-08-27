@@ -431,8 +431,31 @@ non e' un cambio di priorita' silenzioso.
       di regressione (`tests/test_api_docs.py`) che tiene la doc
       sincronizzata con le route reali in entrambe le direzioni — nessuna
       route nuova non documentata, nessuna route documentata ma rimossa.)*
-- [ ] Webhooks.
-- [ ] Comparative reports between scans ("first scan vs current scan").
-- [ ] Local asset database.
-- [ ] Historical dashboard.
+- [x] Webhooks. *(`scanner/webhooks.py`: notifica opzionale via POST JSON
+      a fine scan, configurazione admin-only (`data/webhooks.json`, mai
+      committato). Solo URL http/https accettati (mai `file://`, anche
+      se l'URL e' scelto da un admin autenticato — non e' lo stesso
+      rischio SSRF dell'XAddr ONVIF, ma resta la forma minima corretta).
+      Best-effort: un fallimento (timeout, URL irraggiungibile) e' solo
+      loggato, non fa mai fallire lo scan. API `GET`/`POST
+      /api/settings/webhook`, sezione dedicata in Impostazioni.)*
+- [x] Comparative reports between scans ("first scan vs current scan").
+      *(`storage.compare_scans()`: confronto per MAC tra due scan salvati
+      — added/removed/changed (con i campi esatti cambiati). Device
+      senza MAC esclusi dal confronto (IP non affidabile come identita'
+      nel tempo). UI dedicata nella tab History: due tendine + pulsante
+      "Compare".)*
+- [x] Local asset database. *(`scanner/storage.py`, SQLite (stdlib,
+      nessuna nuova dipendenza) — `data/history.db`, mai committato,
+      escluso dal `rsync --delete` di install.sh come users.json/tls_*.pem.
+      Ogni MAC visto almeno una volta viene tracciato con first_seen/
+      last_seen/times_seen, aggiornato a ogni scan. Un device senza MAC
+      resta fuori dall'asset tracking per lo stesso motivo dei report
+      comparativi.)*
+- [x] Historical dashboard. *(Nuova tab "History" in dashboard: elenco
+      scan passati, confronto tra due scan, elenco asset noti. Salvataggio
+      dello storico avviene automaticamente a fine di OGNI scan (anche
+      fermato a meta' o terminato con errore — resta un'istantanea reale),
+      dentro `scan_engine._run_scan_thread`, mai bloccante per lo scan
+      stesso se il salvataggio fallisce.)*
 - [ ] Field Technician mode. Audit mode. Continuous Monitoring mode.

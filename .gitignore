@@ -20,3 +20,7 @@ data/users.json
 # Certificato TLS self-signed, generato al primo avvio
 data/tls_cert.pem
 data/tls_key.pem
+
+# Storico scan (SQLite) e configurazione webhook, generati al primo scan/uso
+data/history.db
+data/webhooks.json
