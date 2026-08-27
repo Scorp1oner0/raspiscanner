@@ -100,6 +100,27 @@ class TestSecurityFindings(unittest.TestCase):
         self.assertEqual(len(admin_findings), 1)
         self.assertEqual(admin_findings[0]["severity"], "high")
 
+    def test_http_admin_panel_detected_even_with_string_port_keys(self):
+        """Bug reale scoperto testando l'Audit mode su hardware vero: un
+        device passato per storage.save_scan()/get_scan_devices() (usato
+        dall'Audit mode) ha fatto un round-trip JSON, dove le chiavi di
+        http_banners diventano stringhe ("80" invece di 80) — JSON non
+        supporta chiavi-oggetto non stringa. Senza la normalizzazione a
+        int in find_security_issues(), banners.get(p) con p intero (da
+        ports_open) falliva silenziosamente, degradando questo stesso
+        finding da "high" (admin panel) a "medium" (HTTP generico) SOLO
+        per i report rigenerati da uno scan salvato, mai per il report
+        live — una regressione che i test esistenti (con chiavi int,
+        come nello stato live) non potevano cogliere."""
+        admin_device = _device(
+            "192.168.10.55", "Unknown", [{"port": 80, "service": "HTTP"}],
+            banners={"80": {"server": None, "title": "Router Admin Login"}},
+        )
+        findings = security.find_security_issues(admin_device)
+        admin_findings = [f for f in findings if f["id"] == "http_admin_without_https"]
+        self.assertEqual(len(admin_findings), 1)
+        self.assertEqual(admin_findings[0]["severity"], "high")
+
     def test_http_admin_panel_with_https_is_medium_severity(self):
         admin_device = _device(
             "192.168.10.56", "Unknown", [{"port": 80, "service": "HTTP"}, {"port": 443, "service": "HTTPS"}],

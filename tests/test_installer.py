@@ -70,6 +70,19 @@ class TestInstallShSyntax(unittest.TestCase):
         self.assertIn("FIRST LOGIN", text)
         self.assertIn("journalctl", text)
 
+    def test_bootstrap_detection_polls_instead_of_a_fixed_short_sleep(self):
+        """Regressione concreta scoperta dal vivo su un Raspberry Pi 3B+
+        reale: un `sleep 3` fisso prima di controllare il journal per la
+        riga di bootstrap non bastava su CPU debole (Flask/scapy/il
+        monitor di rete possono metterci piu' di qualche secondo ad
+        avviarsi) — l'installer concludeva "nessun account creato" anche
+        quando l'account stava per essere creato un attimo dopo. Un
+        `sleep 3` isolato (non dentro un loop di poll) non deve
+        ricomparire."""
+        text = INSTALL_SH.read_text()
+        self.assertNotIn("sleep 3\nBOOTSTRAP_LINE", text)
+        self.assertIn("for _ in $(seq 1 15); do", text)
+
 
 class TestUninstallShSyntax(unittest.TestCase):
     def test_bash_syntax_is_valid(self):

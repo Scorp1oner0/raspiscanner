@@ -99,8 +99,19 @@ systemctl restart raspiscanner.service
 
 echo ""
 echo "==> Checking service status and looking for first-login credentials..."
-sleep 3
-BOOTSTRAP_LINE="$(journalctl -u raspiscanner.service --no-pager 2>/dev/null | grep -i "utente di bootstrap creato" | tail -1 || true)"
+# Un sleep fisso qui era troppo ottimista: su una CPU debole (Raspberry Pi
+# 3B+, verificato dal vivo) l'avvio di Flask/scapy/il monitor di rete puo'
+# richiedere piu' di qualche secondo prima che auth.ensure_default_user()
+# arrivi a loggare la riga di bootstrap — un sleep breve concludeva "nessun
+# account creato" anche quando l'account stava per essere creato un attimo
+# dopo. Poll fino a 15s invece di un'attesa cieca, cosi' funziona sia su
+# hardware veloce (esce quasi subito) sia su hardware lento.
+BOOTSTRAP_LINE=""
+for _ in $(seq 1 15); do
+  BOOTSTRAP_LINE="$(journalctl -u raspiscanner.service --no-pager 2>/dev/null | grep -i "utente di bootstrap creato" | tail -1 || true)"
+  [ -n "$BOOTSTRAP_LINE" ] && break
+  sleep 1
+done
 
 echo ""
 echo "✅ Installed. Service: systemctl status raspiscanner"

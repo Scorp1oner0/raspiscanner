@@ -33,7 +33,16 @@ def find_security_issues(device):
     con severity in critical/high/medium/low.
     """
     ports_open = {p["port"] for p in device.get("open_ports", [])}
-    banners = device.get("http_banners") or {}
+    # Normalizza le chiavi porta a int: un device passato per uno storico
+    # salvato (storage.save_scan()/get_scan_devices(), usato dall'Audit
+    # mode) ha fatto un round-trip JSON, e JSON non supporta chiavi-oggetto
+    # non stringa — "80" invece di 80. Bug reale scoperto testando l'Audit
+    # mode su hardware vero: banners.get(p) con p intero (da ports_open,
+    # sempre int) falliva silenziosamente su un dict con chiavi stringa,
+    # degradando "HTTP admin panel" (high) a "HTTP service" generico
+    # (medium) SOLO per i report rigenerati da uno scan salvato, mai per
+    # il report live (dict Python originale, mai serializzato).
+    banners = {int(k): v for k, v in (device.get("http_banners") or {}).items()}
     findings = []
 
     if device.get("network_mismatch"):
