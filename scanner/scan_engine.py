@@ -12,7 +12,7 @@ import time
 from . import storage, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
-from .discovery import arp_scan, icmp_scan, mdns_probe, resolve_hostname
+from .discovery import arp_scan, icmp_scan, mdns_probe, resolve_hostname, snmp_probe
 from .fingerprint import grab_http_banner, scan_ports
 from .hosts import classify_host
 from .network import setup as network_setup
@@ -118,6 +118,21 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
     is_infra, infra_subtype, infra_reasons = classify_network_device(ip, gateway_ip, device_vendor, banners)
     host_label, host_reasons = classify_host(device_vendor, open_ports, hostname)
 
+    # SNMP (P4, opzionale): solo su apparati gia' sospettati di rete
+    # (router/switch/AP), non su ogni host — SNMP e' spento sulla
+    # stragrande maggioranza dei dispositivi (telefoni, PC, IoT), provarlo
+    # su tutti aggiungerebbe un timeout in piu' per host all'intero scan
+    # senza un guadagno reale. community "public" di sola lettura, mai
+    # una lista indovinata (vedi scanner.discovery.snmp).
+    snmp_info = {}
+    if is_infra:
+        snmp_info = snmp_probe(ip)
+        if snmp_info.get("sysDescr") and device_vendor == "Unknown":
+            device_vendor = snmp_info["sysDescr"]
+            vendor_source = "snmp"
+        if snmp_info.get("sysName") and not hostname:
+            hostname = snmp_info["sysName"]
+
     # Se il dispositivo risponde a ONVIF, prova a interrogare
     # GetDeviceInformation per un vendor/model REALI invece di indovinarli
     # dal banner: non sempre riesce (spesso richiede autenticazione), in
@@ -185,6 +200,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
         "model": model,
         "model_source": model_source,
         "hostname": hostname,
+        "snmp_info": snmp_info,
         "open_ports": open_ports,
         "http_banners": banners,
         "onvif": onvif_info,
@@ -303,6 +319,7 @@ def _build_orphan_onvif_device(ip, onvif_info, iface):
         "model": model,
         "model_source": model_source,
         "hostname": None,
+        "snmp_info": {},
         "open_ports": [],
         "http_banners": {},
         "onvif": onvif_info,

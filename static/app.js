@@ -218,6 +218,7 @@ function renderVendorCell(d) {
   // affidabile) — reso esplicito invece di mostrare lo stesso nome vendor
   // a prescindere da quanto sia affidabile la fonte.
   const sourceLabel = d.vendor_source === "onvif" ? "self-reported via ONVIF"
+    : d.vendor_source === "snmp" ? "self-reported via SNMP (sysDescr)"
     : d.vendor_source === "banner" ? "guessed from the device's own HTTP banner (MAC vendor unknown)"
     : d.vendor_source === "oui" ? "from MAC vendor lookup (OUI database)"
     : null;

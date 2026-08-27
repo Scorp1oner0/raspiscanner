@@ -262,6 +262,8 @@ The shape returned by `/api/devices`, `/api/devices/cameras`,
   "model": "DS-2CD2043G0",
   "model_source": "onvif",
   "hostname": null,
+  "snmp_info": {},
+  "vlan_id": null,
   "iface": "eth0",
   "network": "192.168.1.0/24",
   "open_ports": [{"port": 554, "service": "RTSP"}],
@@ -282,9 +284,20 @@ The shape returned by `/api/devices`, `/api/devices/cameras`,
 
 - `vendor_source`: `"oui"` (MAC vendor lookup), `"banner"` (guessed from
   the device's own HTTP banner — only used when the OUI lookup found
-  nothing), `"onvif"` (self-reported), or `null`.
+  nothing), `"snmp"` (from SNMP `sysDescr`, only on devices already
+  suspected to be network infrastructure), `"onvif"` (self-reported), or
+  `null`.
 - `model_source`: `"onvif"`, `"mdns"`, or `null` — `model` is never a
   guess, only ever what the device declared about itself.
+- `snmp_info`: `{"sysDescr": "...", "sysName": "..."}` with only the keys
+  actually obtained — `{}` on the vast majority of devices (SNMP is
+  usually disabled, and only probed on hosts already classified as
+  network infrastructure). Community `public`, read-only, never a list
+  of guessed communities.
+- `vlan_id`: the 802.1Q VLAN tag seen on this device's ARP traffic, or
+  `null` — most switch ports are "access" mode (the tag is stripped
+  before the frame reaches the scanner), so `null` is the normal case,
+  not a sign anything is missing.
 - `rtsp_url`/`admin_url` are **candidates**, not verified endpoints:
   guessed from an open port (554 for RTSP; the first open web port for
   admin), never confirmed with an actual handshake — see

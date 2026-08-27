@@ -242,6 +242,63 @@ class TestClassifyOrphanIps(unittest.TestCase):
         self.assertEqual(scan_engine._classify_orphan_ips([], networks), ([], []))
 
 
+class TestScanHostSnmp(unittest.TestCase):
+    """P4 'optional SNMP discovery': provato SOLO su host gia' sospettati
+    di essere apparato di rete (is_infra), non su ogni host — evita di
+    aggiungere un timeout per host all'intero scan senza un guadagno
+    reale sulla stragrande maggioranza dei device (telefoni, PC, IoT)."""
+
+    GATEWAY_IP = "192.168.1.1"
+
+    def setUp(self):
+        self._orig = {
+            name: getattr(scan_engine, name)
+            for name in ("scan_ports", "grab_http_banner", "get_device_info_multi",
+                         "resolve_hostname", "snmp_probe")
+        }
+        scan_engine.scan_ports = lambda ip: []
+        scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
+        scan_engine.resolve_hostname = lambda ip, timeout=1: None
+        scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
+
+    def tearDown(self):
+        for name, fn in self._orig.items():
+            setattr(scan_engine, name, fn)
+
+    def test_snmp_probed_when_host_is_the_gateway(self):
+        calls = []
+        scan_engine.snmp_probe = lambda ip, community="public", timeout=1.0: (
+            calls.append(ip), {"sysDescr": "Linux router 5.4.0", "sysName": "core-router"}
+        )[1]
+        device = scan_engine._scan_host(self.GATEWAY_IP, "AA:BB:CC:00:00:01", {}, {}, self.GATEWAY_IP)
+        self.assertEqual(calls, [self.GATEWAY_IP])
+        self.assertEqual(device["snmp_info"]["sysDescr"], "Linux router 5.4.0")
+
+    def test_snmp_not_probed_on_a_regular_host(self):
+        def fail(*a, **k):
+            raise AssertionError("snmp_probe non doveva essere chiamata su un host non-infra")
+        scan_engine.snmp_probe = fail
+        device = scan_engine._scan_host("192.168.1.50", "AA:BB:CC:00:00:02", {}, {}, self.GATEWAY_IP)
+        self.assertEqual(device["snmp_info"], {})
+
+    def test_sysdescr_fills_unknown_vendor(self):
+        scan_engine.snmp_probe = lambda ip, community="public", timeout=1.0: {"sysDescr": "Cisco IOS Software"}
+        device = scan_engine._scan_host(self.GATEWAY_IP, "AA:BB:CC:00:00:01", {}, {}, self.GATEWAY_IP)
+        self.assertEqual(device["vendor"], "Cisco IOS Software")
+        self.assertEqual(device["vendor_source"], "snmp")
+
+    def test_sysdescr_does_not_override_a_known_vendor(self):
+        scan_engine.snmp_probe = lambda ip, community="public", timeout=1.0: {"sysDescr": "Should not be used"}
+        device = scan_engine._scan_host("192.168.1.1", "B8:27:EB:00:00:01", {}, {}, self.GATEWAY_IP)
+        self.assertEqual(device["vendor"], "Raspberry Pi Foundation")
+        self.assertEqual(device["vendor_source"], "oui")
+
+    def test_sysname_fills_missing_hostname(self):
+        scan_engine.snmp_probe = lambda ip, community="public", timeout=1.0: {"sysName": "core-switch"}
+        device = scan_engine._scan_host(self.GATEWAY_IP, "AA:BB:CC:00:00:01", {}, {}, self.GATEWAY_IP)
+        self.assertEqual(device["hostname"], "core-switch")
+
+
 class TestScanHostModelSource(unittest.TestCase):
     """P3 (dashboard UX "detected vs inferred"): model_source distingue un
     "model" auto-dichiarato dal dispositivo via protocollo strutturato

@@ -414,7 +414,19 @@ non e' un cambio di priorita' silenzioso.
       Non verificabile con un vero switch trunk in questa sessione, ma la
       logica di estrazione e' testata direttamente con un frame Dot1Q
       costruito a mano — corretta a prescindere dall'hardware disponibile.)*
-- [ ] Optional SNMP discovery.
+- [x] Optional SNMP discovery. *(`scanner/discovery/snmp.py`: GET
+      sysDescr/sysName via SNMP v2c, community "public" (la convenzione
+      universale di sola lettura, MAI una lista indovinata — sarebbe
+      credential guessing, fuori scope). Provato SOLO su host gia'
+      classificati come apparato di rete (`is_infra`), non su ogni host:
+      SNMP e' spento sulla stragrande maggioranza dei device, provarlo
+      su tutti aggiungerebbe un timeout per host all'intero scan senza
+      guadagno reale. `sysDescr` riempie il vendor solo se ancora
+      "Unknown" (nuovo `vendor_source="snmp"`), `sysName` riempie
+      l'hostname solo se mancante. Non verificabile con un vero
+      dispositivo SNMP-enabled in questa sessione: parsing testato con
+      risposte SNMP costruite a mano (round-trip byte a byte, non
+      oggetti scapy "freschi" — differenza scoperta scrivendo il test).)*
 - [ ] LLDP/CDP discovery.
 - [ ] IPv6 discovery.
 - [ ] Network topology map.
