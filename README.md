@@ -146,7 +146,7 @@ full flow. Full install/upgrade/uninstall instructions further down.
 ## Example output
 
 ```
-$ sudo raspi-scanner.py --report
+$ sudo python3 raspi-scanner.py --report
 
 NETWORK ASSESSMENT
 ────────────────────────────
@@ -257,9 +257,15 @@ discover:
 - **RAM usage on large scans.** Not measured against a real network big
   enough to matter; each device's data is modest, but hasn't been
   profiled at scale.
-- **Raspberry Pi 4/5 scan times.** Measured on a real Pi 3B+ (22.3s for
-  a multi-interface scan — eth0 + Wi-Fi together, 8 live hosts, full
-  classification included) but not yet on the faster 4/5 models.
+- **Raspberry Pi 4/5 scan times.** Measured on a real Pi 3B+, two
+  distinct scenarios — not the same test, don't compare them directly:
+  **10.98s** for a single `/24` network (eth0 only, 4 live hosts,
+  confirmed again at ~11s in a separate run) and **22.3s** for a
+  multi-interface scan (eth0 + Wi-Fi together, two networks, 8 live
+  hosts combined, full classification included). Both land around
+  2.7-2.8s/host, so the two figures are consistent, not conflicting —
+  the higher number is a bigger combined workload, not a slower single
+  scan. Pi 4/5 not yet benchmarked.
 
 None of these block using the tool day to day; they're gaps in
 *measurement*, not known bugs.
@@ -453,6 +459,7 @@ scanner/
   storage.py                     Scan history/asset database (SQLite, data/history.db)
   webhooks.py                    Optional POST notification after each scan
   monitoring.py                  Continuous Monitoring mode (scheduled automatic scans)
+  targets.py                     Scan targets: custom networks beyond active interfaces
   discovery/
     arp.py                       ARP scan (scapy) + reverse DNS + VLAN tag
     icmp.py                       ICMP sweep for NOARP links (VPN tunnels)
@@ -485,6 +492,7 @@ data/tls_cert.pem, tls_key.pem  Self-signed TLS certificate (generated on first 
 data/history.db              Scan history/asset database (SQLite, generated on first scan, gitignored)
 data/webhooks.json           Webhook config (generated on first save, gitignored)
 data/monitoring.json         Continuous Monitoring config (generated on first save, gitignored)
+data/targets.json            Scan targets config (generated on first save, gitignored)
 templates/, static/          Dashboard (HTML/CSS/JS, no external CDN: works offline)
 install.sh                   Installer (venv + systemd)
 raspiscanner.service         systemd unit file

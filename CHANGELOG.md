@@ -145,5 +145,8 @@ resource-constrained device to surface:
   not tuned for very large (`/16`-scale) networks. See
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - RAM usage has not been profiled on a large scan.
-- Scan timing verified on a real Raspberry Pi 3B+ (22.3s for a
-  multi-interface scan, 8 hosts); Pi 4/5 not yet benchmarked.
+- Scan timing verified on a real Raspberry Pi 3B+, two distinct
+  scenarios (not directly comparable): 10.98s for a single `/24`
+  network (4 hosts) and 22.3s for a multi-interface scan (eth0 + Wi-Fi,
+  two networks, 8 hosts combined) — both ~2.7-2.8s/host, consistent
+  with each other. Pi 4/5 not yet benchmarked.
