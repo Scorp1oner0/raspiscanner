@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.0.0.** A network discovery and security-exposure scanner for
+**Status: pre-1.0.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -39,7 +39,10 @@ of some of the same discovery mechanisms.
    by default, every network detected on an active interface — Ethernet,
    every Wi-Fi adapter present, every active VPN tunnel (WireGuard,
    OpenVPN, PPP, Tailscale, ZeroTier) — plus any custom network you add
-   explicitly. ARP for a network the device has an address in; ICMP
+   explicitly (must be a **private** IPv4 network, `/22` or smaller —
+   this isn't meant to point the device at arbitrary public hosts, or
+   at a range too big for the sequential per-host scan to finish in a
+   reasonable time). ARP for a network the device has an address in; ICMP
    sweep for one it doesn't (a VPN tunnel the kernel marks NOARP, or a
    custom network reachable only by routing) — no MAC there, ARP can't
    cross a router. Per host: TCP port scan + HTTP banners, ONVIF
@@ -501,3 +504,7 @@ LICENSE                      MIT
 
 More on the scan flow and architectural choices in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
+by Andrea Biral — Scorpionero

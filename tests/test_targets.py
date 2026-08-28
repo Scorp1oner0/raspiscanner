@@ -71,5 +71,61 @@ class TestTargetsConfig(TargetsTestCase):
         self.assertEqual(targets.get_config(), {"auto_interfaces": True, "custom": []})
 
 
+class TestTargetsPolicy(TargetsTestCase):
+    """Policy esplicita (vedi scanner/targets.py): solo reti IPv4 private,
+    prefisso minimo /22 (max 1024 host) — decisa per evitare che il Pi
+    venga puntato su host pubblici non autorizzati o bloccato per ore su
+    uno sweep enorme."""
+
+    def test_default_route_rejected(self):
+        ok, message = targets.set_config(True, ["0.0.0.0/0"])
+        self.assertFalse(ok)
+        self.assertIn("0.0.0.0/0", message)
+        self.assertEqual(targets.get_config()["custom"], [])
+
+    def test_public_network_rejected(self):
+        ok, message = targets.set_config(True, ["8.8.8.0/24"])
+        self.assertFalse(ok)
+        self.assertIn("private", message.lower())
+
+    def test_network_larger_than_min_prefixlen_rejected(self):
+        ok, message = targets.set_config(True, ["10.0.0.0/8"])
+        self.assertFalse(ok)
+        self.assertIn("too large", message.lower())
+
+    def test_network_at_min_prefixlen_accepted(self):
+        ok, _ = targets.set_config(True, ["10.0.0.0/22"])
+        self.assertTrue(ok)
+        self.assertEqual(targets.get_config()["custom"], ["10.0.0.0/22"])
+
+    def test_network_smaller_than_min_prefixlen_accepted(self):
+        ok, _ = targets.set_config(True, ["10.0.0.0/24"])
+        self.assertTrue(ok)
+        self.assertEqual(targets.get_config()["custom"], ["10.0.0.0/24"])
+
+    def test_carrier_grade_nat_range_rejected(self):
+        """100.64.0.0/10 (RFC 6598, CGNAT) non e' 'privato' secondo
+        ipaddress.is_private (ne' privato ne' globale nel registro IANA:
+        e' spazio condiviso tra ISP e router del cliente, non una LAN
+        dell'operatore) — la policy "solo reti private" lo esclude."""
+        ok, message = targets.set_config(True, ["100.64.0.0/24"])
+        self.assertFalse(ok)
+        self.assertIn("private", message.lower())
+
+    def test_multiple_valid_targets_accepted(self):
+        ok, _ = targets.set_config(True, ["192.168.1.0/24", "10.0.0.0/24", "172.16.0.0/24"])
+        self.assertTrue(ok)
+        self.assertEqual(
+            targets.get_config()["custom"],
+            ["192.168.1.0/24", "10.0.0.0/24", "172.16.0.0/24"],
+        )
+
+    def test_one_invalid_target_among_many_rejects_all(self):
+        ok, message = targets.set_config(True, ["192.168.1.0/24", "8.8.8.0/24", "10.0.0.0/24"])
+        self.assertFalse(ok)
+        self.assertIn("8.8.8.0/24", message)
+        self.assertEqual(targets.get_config()["custom"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

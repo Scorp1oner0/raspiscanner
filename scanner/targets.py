@@ -60,26 +60,45 @@ def get_config():
     return _load()
 
 
-def _normalize_cidr(raw):
+MIN_PREFIXLEN = 22  # max 1024 host per rete custom (/22)
+
+
+def _validate_cidr(raw):
     """Valida e normalizza un CIDR IPv4 (es. "192.168.20.5/24" ->
     "192.168.20.0/24", host bits azzerati — un operatore che digita
     l'indirizzo di un host invece della rete non deve ottenere uno scan
-    silenziosamente vuoto/sbagliato). Ritorna None se non valido."""
+    silenziosamente vuoto/sbagliato). Ritorna (network_str, None) se
+    valido, altrimenti (None, motivo_del_rifiuto).
+
+    Policy (decisa esplicitamente per evitare che il Pi venga puntato su
+    host arbitrari non autorizzati, o bloccato per ore su uno sweep
+    enorme): solo reti IPv4 private (RFC1918/CGNAT/loopback/link-local,
+    via ipaddress.is_private — questo esclude anche 0.0.0.0/0, che copre
+    anche spazio pubblico), prefisso minimo /22.
+    """
     try:
-        return str(ipaddress.ip_network(raw.strip(), strict=False))
+        network = ipaddress.ip_network(raw.strip(), strict=False)
     except (ValueError, AttributeError):
-        return None
+        return None, f"Invalid network: {raw!r}"
+    if not isinstance(network, ipaddress.IPv4Network):
+        return None, f"Only IPv4 networks are supported: {raw!r}"
+    if not network.is_private:
+        return None, f"Only private networks are allowed: {raw!r}"
+    if network.prefixlen < MIN_PREFIXLEN:
+        return None, f"Network too large (min /{MIN_PREFIXLEN}): {raw!r}"
+    return str(network), None
 
 
 def set_config(auto_interfaces, custom):
     """`custom`: lista di stringhe CIDR IPv4. Ritorna (ok, messaggio) —
-    rifiuta l'intera lista se anche solo un CIDR non e' valido, invece di
-    salvarne silenziosamente solo una parte."""
+    rifiuta l'intera lista se anche solo un CIDR non e' valido/non
+    conforme alla policy, invece di salvarne silenziosamente solo una
+    parte."""
     normalized = []
     for raw in (custom or []):
-        cidr = _normalize_cidr(raw)
-        if cidr is None:
-            return False, f"Invalid network: {raw!r}"
+        cidr, error = _validate_cidr(raw)
+        if error is not None:
+            return False, error
         if cidr not in normalized:
             normalized.append(cidr)
     _save(bool(auto_interfaces), normalized)

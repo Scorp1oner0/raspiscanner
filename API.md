@@ -337,8 +337,14 @@ before running it.
 ### `POST /api/settings/targets` — operator
 Body: `{"auto_interfaces": true, "custom": ["192.168.20.0/24", "10.0.5.0/24"]}`.
 Each entry in `custom` is normalized to its network address (`.5/24`
-becomes `.0/24`); `400` if any entry isn't a valid IPv4 CIDR — the whole
-list is rejected together rather than saving a partial one.
+becomes `.0/24`); `400` if any entry isn't a valid IPv4 CIDR, isn't a
+**private** network (`ipaddress.is_private` — rejects public ranges and
+`0.0.0.0/0`), or is larger than **`/22`** (max 1024 hosts) — the whole
+list is rejected together rather than saving a partial one. This is a
+deliberate policy, not an oversight: the tool is meant for networks the
+operator administers, not for pointing a Pi at arbitrary public hosts,
+and a huge custom range would make the sequential per-host scan (see
+README, "Known limitations") impractically slow anyway.
 
 ## Settings
 

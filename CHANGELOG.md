@@ -3,9 +3,9 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [1.0.0] - 2026-08-28
+## [Unreleased]
 
-First stable release. Grouped by the priority phases used during
+First stable release, once tagged. Grouped by the priority phases used during
 development (P0 security → P1 hardening → P2 robustness → P3 tests/
 release → P4 extended discovery). See [ROADMAP.md](ROADMAP.md) for
 what's next.
