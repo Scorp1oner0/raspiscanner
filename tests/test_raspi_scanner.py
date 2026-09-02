@@ -63,16 +63,32 @@ class TestDashboardRefusesHttpFallback(unittest.TestCase):
         mock_ensure_startup.assert_not_called()
 
     def test_starts_normally_when_cert_available(self):
+        """Con il certificato disponibile la dashboard parte, servita da
+        _LateTLSServer (non piu' da app.run con ssl_context: quella variante
+        esegue la stretta di mano TLS dentro accept() e un client muto
+        bloccherebbe l'intero server — vedi test_tls_handshake_dos.py)."""
         self.module.tls.ensure_cert = lambda: ("/fake/cert.pem", "/fake/key.pem")
-        with patch.object(self.module.app, "run") as mock_run, \
+        loaded = []
+
+        class _FakeCtx:
+            def load_cert_chain(self, cert, key):
+                loaded.append((cert, key))
+
+        with patch.object(self.module.ssl, "SSLContext", return_value=_FakeCtx()), \
+                patch.object(self.module, "_LateTLSServer") as mock_server, \
+                patch.object(self.module.app, "run") as mock_run, \
                 patch.object(self.module, "_ensure_startup") as mock_ensure_startup:
             self.module.run_dashboard(port=7799)
 
         mock_ensure_startup.assert_called_once()
-        mock_run.assert_called_once()
-        _, kwargs = mock_run.call_args
-        self.assertEqual(kwargs["ssl_context"], ("/fake/cert.pem", "/fake/key.pem"))
-        self.assertFalse(kwargs["debug"])
+        # app.run NON deve piu' essere usato: e' la variante vulnerabile.
+        mock_run.assert_not_called()
+        self.assertEqual(loaded, [("/fake/cert.pem", "/fake/key.pem")])
+        mock_server.assert_called_once()
+        args, _ = mock_server.call_args
+        self.assertEqual(args[0], "0.0.0.0")
+        self.assertEqual(args[1], 7799)
+        mock_server.return_value.serve_forever.assert_called_once()
 
 
 class RaspiScannerAppTestCase(unittest.TestCase):

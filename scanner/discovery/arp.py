@@ -2,13 +2,21 @@
 
 Richiede privilegi per socket raw (root o cap_net_raw+cap_net_admin), come
 tutto il resto dell'applicazione che deve anche riconfigurare le interfacce.
+
+Sulla build Windows senza Npcap (nessun socket raw disponibile) l'ARP
+scan attivo non parte: si ripiega su scanner.discovery.nopriv (sweep
+TCP-connect + tabella ARP di sistema). Su Linux quel ripiego non viene
+mai usato.
 """
 import ipaddress
 import logging
 import socket
+import threading
 import time
 
 from .. import config
+from .. import platform_net
+from . import nopriv
 
 log = logging.getLogger("raspiscanner.discovery")
 
@@ -77,7 +85,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     risposta da nessuno, sembrando "bloccato" sulla rete precedente.
     """
     if not SCAPY_AVAILABLE:
-        return []
+        return nopriv.windows_arp_scan(cidr) if platform_net.IS_WINDOWS else []
 
     try:
         network = ipaddress.ip_network(cidr, strict=False)
@@ -93,7 +101,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(**arp_kwargs)
     except Exception as exc:
         log.error("costruzione pacchetto ARP fallita su %s (%s): %s", iface, cidr, exc)
-        return []
+        return nopriv.windows_arp_scan(cidr) if platform_net.IS_WINDOWS else []
 
     results = {}
 
@@ -125,6 +133,8 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         # esiste piu') interromperebbe l'intera scansione multi-rete invece
         # di limitarsi a saltare questa singola rete.
         log.error("ARP scan fallito su %s (%s): %s", iface, cidr, exc)
+        if platform_net.IS_WINDOWS:
+            return nopriv.windows_arp_scan(cidr)
         return []
     finally:
         if sniffer is not None:
@@ -138,17 +148,45 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
                 # completamente fallito e' indistinguibile da "rete vuota".
                 log.error("sniffer ARP terminato con errore su %s: %s", iface, exc)
 
+    if not results and platform_net.IS_WINDOWS:
+        # scapy ha girato senza errori ma non ha visto nulla: quasi sempre
+        # Npcap assente (i socket L2 falliscono in silenzio). Ripiego.
+        return nopriv.windows_arp_scan(cidr)
+
     return [{"ip": ip, "mac": mac, "vlan_id": vlan_id} for ip, (mac, vlan_id) in results.items()]
 
 
 def resolve_hostname(ip, timeout=config.HOSTNAME_TIMEOUT):
-    """Reverse DNS best-effort, non blocca a lungo se non c'e' un DNS server."""
-    old_timeout = socket.getdefaulttimeout()
-    try:
-        socket.setdefaulttimeout(timeout)
-        name, _, _ = socket.gethostbyaddr(ip)
-        return name
-    except (socket.herror, socket.gaierror, socket.timeout, OSError):
-        return None
-    finally:
-        socket.setdefaulttimeout(old_timeout)
+    """Reverse DNS best-effort, con un tetto reale al tempo di attesa.
+
+    NON usa socket.setdefaulttimeout(), come faceva prima, per due motivi
+    indipendenti:
+
+    1. **Non funzionava.** Quel timeout vale solo per gli oggetti socket di
+       Python; `gethostbyaddr()` chiama il resolver del sistema e non ne
+       crea nessuno (verificato: zero socket Python istanziate). La
+       risoluzione poteva quindi bloccare per l'intero timeout del
+       resolver, molto piu' lungo dei 0,6s richiesti.
+    2. **Era pericoloso.** `setdefaulttimeout` e' stato GLOBALE del
+       processo, e questa funzione gira dentro un thread pool: piu' thread
+       che lo impostano e ripristinano insieme si sovrascrivono a vicenda,
+       lasciando un timeout arbitrario a tutte le altre socket della
+       scansione. Una porta poteva risultare chiusa solo perche' un altro
+       thread aveva accorciato il timeout di default.
+
+    Qui la risoluzione gira in un thread dedicato che viene semplicemente
+    abbandonato se sfora: il thread e' daemon, quindi non trattiene
+    l'uscita del processo.
+    """
+    result = []
+
+    def _lookup():
+        try:
+            result.append(socket.gethostbyaddr(ip)[0])
+        except (socket.herror, socket.gaierror, OSError):
+            pass
+
+    worker = threading.Thread(target=_lookup, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    return result[0] if result else None

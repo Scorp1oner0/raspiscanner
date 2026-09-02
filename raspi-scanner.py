@@ -18,14 +18,16 @@ import csv
 import io
 import json
 import logging
+import ssl
 import sys
 import threading
 import time
 from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request
+from werkzeug.serving import ThreadedWSGIServer
 
-from scanner import auth, monitoring, scan_engine, storage, targets, tls, webhooks
+from scanner import auth, monitoring, platform_net, scan_engine, storage, targets, tls, webhooks
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -148,6 +150,15 @@ def _ensure_startup():
 def index():
     _ensure_startup()
     return render_template("index.html")
+
+
+@app.route("/api/platform")
+@require_role("viewer")
+def api_platform():
+    """Capacita' della piattaforma su cui gira lo scanner: la dashboard le
+    usa per nascondere i pannelli non applicabili (riconfigurazione rete e
+    hotspot sulla build Windows) e per avvisare se manca Npcap."""
+    return jsonify(platform_net.summary())
 
 
 @app.route("/api/network")
@@ -525,6 +536,65 @@ def api_settings_delete_user(username):
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 
+# Tempo massimo concesso a un client per completare la stretta di mano TLS.
+# Oltre questo la connessione viene scartata: chi apre il TCP e non parla
+# (port scanner, browser che rinuncia, sonde di rete) non deve costare nulla.
+TLS_HANDSHAKE_TIMEOUT = 10.0
+# Timeout di lettura/scrittura sulla richiesta gia' stabilita. Generoso: le
+# richieste della dashboard sono brevi, gli scan girano in thread separati.
+REQUEST_IO_TIMEOUT = 60.0
+
+
+class _LateTLSServer(ThreadedWSGIServer):
+    """Server HTTPS che esegue la stretta di mano TLS nel thread della
+    richiesta, invece che nel ciclo di accettazione.
+
+    Werkzeug, quando riceve `ssl_context`, avvolge il socket **in ascolto**:
+
+        self.socket = ssl_context.wrap_socket(self.socket, server_side=True)
+
+    Cosi' la stretta di mano avviene dentro `accept()`, che gira nel thread
+    principale. Un client che apre la connessione TCP e non completa
+    l'handshake blocca l'accettazione di TUTTE le connessioni successive,
+    per sempre: il servizio resta "active" per systemd, la porta resta in
+    ascolto, il kernel continua ad accettare in backlog, ma nessuna
+    richiesta viene piu' servita. `threaded=True` non aiuta, perche' il
+    blocco e' PRIMA dello smistamento ai thread.
+
+    Non e' teoria: e' successo il 27/08/2026, scoperto il 02/09 dopo 5
+    giorni e 22 ore di stallo — tre thread tutti dormienti, CPU allo 0,1%.
+    Su una rete che si sta scansionando, basta un port scanner (anche il
+    nostro) a innescarlo.
+
+    Qui il socket in ascolto resta in chiaro, quindi `accept()` e'
+    immediato, e ogni connessione viene avvolta nel proprio thread con un
+    timeout: una stretta di mano incompleta costa un thread per dieci
+    secondi, non l'intero servizio.
+    """
+
+    def __init__(self, host, port, app, tls_context, **kwargs):
+        super().__init__(host, port, app, **kwargs)
+        self._tls_context = tls_context
+        # Werkzeug legge self.ssl_context solo per decidere lo schema
+        # dell'URL nel WSGI environ. Lo assegniamo DOPO __init__: cosi' non
+        # avvolge il socket in ascolto, ma le richieste risultano https.
+        self.ssl_context = tls_context
+
+    def process_request_thread(self, request, client_address):
+        try:
+            request.settimeout(TLS_HANDSHAKE_TIMEOUT)
+            request = self._tls_context.wrap_socket(request, server_side=True)
+            request.settimeout(REQUEST_IO_TIMEOUT)
+        except OSError as exc:
+            # Handshake fallito o mai completato: nessun rumore nei log, e'
+            # traffico normale su una rete che stiamo scansionando.
+            log.debug("stretta di mano TLS non completata da %s: %s",
+                      client_address[0] if client_address else "?", exc)
+            self.shutdown_request(request)
+            return
+        super().process_request_thread(request, client_address)
+
+
 def run_dashboard(port=7332):
     # Il TLS va verificato PRIMA di avviare qualunque altra cosa (monitor
     # rete, server): la dashboard espone credenziali via Basic Auth e
@@ -535,15 +605,16 @@ def run_dashboard(port=7332):
     cert_path, key_path = tls.ensure_cert()
     if not cert_path:
         log.error(
-            "Certificato TLS non disponibile (openssl assente o generazione "
-            "fallita): mi rifiuto di avviare la dashboard su HTTP semplice, "
-            "che manderebbe le credenziali Basic Auth in chiaro sulla rete "
-            "scansionata. Installa openssl e riavvia il servizio."
+            "Certificato TLS non disponibile: mi rifiuto di avviare la "
+            "dashboard su HTTP semplice, che manderebbe le credenziali Basic "
+            "Auth in chiaro sulla rete scansionata. Serve openssl nel PATH "
+            "oppure la libreria Python 'cryptography' (pip install cryptography "
+            "/ requirements-windows.txt), poi riavvia."
         )
         print(
-            "ERRORE: certificato TLS non disponibile (openssl assente o "
-            "generazione fallita). La dashboard non parte su HTTP semplice: "
-            "installa openssl e riavvia.",
+            "ERRORE: certificato TLS non generabile (ne' openssl ne' la "
+            "libreria 'cryptography' disponibili). La dashboard non parte su "
+            "HTTP semplice: installa uno dei due e riavvia.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -551,7 +622,17 @@ def run_dashboard(port=7332):
     log.info("TLS attivo (certificato self-signed): il browser mostrera' "
               "un avviso da accettare la prima volta, e' atteso.")
     _ensure_startup()
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True, ssl_context=(cert_path, key_path))
+
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert_path, key_path)
+    srv = _LateTLSServer("0.0.0.0", port, app, ctx)
+    log.info("dashboard in ascolto su https://0.0.0.0:%d", port)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.server_close()
 
 
 def run_cli_report(timeout=180):
