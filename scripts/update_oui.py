@@ -16,7 +16,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scanner.config import OUI_CSV_PATH
+from scanner.config import OUI_FULL_CSV_PATH
 
 SOURCE_URL = "https://standards-oui.ieee.org/oui/oui.csv"
 
@@ -30,6 +30,12 @@ USER_AGENT = (
 
 
 def main():
+    # start.sh / start.bat lo invocano a ogni avvio: con --if-missing
+    # non riscarica 40.000 voci ogni volta.
+    if "--if-missing" in sys.argv and os.path.exists(OUI_FULL_CSV_PATH) \
+            and os.path.getsize(OUI_FULL_CSV_PATH) > 0:
+        print(f"OUI completo gia' presente ({OUI_FULL_CSV_PATH}), non scarico.")
+        return
     print(f"Downloading {SOURCE_URL} ...")
     req = urllib.request.Request(SOURCE_URL, headers={"User-Agent": USER_AGENT})
     try:
@@ -39,7 +45,7 @@ def main():
         print(f"Download failed: {exc}", file=sys.stderr)
         print(
             f"You can also download the CSV by hand from {SOURCE_URL} "
-            f"and save it as {OUI_CSV_PATH}.",
+            f"and save it as {OUI_FULL_CSV_PATH}.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -56,12 +62,12 @@ def main():
         if len(prefix) == 6 and vendor:
             rows.append((prefix, vendor))
 
-    with open(OUI_CSV_PATH, "w", newline="", encoding="utf-8") as fh:
+    with open(OUI_FULL_CSV_PATH, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         for prefix, vendor in rows:
             writer.writerow([prefix, vendor])
 
-    print(f"Wrote {len(rows)} prefixes to {OUI_CSV_PATH}")
+    print(f"Wrote {len(rows)} prefixes to {OUI_FULL_CSV_PATH}")
 
 
 if __name__ == "__main__":

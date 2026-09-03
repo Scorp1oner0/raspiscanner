@@ -27,3 +27,7 @@ data/history.db
 data/webhooks.json
 data/monitoring.json
 data/targets.json
+
+# Registro IEEE completo scaricato a runtime (~5 MB): resta locale.
+data/oui_full.csv
+data/oui_full.csv.tmp

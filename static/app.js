@@ -1041,6 +1041,34 @@ async function submitForcedPasswordChange() {
   }
 }
 
+async function loadPlatform() {
+  // Adatta la dashboard alla piattaforma: sulla build Windows la scheda di
+  // rete e' in sola lettura (niente "Reconfigure network") e l'hotspot non
+  // e' disponibile. Avvisa anche se manca Npcap (ARP scan degradato).
+  try {
+    const res = await fetch("/api/platform");
+    if (!res.ok) return;
+    const p = await res.json();
+    if (!p.is_windows) return;
+
+    document.body.classList.add("platform-windows", "no-hotspot", "no-net-reconfig");
+
+    const note = $("net-platform-note");
+    if (note) {
+      let text = "Windows: the network card is read-only — DHCP/static is left "
+        + "to Windows. \"Reconfigure network\" just re-reads the current addresses.";
+      if (p.arp_raw_available === false) {
+        text += " Npcap not detected: the ARP scan falls back to a TCP-connect "
+          + "sweep + the system ARP table (install Npcap for a full L2 scan).";
+      }
+      note.textContent = text;
+      note.classList.remove("hidden");
+    }
+  } catch (e) {
+    console.error("loadPlatform", e);
+  }
+}
+
 async function init() {
   // P0: se questo utente ha ancora la password casuale di bootstrap,
   // blocca tutto il resto della dashboard (niente scan, niente polling)
@@ -1127,6 +1155,7 @@ async function init() {
     }
   });
 
+  loadPlatform();
   refreshNetwork();
   refreshScan();
   refreshSecurityStats();

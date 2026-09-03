@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 
-from . import storage, targets, vendor, webhooks
+from . import platform_net, storage, targets, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import (
@@ -97,6 +97,8 @@ def _egress_interface_for(cidr):
     nessuna interfaccia — instradata attraverso un gateway, non
     direttamente collegata via L2. None se il kernel non ha una rotta
     (rete davvero irraggiungibile, o comando `ip` assente)."""
+    if platform_net.IS_WINDOWS:
+        return platform_net.egress_interface_for(cidr)
     try:
         network = ipaddress.ip_network(cidr, strict=False)
         probe_ip = str(next(network.hosts(), network.network_address))

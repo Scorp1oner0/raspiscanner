@@ -20,6 +20,8 @@ import logging
 import time
 
 from .. import config
+from .. import platform_net
+from . import nopriv
 
 log = logging.getLogger("raspiscanner.discovery.icmp")
 
@@ -66,8 +68,8 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     dopo un cambio di rete l'IP sorgente di default puo' non essere piu'
     valido.
     """
-    if not SCAPY_AVAILABLE:
-        return []
+    if not SCAPY_AVAILABLE or not platform_net.has_raw_socket_access():
+        return nopriv.fallback_icmp_sweep(cidr)
 
     try:
         network = ipaddress.ip_network(cidr, strict=False)
@@ -95,7 +97,7 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         pkt = IP(**ip_kwargs) / ICMP()
     except Exception as exc:
         log.error("costruzione pacchetto ICMP fallita su %s (%s): %s", iface, cidr, exc)
-        return []
+        return nopriv.fallback_icmp_sweep(cidr)
 
     try:
         sniffer = AsyncSniffer(iface=iface, prn=_on_packet, store=False)
@@ -106,12 +108,15 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         # Ampio deliberatamente, stesso motivo di arp_scan: non deve
         # interrompere lo scan sulle altre reti attive.
         log.error("ICMP scan fallito su %s (%s): %s", iface, cidr, exc)
-        return []
+        return nopriv.fallback_icmp_sweep(cidr)
     finally:
         if sniffer is not None:
             try:
                 sniffer.stop()
             except Exception as exc:
                 log.error("sniffer ICMP terminato con errore su %s: %s", iface, exc)
+
+    if not results:
+        return nopriv.fallback_icmp_sweep(cidr)
 
     return [{"ip": ip, "mac": mac} for ip, mac in results.items()]

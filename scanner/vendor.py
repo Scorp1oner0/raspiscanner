@@ -24,24 +24,45 @@ def _normalize_prefix(mac_or_prefix):
     return hexonly[:6]
 
 
+def _read_csv_into(path, table):
+    """Carica un CSV "PREFISSO,Vendor" dentro `table`. Ritorna il numero di
+    voci lette, 0 se il file non c'e'."""
+    if not os.path.exists(path):
+        return 0
+    n = 0
+    with open(path, newline="", encoding="utf-8") as fh:
+        for row in csv.reader(fh):
+            if not row or row[0].startswith("#") or len(row) < 2:
+                continue
+            prefix = _normalize_prefix(row[0])
+            vendor = row[1].strip()
+            if len(prefix) == 6 and vendor:
+                table[prefix] = vendor
+                n += 1
+    return n
+
+
 def _load():
+    """Carica il database OUI da due file, in quest'ordine:
+
+    1. `data/oui_full.csv` — registro IEEE completo (~40.000 voci) scaricato
+       da `scripts/update_oui.py`, non tracciato da git. Da' la copertura.
+    2. `data/oui.csv` — lista curata inclusa nel repo (~100 vendor comuni),
+       caricata DOPO cosi' i suoi nomi hanno la precedenza: sono corti e
+       leggibili ("Hikvision") dove l'IEEE e' verboso ("Hangzhou Hikvision
+       Digital Technology Co.,Ltd."). Meglio in un report da leggere sul
+       campo, e garantisce lo stesso risultato con o senza il DB completo.
+    """
     global _loaded
     _oui_table.clear()
-    if os.path.exists(config.OUI_CSV_PATH):
-        with open(config.OUI_CSV_PATH, newline="", encoding="utf-8") as fh:
-            for row in csv.reader(fh):
-                if not row or row[0].startswith("#"):
-                    continue
-                if len(row) < 2:
-                    continue
-                prefix = _normalize_prefix(row[0])
-                vendor = row[1].strip()
-                if len(prefix) == 6 and vendor:
-                    _oui_table[prefix] = vendor
-    else:
-        log.warning("database OUI non trovato: %s", config.OUI_CSV_PATH)
+    n_full = _read_csv_into(config.OUI_FULL_CSV_PATH, _oui_table)
+    n_min = _read_csv_into(config.OUI_CSV_PATH, _oui_table)
+    if not n_full and not n_min:
+        log.warning("nessun database OUI trovato (%s, %s)",
+                    config.OUI_FULL_CSV_PATH, config.OUI_CSV_PATH)
     _loaded = True
-    log.info("database OUI caricato: %d prefissi", len(_oui_table))
+    log.info("database OUI caricato: %d prefissi (%d dal registro IEEE completo, "
+             "%d dalla lista curata)", len(_oui_table), n_full, n_min)
 
 
 def lookup_vendor(mac):

@@ -89,10 +89,11 @@
       <div id="vpn-boxes"></div>
     </div>
     <button class="btn" id="btn-rescan-net">🔄 Reconfigure network</button>
-    <label class="force-label">
+    <label class="force-label" id="force-rescan-label">
       <input type="checkbox" id="chk-force-rescan">
       force DHCP/fallback (clears current IPs)
     </label>
+    <div class="net-line platform-note hidden" id="net-platform-note"></div>
     <span id="net-msg" class="msg"></span>
   </section>
 

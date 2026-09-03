@@ -1,12 +1,12 @@
 """Discovery dei dispositivi su una rete locale tramite ARP scan.
 
-Richiede privilegi per socket raw (root o cap_net_raw+cap_net_admin), come
-tutto il resto dell'applicazione che deve anche riconfigurare le interfacce.
-
-Sulla build Windows senza Npcap (nessun socket raw disponibile) l'ARP
-scan attivo non parte: si ripiega su scanner.discovery.nopriv (sweep
-TCP-connect + tabella ARP di sistema). Su Linux quel ripiego non viene
-mai usato.
+L'ARP scan attivo richiede privilegi per i socket raw (root o
+cap_net_raw+cap_net_admin su Linux, Npcap su Windows). Quando non sono
+disponibili si ripiega su scanner.discovery.nopriv (sweep TCP-connect +
+tabella ARP di sistema): vale su OGNI piattaforma, non solo su Windows —
+anche un Linux avviato senza privilegi, cioe' il caso "sto provando lo
+scanner sul mio portatile", deve trovare i dispositivi invece di
+restituire una rete apparentemente vuota.
 """
 import ipaddress
 import logging
@@ -84,8 +84,11 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     scan puo' partire con un IP sorgente non piu' valido e non ricevere
     risposta da nessuno, sembrando "bloccato" sulla rete precedente.
     """
-    if not SCAPY_AVAILABLE:
-        return nopriv.windows_arp_scan(cidr) if platform_net.IS_WINDOWS else []
+    if not SCAPY_AVAILABLE or not platform_net.has_raw_socket_access():
+        # Nessun socket raw: ripiego valido su OGNI piattaforma. Prima era
+        # riservato a Windows, quindi su un Linux non privilegiato lo scan
+        # restituiva zero dispositivi invece di degradare.
+        return nopriv.fallback_arp_scan(cidr)
 
     try:
         network = ipaddress.ip_network(cidr, strict=False)
@@ -101,7 +104,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(**arp_kwargs)
     except Exception as exc:
         log.error("costruzione pacchetto ARP fallita su %s (%s): %s", iface, cidr, exc)
-        return nopriv.windows_arp_scan(cidr) if platform_net.IS_WINDOWS else []
+        return nopriv.fallback_arp_scan(cidr)
 
     results = {}
 
@@ -133,9 +136,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         # esiste piu') interromperebbe l'intera scansione multi-rete invece
         # di limitarsi a saltare questa singola rete.
         log.error("ARP scan fallito su %s (%s): %s", iface, cidr, exc)
-        if platform_net.IS_WINDOWS:
-            return nopriv.windows_arp_scan(cidr)
-        return []
+        return nopriv.fallback_arp_scan(cidr)
     finally:
         if sniffer is not None:
             try:
@@ -148,10 +149,11 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
                 # completamente fallito e' indistinguibile da "rete vuota".
                 log.error("sniffer ARP terminato con errore su %s: %s", iface, exc)
 
-    if not results and platform_net.IS_WINDOWS:
-        # scapy ha girato senza errori ma non ha visto nulla: quasi sempre
-        # Npcap assente (i socket L2 falliscono in silenzio). Ripiego.
-        return nopriv.windows_arp_scan(cidr)
+    if not results:
+        # scapy ha girato senza errori ma non ha visto nulla: Npcap assente su
+        # Windows, o socket L2 che falliscono in silenzio. Ripiego comunque:
+        # una rete davvero vuota costa solo uno sweep in piu'.
+        return nopriv.fallback_arp_scan(cidr)
 
     return [{"ip": ip, "mac": mac, "vlan_id": vlan_id} for ip, (mac, vlan_id) in results.items()]
 

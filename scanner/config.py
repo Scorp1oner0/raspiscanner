@@ -4,6 +4,12 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 OUI_CSV_PATH = os.path.join(DATA_DIR, "oui.csv")
+# Registro IEEE completo (~40.000 voci) scaricato da
+# scripts/update_oui.py. NON tracciato da git: e' stato generato a
+# runtime. Va in un file SUO invece di sovrascrivere oui.csv, che e'
+# tracciato: cosi' provare lo scanner da un clone non sporca il
+# checkout dell'utente ne' perde i nomi vendor curati.
+OUI_FULL_CSV_PATH = os.path.join(DATA_DIR, "oui_full.csv")
 USERS_JSON_PATH = os.path.join(DATA_DIR, "users.json")
 TLS_CERT_PATH = os.path.join(DATA_DIR, "tls_cert.pem")
 TLS_KEY_PATH = os.path.join(DATA_DIR, "tls_key.pem")

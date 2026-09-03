@@ -32,6 +32,7 @@ import threading
 import time
 
 from .. import config
+from .. import platform_net
 from ..discovery import arp_scan
 from .nmcli_util import split_nmcli_terse
 
@@ -87,6 +88,8 @@ def _get_status_field(key, field, default=None):
 
 def list_interfaces():
     """Ritorna i nomi delle interfacce di rete presenti (esclusa lo)."""
+    if platform_net.IS_WINDOWS:
+        return platform_net.list_interfaces()
     try:
         names = os.listdir("/sys/class/net")
     except FileNotFoundError:
@@ -95,6 +98,8 @@ def list_interfaces():
 
 
 def classify_interface(name):
+    if platform_net.IS_WINDOWS:
+        return platform_net.classify_windows_interface(name)
     if name.startswith(config.ETH_IFACE_PREFIXES):
         return "eth"
     if name.startswith(config.WIFI_IFACE_PREFIXES):
@@ -148,6 +153,8 @@ def is_noarp(iface):
     affidabile per qualunque VPN non elencata in config.VPN_IFACE_PREFIXES,
     e corretto anche per un'eventuale interfaccia VPN in modalita' TAP
     (bridged, quella si' supporta ARP)."""
+    if platform_net.IS_WINDOWS:
+        return platform_net.is_noarp(iface)
     try:
         with open(f"/sys/class/net/{iface}/flags") as fh:
             flags = int(fh.read().strip(), 16)
@@ -158,6 +165,8 @@ def is_noarp(iface):
 
 def has_carrier(iface):
     """True se il cavo e' collegato (o l'interfaccia wifi e' associata)."""
+    if platform_net.IS_WINDOWS:
+        return platform_net.has_carrier(iface)
     try:
         with open(f"/sys/class/net/{iface}/carrier") as fh:
             return fh.read().strip() == "1"
@@ -171,6 +180,8 @@ def get_interface_mac(iface):
     rimanda sulla porta da cui e' arrivata), quindi un ARP scan non trova
     mai se stesso: questo serve per aggiungere comunque la macchina locale
     all'elenco dei dispositivi, dato che IP e MAC li conosciamo gia'."""
+    if platform_net.IS_WINDOWS:
+        return platform_net.get_interface_mac(iface)
     try:
         with open(f"/sys/class/net/{iface}/address") as fh:
             mac = fh.read().strip().upper()
@@ -196,6 +207,8 @@ def get_interface_ips(iface):
     mano per raggiungere piu' subnet sullo stesso cavo): vanno rilevati e
     scansionati tutti, non solo il primo.
     """
+    if platform_net.IS_WINDOWS:
+        return platform_net.get_interface_ips(iface)
     res = _run(["ip", "-4", "-o", "addr", "show", "dev", iface])
     if not res or res.returncode != 0:
         return []
@@ -395,6 +408,30 @@ def choose_preset_class(iface, cidr):
     return True, f"Network {cidr} selected"
 
 
+def _read_only_eth_status(iface):
+    """Percorso Windows di autoconfigure_ethernet: SOLA LETTURA.
+
+    Sul portatile del tecnico la scheda e' gia' configurata da Windows (DHCP
+    o statico) e sta gia' funzionando: non la tocchiamo (niente flush, niente
+    DHCP forzato, niente probe delle classi preimpostate — quella logica ha
+    senso solo per un Pi dedicato buttato su una rete ignota). Ci limitiamo a
+    riportare nello stato gli indirizzi che l'interfaccia ha gia'."""
+    addresses = _address_list(iface)
+    if addresses:
+        primary = addresses[0]
+        _set_status(
+            "eth", iface=iface, up=True, mode="manual",
+            ip=primary["ip"], cidr=primary["cidr"], addresses=addresses,
+            candidates=[], reconfiguring=False, error=None, last_change=time.time(),
+        )
+    else:
+        _set_status(
+            "eth", iface=iface, up=has_carrier(iface), mode="no-network",
+            ip=None, cidr=None, addresses=[],
+            candidates=[], reconfiguring=False, error=None, last_change=time.time(),
+        )
+
+
 def autoconfigure_ethernet(iface=None, force=False):
     """Esegue la logica DHCP -> fallback classi preimpostate su eth.
 
@@ -415,6 +452,14 @@ def autoconfigure_ethernet(iface=None, force=False):
     iface = iface or find_default_eth_iface()
     if not iface:
         log.warning("nessuna interfaccia ethernet trovata")
+        return
+
+    # Sola lettura dove riconfigurare non è voluto o non è possibile: su
+    # Windows sempre, su Linux quando lo scanner gira senza privilegi (il
+    # tecnico lo sta provando sul proprio portatile, la sua rete non si
+    # tocca). Vedi platform_net.can_configure_network().
+    if not platform_net.can_configure_network():
+        _read_only_eth_status(iface)
         return
 
     if not _autoconfig_lock.acquire(blocking=False):
@@ -517,9 +562,12 @@ def refresh_eth_addresses(iface):
 def _refresh_one_wifi_iface(iface):
     addresses = _address_list(iface)
     ssid = None
-    res = _run(["iwgetid", "-r", iface], timeout=3)
-    if res and res.returncode == 0:
-        ssid = res.stdout.strip() or None
+    if platform_net.IS_WINDOWS:
+        ssid = platform_net.wifi_ssid(iface)
+    else:
+        res = _run(["iwgetid", "-r", iface], timeout=3)
+        if res and res.returncode == 0:
+            ssid = res.stdout.strip() or None
     if addresses:
         primary = addresses[0]
         status = {
@@ -585,6 +633,8 @@ def wifi_scan_networks(iface=None):
     cui si vuole cercare (es. quella NON in uso come hotspot in quel
     momento).
     """
+    if platform_net.IS_WINDOWS:
+        return platform_net.wifi_scan_networks(name=iface)
     cmd = ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list"]
     if iface:
         cmd += ["ifname", iface]
@@ -615,6 +665,11 @@ def wifi_connect(ssid, password=None, iface=None):
     """Connette il Wi-Fi tramite nmcli, se disponibile. Senza `iface` nmcli
     sceglie da solo la scheda Wi-Fi da usare (comodo con una sola scheda,
     ambiguo con piu' di una)."""
+    if platform_net.IS_WINDOWS:
+        ok, message = platform_net.wifi_connect(ssid, password, name=iface)
+        if ok:
+            refresh_wifi_status()
+        return ok, message
     cmd = ["nmcli", "device", "wifi", "connect", ssid]
     if password:
         cmd += ["password", password]
@@ -635,7 +690,11 @@ def _monitor_loop(stop_event):
             if eth_iface:
                 carrier = has_carrier(eth_iface)
                 if carrier and not last_carrier:
-                    log.info("cavo eth collegato su %s, avvio autoconfig", eth_iface)
+                    if platform_net.can_configure_network():
+                        log.info("cavo eth collegato su %s, avvio autoconfig", eth_iface)
+                    else:
+                        log.info("cavo eth collegato su %s: leggo la configurazione "
+                                 "esistente (nessuna riconfigurazione)", eth_iface)
                     autoconfigure_ethernet(eth_iface)
                 elif not carrier and last_carrier:
                     log.info("cavo eth scollegato da %s", eth_iface)

@@ -3,6 +3,49 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added — Windows field build
+- `start.sh`: prova rapida su Linux e Raspberry Pi, gemello di `start.bat`
+  (virtualenv, dipendenze, dashboard in primo piano, browser). Non installa
+  nulla e non tocca la rete. Nuovo `docs/PROVA-RAPIDA.md`.
+- Le capacita' della piattaforma dipendono ora dai **privilegi**, non dal
+  sistema operativo (`platform_net.can_configure_network()`,
+  `has_raw_socket_access()`). Su un Linux non privilegiato la scheda di rete
+  non viene piu' riconfigurata e l'ARP scan ripiega sullo sweep TCP +
+  tabella ARP invece di restituire una lista vuota: prima quel ripiego era
+  riservato a Windows. `RASPISCANNER_NO_NETWORK_CONFIG=1` disattiva la
+  riconfigurazione anche da root (scan completo, rete intatta).
+- Il registro IEEE completo viene scaricato in `data/oui_full.csv`, non
+  tracciato da git, invece di sovrascrivere la lista curata `data/oui.csv`:
+  provare lo scanner da un clone non sporca piu' il checkout. La lista
+  curata mantiene la precedenza sui nomi che conosce (piu' corti e
+  leggibili in un report). `update_oui.py --if-missing` per non riscaricare
+  a ogni avvio.
+
+- Runs on a technician's **Windows** laptop via `start.bat` (no Linux, no
+  command line). New `docs/WINDOWS.md`, `requirements-windows.txt`
+  (`psutil` + `cryptography`).
+- `scanner/platform_net.py`: OS abstraction for interface/IP/MAC/gateway
+  reads. On Windows uses `psutil` + `route print` + `netsh wlan`; on
+  Linux the existing `ip`/`/sys/class/net` paths are unchanged.
+- `GET /api/platform`: reports host capabilities so the dashboard hides
+  the panels that don't apply on Windows (network reconfiguration,
+  Wi-Fi hotspot) and warns when Npcap is missing.
+- TLS certificate now falls back to the pure-Python `cryptography`
+  library when `openssl` isn't on `PATH` (typical on Windows). `openssl`
+  stays the preferred path on Linux.
+- `scanner/discovery/nopriv.py`: when the raw-socket ARP/ICMP scan can't
+  run (Windows without Npcap), falls back to a TCP-connect sweep plus the
+  system ARP table (`arp -a`).
+
+### Changed
+
+- On Windows the network interface is **read-only**: no DHCP/`dhclient`,
+  no static-fallback probing, no `ip addr` changes. `autoconfigure`
+  just re-reads the addresses Windows already set (`mode: manual`). The
+  Wi-Fi hotspot is not available on Windows.
+
 ## [1.0.0] - 2026-08-28
 
 First stable release. Grouped by the priority phases used during

@@ -20,12 +20,24 @@ import secrets
 import string
 import subprocess
 
+from .. import platform_net
 from .nmcli_util import split_nmcli_terse
 
 log = logging.getLogger("raspiscanner.network.hotspot")
 
 HOTSPOT_CONNECTION_NAME = "raspiscanner-hotspot"
 MIN_PASSWORD_LENGTH = 8
+
+# L'hotspot (access point) si appoggia a NetworkManager (`nmcli device wifi
+# hotspot`), che gestisce da solo DHCP interno per i client. Su Windows non
+# c'e' un equivalente affidabile: l'API "hosted network" di `netsh wlan` e'
+# deprecata e su molte schede non funziona piu'. Sulla build Windows
+# l'hotspot e' quindi disabilitato per scelta (vedi docs/WINDOWS.md) e la
+# dashboard nasconde il pannello relativo.
+_WINDOWS_UNSUPPORTED_MSG = (
+    "Hotspot non disponibile nella build Windows: collega la dashboard via "
+    "cavo o Wi-Fi gestito da Windows."
+)
 
 
 def _run(cmd, timeout=20):
@@ -47,11 +59,14 @@ def default_ssid(mac=None, iface="wlan0"):
     dell'interfaccia (cosi' e' riconoscibile e non collide con altri
     RaspiScanner sulla stessa rete)."""
     if mac is None:
-        try:
-            with open(f"/sys/class/net/{iface}/address") as fh:
-                mac = fh.read().strip()
-        except (FileNotFoundError, OSError):
-            mac = None
+        if platform_net.IS_WINDOWS:
+            mac = platform_net.get_interface_mac(iface)
+        else:
+            try:
+                with open(f"/sys/class/net/{iface}/address") as fh:
+                    mac = fh.read().strip()
+            except (FileNotFoundError, OSError):
+                mac = None
     suffix = mac.replace(":", "")[-4:].upper() if mac else "0000"
     return f"RaspiScanner-{suffix}"
 
@@ -65,6 +80,8 @@ def start_hotspot(iface, ssid, password):
     raggiungibile via hotspot senza bisogno di riconfigurarlo da capo con
     un cavo.
     """
+    if platform_net.IS_WINDOWS:
+        return False, _WINDOWS_UNSUPPORTED_MSG
     ssid = (ssid or "").strip()
     if not ssid:
         return False, "SSID is required"
@@ -96,6 +113,8 @@ def stop_hotspot():
     """Disattiva l'hotspot (il profilo resta salvato, solo disattivato:
     per rimuoverlo del tutto va cancellato manualmente con
     `nmcli connection delete raspiscanner-hotspot`)."""
+    if platform_net.IS_WINDOWS:
+        return False, _WINDOWS_UNSUPPORTED_MSG
     res = _run(["nmcli", "connection", "down", HOTSPOT_CONNECTION_NAME], timeout=15)
     if not res:
         return False, "nmcli not available"
@@ -106,6 +125,8 @@ def stop_hotspot():
 
 def get_hotspot_status():
     """Ritorna {'active': bool, 'ssid':.., 'ip':.., 'iface':..}."""
+    if platform_net.IS_WINDOWS:
+        return {"active": False, "ssid": None, "ip": None, "iface": None, "supported": False}
     active_res = _run(["nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active"], timeout=10)
     iface = None
     if active_res and active_res.returncode == 0:

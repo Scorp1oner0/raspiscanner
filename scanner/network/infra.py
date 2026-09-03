@@ -8,6 +8,8 @@ OUI e banner HTTP sono segnali di supporto, meno certi.
 import logging
 import subprocess
 
+from .. import platform_net
+
 log = logging.getLogger("raspiscanner.network.infra")
 
 # Parola chiave nel banner -> sottotipo specifico da mostrare invece del
@@ -31,6 +33,8 @@ _INFRA_VENDOR_HINTS = (
 
 def get_default_gateway(iface):
     """Ritorna l'IP del gateway di default per l'interfaccia, o None."""
+    if platform_net.IS_WINDOWS:
+        return platform_net.get_default_gateway(iface)
     try:
         res = subprocess.run(
             ["ip", "-4", "route", "show", "dev", iface],

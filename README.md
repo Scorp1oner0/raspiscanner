@@ -8,6 +8,24 @@ cameras, NVR/DVR, network gear, general hosts — and produces a security
 report from active but non-intrusive probes. Available as a web dashboard
 and as a command-line tool.
 
+## Provarlo subito
+
+Su Linux, Raspberry Pi OS e Windows il percorso è lo stesso: uno script che
+crea un ambiente Python isolato, avvia la dashboard e apre il browser. Non
+installa nulla, non registra servizi e **non tocca la configurazione di
+rete**.
+
+| Sistema | Comando |
+|---|---|
+| Linux / Raspberry Pi OS | `./start.sh` |
+| Windows | doppio click su `start.bat` |
+
+Dashboard su <https://127.0.0.1:7332>. Dettagli, scan completo a livello 2 e
+differenze rispetto all'installazione: [`docs/PROVA-RAPIDA.md`](docs/PROVA-RAPIDA.md).
+
+Per l'uso permanente su un **Pi dedicato** (servizio systemd,
+autoconfigurazione della scheda di rete) resta `sudo ./install.sh`.
+
 ## Why RaspiScanner?
 
 Good tools already exist for generic network discovery (Nmap, Netdiscover,
@@ -146,6 +164,15 @@ random password are created on first launch and printed to the service
 log — see [Dashboard authentication](#dashboard-authentication) for the
 full flow. Full install/upgrade/uninstall instructions further down.
 
+### On a Windows laptop
+
+Double-click **`start.bat`** (needs Python 3.9+ with "Add Python to PATH").
+The Windows build is read-only about the network — it scans whatever the
+laptop is already connected to, never reconfigures the adapter, and has no
+Wi-Fi hotspot. Everything else (discovery, classification, assessment,
+history, API) is identical. Full details, including the optional Npcap
+install for a full L2 ARP scan: [`docs/WINDOWS.md`](docs/WINDOWS.md).
+
 ## Example output
 
 ```
@@ -212,6 +239,11 @@ credentials, no separate token).
 - System packages: `python3-venv`, `isc-dhcp-client` (for `dhclient`).
   `nmcli` (NetworkManager) is optional, used only for Wi-Fi
   listing/connection.
+
+**Windows** is also supported as a technician's field build (read-only
+about the network, no hotspot): Python 3.9+, `requirements-windows.txt`
+(adds `psutil` and `cryptography`), and — optionally, for a full L2 ARP
+scan — [Npcap](https://npcap.com). See [`docs/WINDOWS.md`](docs/WINDOWS.md).
 
 ## ARP scan limits (read before reporting "can't find a device")
 

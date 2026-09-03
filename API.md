@@ -89,6 +89,9 @@ RaspiScanner didn't assign), `choose-network` (multiple preset subnets
 answered, see `candidates`), `no-network`, or `null` (cable unplugged).
 While `mode` is being decided, `probing` is `true` and `probe_index`/
 `probe_total`/`probe_cidr` track which preset subnet is being tried.
+On the Windows build the interface is never reconfigured: `mode` is always
+`manual` (whatever DHCP/static Windows already set) or `no-network`, and
+`POST /api/network/rescan` just re-reads the current addresses.
 
 ### `POST /api/network/rescan` — operator
 Re-runs ethernet autoconfiguration (DHCP → preset-subnet fallback) in the

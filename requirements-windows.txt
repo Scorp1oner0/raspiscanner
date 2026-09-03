@@ -1,0 +1,16 @@
+# Dipendenze per la build Windows di RaspiScanner (vedi docs/WINDOWS.md).
+# Su Raspberry Pi / Linux NON serve questo file: usa requirements.txt.
+-r requirements.txt
+
+# Letture di rete cross-platform (interfacce, IP, MAC, stato) al posto di
+# /sys/class/net e del comando `ip`, che su Windows non esistono.
+psutil>=5.9,<8.0
+
+# Certificato TLS self-signed generato in pure-Python quando `openssl` non
+# e' nel PATH (di norma il caso su Windows). Su Linux resta preferito openssl.
+cryptography>=42.0
+
+# NOTA: scapy e' gia' in requirements.txt ma per l'ARP scan L2 su Windows
+# richiede Npcap installato a parte (https://npcap.com, opzione "WinPcap API
+# compatible"). Senza Npcap lo scanner funziona lo stesso: ripiega su uno
+# sweep TCP-connect + lettura della tabella ARP di sistema (`arp -a`).

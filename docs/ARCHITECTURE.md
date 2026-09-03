@@ -4,8 +4,9 @@
 raspi-scanner.py             Entry point: dashboard Flask (default) o CLI --report
 ├── scanner/
 │   ├── config.py              Costanti condivise (classi preimpostate, porte, timeout)
+│   ├── platform_net.py         Astrazione OS per le letture di rete (Linux: /sys+ip; Windows: psutil+netsh)
 │   ├── auth.py                 Utenti dashboard: ruoli, hash password, must_change_password
-│   ├── tls.py                   Certificato TLS self-signed per la dashboard (via openssl)
+│   ├── tls.py                   Certificato TLS self-signed (openssl; fallback pure-Python "cryptography")
 │   ├── vendor.py                Lookup vendor da OUI offline (data/oui.csv)
 │   ├── hosts.py                  "e' un Raspberry Pi/PC/stampante?" (vendor o porte tipiche)
 │   ├── scan_engine.py            Orchestrazione: discovery -> fingerprint -> classify -> stato
@@ -17,6 +18,7 @@ raspi-scanner.py             Entry point: dashboard Flask (default) o CLI --repo
 │   ├── discovery/                 Scoperta host su una subnet
 │   │   ├── arp.py                   ARP scan (scapy) + reverse DNS + tag VLAN 802.1Q
 │   │   ├── icmp.py                   ICMP sweep per link NOARP (tunnel VPN)
+│   │   ├── nopriv.py                  Ripiego senza socket raw (Windows senza Npcap): sweep TCP + tabella ARP di sistema
 │   │   ├── mdns.py                   mDNS/Bonjour (nome amichevole + modello Apple)
 │   │   ├── snmp.py                    SNMP opzionale (sysDescr/sysName) su apparati di rete
 │   │   ├── lldp_cdp.py                 Ascolto passivo LLDP/CDP (topologia one-hop)
@@ -33,9 +35,9 @@ raspi-scanner.py             Entry point: dashboard Flask (default) o CLI --repo
 │   │   └── classify.py               "e' un NVR/DVR?" + sottotipo (DVR/Encoder/Decoder)
 │   │
 │   ├── network/                   Autoconfig dell'interfaccia + apparati di rete
-│   │   ├── setup.py                 DHCP -> fallback classi preimpostate, monitor cavo/wifi
+│   │   ├── setup.py                 DHCP -> fallback classi preimpostate, monitor cavo/wifi (su Windows: sola lettura)
 │   │   ├── infra.py                  Gateway di default + "e' un router/switch/AP?"
-│   │   └── hotspot.py                 Access point Wi-Fi (nmcli) per raggiungibilita' senza cavo
+│   │   └── hotspot.py                 Access point Wi-Fi (nmcli) per raggiungibilita' senza cavo (non su Windows)
 │   │
 │   └── reporting/                 Il report "NETWORK ASSESSMENT"
 │       ├── security.py              Findings da probe attivi ma non intrusivi
@@ -45,6 +47,8 @@ raspi-scanner.py             Entry point: dashboard Flask (default) o CLI --repo
 ├── templates/, static/        Dashboard web (HTML/CSS/JS, nessuna dipendenza esterna/CDN)
 ├── data/oui.csv                Database OUI offline (best effort)
 ├── scripts/update_oui.py       Aggiorna oui.csv dal registro IEEE (richiede internet)
+├── install.sh                  Installazione + servizio systemd (Raspberry Pi / Linux)
+├── start.bat                   Avvio sulla build Windows (vedi docs/WINDOWS.md)
 └── tests/                      Test unitari, tutti mockati (nessun hardware/rete richiesta)
 ```
 
