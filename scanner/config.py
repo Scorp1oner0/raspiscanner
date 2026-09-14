@@ -90,8 +90,14 @@ PORTS_OF_INTEREST = {
     9100: "JetDirect",
 }
 
-# Porte usate come segnale forte di "questo e' quasi certamente un dispositivo video"
-CAMERA_SIGNAL_PORTS = {554, 8000, 37777, 34567, 8899}
+# Porte usate come segnale forte di "questo e' quasi certamente un dispositivo video".
+# 8000 ESCLUSA deliberatamente: e' un HTTP-Alt generico (vedi PORTS_OF_INTEREST,
+# "Hikvision/HTTP-Alt") usato da tantissimi dispositivi non video (pannelli NAS,
+# server di sviluppo, IoT generico) — da sola causava falsi positivi "Camera" su
+# PC/apparati che non c'entrano nulla. Resta comunque tra le porte controllate e
+# concorre al match sui banner HTTP in classify_camera(), solo non basta piu' da
+# sola a dichiarare is_camera.
+CAMERA_SIGNAL_PORTS = {554, 37777, 34567, 8899}
 
 # Porta UDP standard WS-Discovery (ONVIF)
 ONVIF_DISCOVERY_PORT = 3702

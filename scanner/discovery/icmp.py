@@ -91,6 +91,13 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     sniffer = None
     try:
         scapy_conf.route.resync()
+        # Un'interfaccia comparsa DOPO l'avvio del processo (tipicamente una
+        # VPN connessa dall'operatore a servizio gia' in esecuzione) non e'
+        # nella cache di Scapy: route.resync() aggiorna solo la tabella di
+        # routing, non la lista interfacce. Senza reload(), AsyncSniffer/
+        # send falliscono con "[Errno 19] No such device" anche se il
+        # kernel la vede benissimo (verificato su wg0 in produzione).
+        scapy_conf.ifaces.reload()
         ip_kwargs = {"dst": targets}
         if psrc:
             ip_kwargs["src"] = psrc

@@ -98,6 +98,11 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
 
     try:
         scapy_conf.route.resync()
+        # Stesso motivo di discovery.icmp.icmp_scan: un'interfaccia comparsa
+        # dopo l'avvio del processo (VPN, ma anche una scheda Wi-Fi
+        # collegata a servizio gia' attivo) non e' nella cache di Scapy —
+        # route.resync() aggiorna solo il routing, non la lista interfacce.
+        scapy_conf.ifaces.reload()
         arp_kwargs = {"pdst": cidr}
         if psrc:
             arp_kwargs["psrc"] = psrc
