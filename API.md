@@ -37,6 +37,27 @@ There is currently no OpenAPI/Swagger spec; this document is the reference.
   `{"ok": false, "message": "..."}` with a `4xx`/`5xx` status matching the
   particular endpoint (documented per-endpoint below).
 
+## Platform
+
+### `GET /api/platform` — viewer
+Capabilities of the host RaspiScanner is running on. The dashboard uses
+this to hide panels that don't apply on the Windows build (interface
+reconfiguration, Wi-Fi hotspot) and to warn when Npcap is missing.
+
+```json
+{
+  "os": "linux",
+  "is_windows": false,
+  "network_reconfig_supported": true,
+  "hotspot_supported": true,
+  "arp_raw_available": true
+}
+```
+On Windows `network_reconfig_supported` and `hotspot_supported` are
+`false` (the interface is read-only, DHCP/static is left to Windows), and
+`arp_raw_available` reflects whether Npcap is installed — when `false` the
+ARP scan falls back to a TCP-connect sweep plus the system ARP table.
+
 ## Network
 
 ### `GET /api/network` — viewer
