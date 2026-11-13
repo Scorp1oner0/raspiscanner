@@ -18,40 +18,40 @@ cd /d "%~dp0"
 where python >nul 2>nul
 if errorlevel 1 (
     echo.
-    echo   Python non trovato.
-    echo   Installa Python 3.9 o superiore da https://www.python.org/downloads/
-    echo   ricordando di spuntare "Add Python to PATH", poi riavvia questo file.
+    echo   Python not found.
+    echo   Install Python 3.9 or later from https://www.python.org/downloads/
+    echo   making sure to check "Add Python to PATH", then run this file again.
     echo.
     pause
     exit /b 1
 )
 
 if not exist ".venv" (
-    echo Creazione ambiente Python...
+    echo Creating Python environment...
     python -m venv .venv
 )
 
 call ".venv\Scripts\activate.bat"
 
-echo Installazione/aggiornamento dipendenze...
+echo Installing/updating dependencies...
 python -m pip install -q --upgrade pip
 python -m pip install -q -r requirements-windows.txt
 if errorlevel 1 (
     echo.
-    echo   Installazione dipendenze fallita. Controlla la connessione a
-    echo   internet e riprova.
+    echo   Installing dependencies failed. Check your internet connection
+    echo   and try again.
     echo.
     pause
     exit /b 1
 )
 
-echo Aggiornamento database vendor (OUI) dall'IEEE (facoltativo, serve internet)...
-python scripts\update_oui.py --if-missing || echo   (OUI completo non scaricato, uso la lista minima inclusa)
+echo Updating vendor database (OUI) from the IEEE (optional, needs internet)...
+python scripts\update_oui.py --if-missing || echo   (full OUI not downloaded, using the bundled minimal list)
 
 echo.
-echo RaspiScanner in avvio su https://127.0.0.1:7332
-echo (certificato self-signed: il browser mostra un avviso da accettare una volta)
-echo Chiudi questa finestra per fermarlo.
+echo Starting RaspiScanner at https://127.0.0.1:7332
+echo (self-signed certificate: the browser shows a warning you accept once)
+echo Close this window to stop it.
 echo.
 start "" https://127.0.0.1:7332
 python raspi-scanner.py
