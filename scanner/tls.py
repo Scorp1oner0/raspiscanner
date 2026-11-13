@@ -74,13 +74,13 @@ def ensure_cert():
             check=True, capture_output=True, text=True, timeout=30,
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("openssl non utilizzabile (%s), provo la libreria cryptography", exc)
+        log.warning("openssl not usable (%s), trying the cryptography library", exc)
         if not _generate_with_cryptography(cert_path, key_path):
-            log.warning("generazione certificato TLS fallita: ne' openssl ne' cryptography disponibili")
+            log.warning("TLS certificate generation failed: neither openssl nor cryptography is available")
             return None, None
 
     os.chmod(key_path, 0o600)
-    log.info("certificato TLS self-signed generato: %s", cert_path)
+    log.info("self-signed TLS certificate generated: %s", cert_path)
     return cert_path, key_path
 
 
@@ -121,7 +121,7 @@ def _generate_with_cryptography(cert_path, key_path):
         with open(cert_path, "wb") as fh:
             fh.write(cert.public_bytes(serialization.Encoding.PEM))
     except Exception as exc:  # noqa: BLE001 - qualunque errore = ripiego pulito
-        log.warning("generazione certificato con cryptography fallita: %s", exc)
+        log.warning("generating certificate with cryptography failed: %s", exc)
         return False
-    log.info("certificato TLS self-signed generato con la libreria cryptography")
+    log.info("self-signed TLS certificate generated with the cryptography library")
     return True

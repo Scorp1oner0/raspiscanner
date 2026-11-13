@@ -39,7 +39,7 @@ def scan_ports(ip, ports=None, timeout=config.PORT_SCAN_TIMEOUT):
                 # errore inatteso in un singolo controllo di porta, che non
                 # deve far perdere il risultato delle altre porte dello
                 # stesso host (ne' l'intero host scan).
-                log.exception("controllo porta %s:%s fallito inaspettatamente", ip, port)
+                log.exception("port check %s:%s failed unexpectedly", ip, port)
                 is_open = False
             if is_open:
                 open_ports.append({"port": port, "service": ports[port]})

@@ -38,7 +38,7 @@ def _load():
         with open(config.TARGETS_JSON_PATH, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError):
-        log.exception("lettura configurazione scan targets fallita")
+        log.exception("reading scan targets configuration failed")
         return dict(DEFAULT_CONFIG)
     custom = data.get("custom")
     return {
@@ -103,7 +103,7 @@ def set_config(auto_interfaces, custom):
             normalized.append(cidr)
     _save(bool(auto_interfaces), normalized)
     log.info(
-        "configurazione scan targets aggiornata: auto_interfaces=%s custom=%s",
+        "scan targets configuration updated: auto_interfaces=%s custom=%s",
         bool(auto_interfaces), normalized,
     )
     return True, "Scan targets saved"

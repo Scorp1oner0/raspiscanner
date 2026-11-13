@@ -58,11 +58,11 @@ def _load():
     n_full = _read_csv_into(config.OUI_FULL_CSV_PATH, _oui_table)
     n_min = _read_csv_into(config.OUI_CSV_PATH, _oui_table)
     if not n_full and not n_min:
-        log.warning("nessun database OUI trovato (%s, %s)",
+        log.warning("no OUI database found (%s, %s)",
                     config.OUI_FULL_CSV_PATH, config.OUI_CSV_PATH)
     _loaded = True
-    log.info("database OUI caricato: %d prefissi (%d dal registro IEEE completo, "
-             "%d dalla lista curata)", len(_oui_table), n_full, n_min)
+    log.info("OUI database loaded: %d prefixes (%d from the full IEEE "
+             "registry, %d from the curated list)", len(_oui_table), n_full, n_min)
 
 
 def lookup_vendor(mac):

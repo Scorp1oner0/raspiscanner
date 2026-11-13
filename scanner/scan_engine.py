@@ -107,7 +107,7 @@ def _egress_interface_for(cidr):
             capture_output=True, text=True, timeout=5, check=False,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, StopIteration) as exc:
-        log.warning("route lookup fallita per il target custom %s: %s", cidr, exc)
+        log.warning("route lookup failed for custom target %s: %s", cidr, exc)
         return None
     if res.returncode != 0:
         return None
@@ -136,7 +136,7 @@ def _routed_target_networks(known_cidrs):
             continue
         iface = _egress_interface_for(cidr)
         if not iface:
-            log.warning("nessuna rotta verso la rete target custom %s, saltata", cidr)
+            log.warning("no route to custom target network %s, skipped", cidr)
             continue
         routed.append((iface, cidr, None))
     return routed
@@ -514,12 +514,12 @@ def _run_scan_thread(networks):
                 # kernel le marca NOARP; le reti custom instradate sono
                 # per definizione fuori dal segmento L2 locale).
                 log.info(
-                    "discovery ICMP su %s (%s, %s)", cidr, iface,
-                    "target custom instradato" if is_routed_target else "interfaccia NOARP",
+                    "ICMP discovery on %s (%s, %s)", cidr, iface,
+                    "routed custom target" if is_routed_target else "NOARP interface",
                 )
                 hosts = icmp_scan(cidr, iface, psrc=iface_ip)
             else:
-                log.info("discovery ARP su %s (%s)", cidr, iface)
+                log.info("ARP discovery on %s (%s)", cidr, iface)
                 hosts = arp_scan(cidr, iface, psrc=iface_ip)
             seen_ips = set()
             for h in hosts:
@@ -626,7 +626,7 @@ def _run_scan_thread(networks):
 
         _update(progress=total, current_ip=None)
     except Exception as exc:  # non deve mai morire silenziosamente in un thread
-        log.exception("errore durante lo scan")
+        log.exception("error during the scan")
         _update(error=str(exc))
     finally:
         _update(running=False, finished_at=time.time())
@@ -660,7 +660,7 @@ def _run_scan_thread(networks):
                 "changes_since_previous_scan": changes_summary,
             })
         except Exception:
-            log.exception("salvataggio storico scan fallito (non bloccante)")
+            log.exception("saving scan history failed (non-blocking)")
 
 
 def stop_scan():

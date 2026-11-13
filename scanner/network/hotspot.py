@@ -35,8 +35,8 @@ MIN_PASSWORD_LENGTH = 8
 # l'hotspot e' quindi disabilitato per scelta (vedi docs/WINDOWS.md) e la
 # dashboard nasconde il pannello relativo.
 _WINDOWS_UNSUPPORTED_MSG = (
-    "Hotspot non disponibile nella build Windows: collega la dashboard via "
-    "cavo o Wi-Fi gestito da Windows."
+    "Hotspot not available on the Windows build: reach the dashboard over a "
+    "cable or over Wi-Fi managed by Windows."
 )
 
 
@@ -44,7 +44,7 @@ def _run(cmd, timeout=20):
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("comando fallito %s: %s", cmd, exc)
+        log.warning("command failed %s: %s", cmd, exc)
         return None
 
 
@@ -102,10 +102,10 @@ def start_hotspot(iface, ssid, password):
 
     if not res or res.returncode != 0:
         message = (res.stderr.strip() or res.stdout.strip()) if res else "nmcli not available"
-        log.error("attivazione hotspot fallita su %s: %s", iface, message)
+        log.error("enabling hotspot failed on %s: %s", iface, message)
         return False, message or "failed to activate hotspot"
 
-    log.info("hotspot attivato su %s (SSID %s)", iface, ssid)
+    log.info("hotspot enabled on %s (SSID %s)", iface, ssid)
     return True, "Hotspot activated"
 
 

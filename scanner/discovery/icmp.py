@@ -31,7 +31,7 @@ try:
     SCAPY_AVAILABLE = True
 except ImportError:  # scapy non installato: la scansione ICMP e' disabilitata
     SCAPY_AVAILABLE = False
-    log.warning("scapy non disponibile: la scansione ICMP e' disabilitata")
+    log.warning("scapy not available: ICMP scanning is disabled")
 
 
 def parse_icmp_reply(received, network):
@@ -74,7 +74,7 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     try:
         network = ipaddress.ip_network(cidr, strict=False)
     except ValueError:
-        log.error("subnet non valida per ICMP scan: %s", cidr)
+        log.error("invalid subnet for ICMP scan: %s", cidr)
         return []
 
     targets = [str(ip) for ip in network.hosts()]
@@ -103,7 +103,7 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
             ip_kwargs["src"] = psrc
         pkt = IP(**ip_kwargs) / ICMP()
     except Exception as exc:
-        log.error("costruzione pacchetto ICMP fallita su %s (%s): %s", iface, cidr, exc)
+        log.error("building ICMP packet failed on %s (%s): %s", iface, cidr, exc)
         return nopriv.fallback_icmp_sweep(cidr)
 
     try:
@@ -114,14 +114,14 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     except Exception as exc:
         # Ampio deliberatamente, stesso motivo di arp_scan: non deve
         # interrompere lo scan sulle altre reti attive.
-        log.error("ICMP scan fallito su %s (%s): %s", iface, cidr, exc)
+        log.error("ICMP scan failed on %s (%s): %s", iface, cidr, exc)
         return nopriv.fallback_icmp_sweep(cidr)
     finally:
         if sniffer is not None:
             try:
                 sniffer.stop()
             except Exception as exc:
-                log.error("sniffer ICMP terminato con errore su %s: %s", iface, exc)
+                log.error("ICMP sniffer exited with an error on %s: %s", iface, exc)
 
     if not results:
         return nopriv.fallback_icmp_sweep(cidr)

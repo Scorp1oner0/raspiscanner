@@ -23,7 +23,7 @@ try:
     SCAPY_AVAILABLE = True
 except ImportError:  # scapy non installato: la discovery SNMP non funzionera'
     SCAPY_AVAILABLE = False
-    log.warning("scapy non disponibile: la scansione SNMP e' disabilitata")
+    log.warning("scapy not available: SNMP scanning is disabled")
 
 SNMP_PORT = 161
 SYSDESCR_OID = "1.3.6.1.2.1.1.1.0"
@@ -51,7 +51,7 @@ def parse_snmp_response(resp):
             if value:
                 result[label] = value
     except Exception:
-        log.debug("parsing risposta SNMP fallito", exc_info=True)
+        log.debug("parsing SNMP response failed", exc_info=True)
         return {}
     return result
 
@@ -74,6 +74,6 @@ def snmp_probe(ip, community="public", timeout=1.0):
     try:
         resp = sr1(pkt, timeout=timeout, verbose=0)
     except Exception as exc:
-        log.debug("SNMP probe fallito per %s: %s", ip, exc)
+        log.debug("SNMP probe failed for %s: %s", ip, exc)
         return {}
     return parse_snmp_response(resp)

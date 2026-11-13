@@ -26,7 +26,7 @@ try:
     SCAPY_AVAILABLE = True
 except ImportError:  # scapy non installato: la discovery ARP non funzionera'
     SCAPY_AVAILABLE = False
-    log.warning("scapy non disponibile: la scansione ARP e' disabilitata")
+    log.warning("scapy not available: ARP scanning is disabled")
 
 
 def extract_vlan_id(received):
@@ -93,7 +93,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     try:
         network = ipaddress.ip_network(cidr, strict=False)
     except ValueError:
-        log.error("subnet non valida per ARP scan: %s", cidr)
+        log.error("invalid subnet for ARP scan: %s", cidr)
         return []
 
     try:
@@ -108,7 +108,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
             arp_kwargs["psrc"] = psrc
         pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(**arp_kwargs)
     except Exception as exc:
-        log.error("costruzione pacchetto ARP fallita su %s (%s): %s", iface, cidr, exc)
+        log.error("building ARP packet failed on %s (%s): %s", iface, cidr, exc)
         return nopriv.fallback_arp_scan(cidr)
 
     results = {}
@@ -140,7 +140,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         # un'eccezione non gestita qui (es. ValueError se l'interfaccia non
         # esiste piu') interromperebbe l'intera scansione multi-rete invece
         # di limitarsi a saltare questa singola rete.
-        log.error("ARP scan fallito su %s (%s): %s", iface, cidr, exc)
+        log.error("ARP scan failed on %s (%s): %s", iface, cidr, exc)
         return nopriv.fallback_arp_scan(cidr)
     finally:
         if sniffer is not None:
@@ -152,7 +152,7 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
                 # scoperto solo li'), scapy la rialza solo qui, a .stop().
                 # Non va inghiottita in silenzio: altrimenti uno scan
                 # completamente fallito e' indistinguibile da "rete vuota".
-                log.error("sniffer ARP terminato con errore su %s: %s", iface, exc)
+                log.error("ARP sniffer exited with an error on %s: %s", iface, exc)
 
     if not results:
         # scapy ha girato senza errori ma non ha visto nulla: Npcap assente su

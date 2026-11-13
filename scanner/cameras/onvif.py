@@ -151,7 +151,7 @@ def onvif_probe(iface_ip=None, timeout=3):
         sock.settimeout(timeout)
         sock.sendto(msg.encode("utf-8"), (config.ONVIF_MULTICAST_ADDR, config.ONVIF_DISCOVERY_PORT))
     except OSError as exc:
-        log.warning("probe ONVIF non inviato (%s): %s", iface_ip, exc)
+        log.warning("ONVIF probe not sent (%s): %s", iface_ip, exc)
         sock.close()
         return {}
 
@@ -216,7 +216,7 @@ def get_device_info(xaddr, timeout=3):
     if not parsed.hostname:
         return {}
     if not _is_safe_xaddr_host(parsed.hostname):
-        log.warning("XAddr ONVIF scartato (host non privato/non valido): %s", xaddr)
+        log.warning("ONVIF XAddr discarded (non-private/invalid host): %s", xaddr)
         return {}
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     path = parsed.path or "/onvif/device_service"
@@ -236,7 +236,7 @@ def get_device_info(xaddr, timeout=3):
         status = resp.status
         conn.close()
     except Exception as exc:
-        log.debug("GetDeviceInformation fallito per %s: %s", xaddr, exc)
+        log.debug("GetDeviceInformation failed for %s: %s", xaddr, exc)
         return {}
 
     if status >= 400 or not body:

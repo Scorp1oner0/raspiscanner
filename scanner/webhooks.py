@@ -29,7 +29,7 @@ def _load():
         with open(config.WEBHOOKS_JSON_PATH, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError):
-        log.exception("lettura configurazione webhook fallita")
+        log.exception("reading webhook configuration failed")
         return {"url": None, "enabled": False}
     return {"url": data.get("url"), "enabled": bool(data.get("enabled"))}
 
@@ -63,7 +63,7 @@ def set_config(url, enabled):
         # forma minima corretta indipendentemente da chi lo configura.
         return False, "Webhook URL must be http:// or https://"
     _save(url, bool(enabled))
-    log.info("configurazione webhook aggiornata: url=%s enabled=%s", url, bool(enabled))
+    log.info("webhook configuration updated: url=%s enabled=%s", url, bool(enabled))
     return True, "Webhook configuration saved"
 
 
@@ -80,6 +80,6 @@ def notify_scan_complete(summary):
     )
     try:
         urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS).close()
-        log.info("webhook notificato: %s", cfg["url"])
+        log.info("webhook notified: %s", cfg["url"])
     except Exception as exc:
-        log.warning("notifica webhook fallita (%s): %s", cfg["url"], exc)
+        log.warning("webhook notification failed (%s): %s", cfg["url"], exc)

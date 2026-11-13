@@ -34,7 +34,7 @@ def main():
     # non riscarica 40.000 voci ogni volta.
     if "--if-missing" in sys.argv and os.path.exists(OUI_FULL_CSV_PATH) \
             and os.path.getsize(OUI_FULL_CSV_PATH) > 0:
-        print(f"OUI completo gia' presente ({OUI_FULL_CSV_PATH}), non scarico.")
+        print(f"Full OUI already present ({OUI_FULL_CSV_PATH}), not downloading.")
         return
     print(f"Downloading {SOURCE_URL} ...")
     req = urllib.request.Request(SOURCE_URL, headers={"User-Agent": USER_AGENT})

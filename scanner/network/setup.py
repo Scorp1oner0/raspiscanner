@@ -196,7 +196,7 @@ def _run(cmd, timeout=15):
             cmd, capture_output=True, text=True, timeout=timeout, check=False
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("comando fallito %s: %s", cmd, exc)
+        log.warning("command failed %s: %s", cmd, exc)
         return None
 
 
@@ -262,7 +262,7 @@ def try_dhcp(iface, timeout=config.DHCP_TIMEOUT_SECONDS):
     prima di arrendersi e passare a un DISCOVER pulito sulla rete nuova.
     Partire sempre da un lease vuoto forza un DISCOVER immediato.
     """
-    log.info("provo DHCP su %s (timeout %ss)", iface, timeout)
+    log.info("trying DHCP on %s (timeout %ss)", iface, timeout)
     lease_file = f"/run/raspiscanner-dhclient-{iface}.lease"
     pid_file = f"/run/raspiscanner-dhclient-{iface}.pid"
     dhclient_common = ["-lf", lease_file, "-pf", pid_file]
@@ -283,7 +283,7 @@ def try_dhcp(iface, timeout=config.DHCP_TIMEOUT_SECONDS):
         return False
     ip_info = get_interface_ip(iface)
     if ip_info:
-        log.info("DHCP riuscito su %s: %s", iface, ip_info[0])
+        log.info("DHCP succeeded on %s: %s", iface, ip_info[0])
         return True
     return False
 
@@ -331,7 +331,7 @@ def _find_free_static_ip(iface, cidr):
             continue
         if not _probe_ip_taken(iface, candidate):
             return candidate
-        log.info("IP candidato %s gia' occupato su %s, provo il successivo", candidate, iface)
+        log.info("candidate IP %s already in use on %s, trying the next one", candidate, iface)
     return None
 
 
@@ -363,13 +363,13 @@ def probe_preset_classes(iface):
             _set_status("eth", probe_index=index, probe_cidr=cidr)
             static_ip = _find_free_static_ip(iface, cidr)
             if not static_ip:
-                log.warning("nessun IP candidato libero per la classe %s su %s, salto", cidr, iface)
+                log.warning("no free candidate IP for range %s on %s, skipping", cidr, iface)
                 continue
-            log.info("provo classe %s (IP candidato %s)", cidr, static_ip)
+            log.info("trying range %s (candidate IP %s)", cidr, static_ip)
             assign_static(iface, static_ip, prefix=cidr.split("/")[1])
             hosts = arp_scan(cidr, iface, timeout=config.CLASS_PROBE_TIMEOUT, psrc=static_ip)
             if hosts:
-                log.info("classe %s attiva su %s (%d host)", cidr, iface, len(hosts))
+                log.info("range %s active on %s (%d hosts)", cidr, iface, len(hosts))
                 alive.append({**preset, "static_ip": static_ip, "hosts_found": len(hosts)})
             flush_addresses(iface)
     finally:
@@ -404,7 +404,7 @@ def choose_preset_class(iface, cidr):
         addresses=[{"ip": static_ip, "cidr": cidr}],
         candidates=[], reconfiguring=False, error=None, last_change=time.time(),
     )
-    log.info("classe %s scelta manualmente su %s (IP %s)", cidr, iface, static_ip)
+    log.info("range %s chosen manually on %s (IP %s)", cidr, iface, static_ip)
     return True, f"Network {cidr} selected"
 
 
@@ -451,7 +451,7 @@ def autoconfigure_ethernet(iface=None, force=False):
     """
     iface = iface or find_default_eth_iface()
     if not iface:
-        log.warning("nessuna interfaccia ethernet trovata")
+        log.warning("no Ethernet interface found")
         return
 
     # Sola lettura dove riconfigurare non è voluto o non è possibile: su
@@ -463,7 +463,7 @@ def autoconfigure_ethernet(iface=None, force=False):
         return
 
     if not _autoconfig_lock.acquire(blocking=False):
-        log.info("autoconfigurazione gia' in corso su %s, richiesta ignorata", iface)
+        log.info("autoconfiguration already running on %s, request ignored", iface)
         return
 
     try:
@@ -487,7 +487,7 @@ def autoconfigure_ethernet(iface=None, force=False):
                     candidates=[], reconfiguring=False, error=None, last_change=time.time(),
                 )
                 log.info(
-                    "%d IP preesistenti su %s non assegnati da questo tool, lasciati invariati",
+                    "%d pre-existing IPs on %s not assigned by this tool, left unchanged",
                     len(existing), iface,
                 )
                 return
@@ -502,7 +502,7 @@ def autoconfigure_ethernet(iface=None, force=False):
                 )
                 return
 
-            log.info("DHCP non disponibile su %s, provo classi preimpostate", iface)
+            log.info("DHCP not available on %s, trying preset ranges", iface)
             candidates = probe_preset_classes(iface)
             if len(candidates) == 1:
                 preset = candidates[0]
@@ -527,7 +527,7 @@ def autoconfigure_ethernet(iface=None, force=False):
                     reconfiguring=False, error=None, last_change=time.time(),
                 )
                 log.warning(
-                    "%d classi preimpostate attive su %s, serve una scelta manuale",
+                    "%d preset ranges active on %s, a manual choice is needed",
                     len(candidates), iface,
                 )
                 return
@@ -537,9 +537,9 @@ def autoconfigure_ethernet(iface=None, force=False):
                 "eth", iface=iface, up=True, mode="no-network", ip=None, cidr=None, addresses=[],
                 candidates=[], reconfiguring=False, error=None, last_change=time.time(),
             )
-            log.warning("nessuna classe preimpostata ha risposto su %s", iface)
+            log.warning("no preset range answered on %s", iface)
         except Exception as exc:  # non deve mai lasciare lo stato "congelato" in silenzio
-            log.exception("autoconfigurazione fallita su %s", iface)
+            log.exception("autoconfiguration failed on %s", iface)
             _set_status("eth", iface=iface, reconfiguring=False, error=str(exc), last_change=time.time())
     finally:
         _autoconfig_lock.release()
@@ -691,13 +691,13 @@ def _monitor_loop(stop_event):
                 carrier = has_carrier(eth_iface)
                 if carrier and not last_carrier:
                     if platform_net.can_configure_network():
-                        log.info("cavo eth collegato su %s, avvio autoconfig", eth_iface)
+                        log.info("eth cable connected on %s, starting autoconfig", eth_iface)
                     else:
-                        log.info("cavo eth collegato su %s: leggo la configurazione "
-                                 "esistente (nessuna riconfigurazione)", eth_iface)
+                        log.info("eth cable connected on %s: reading the existing configuration "
+                                 "(no reconfiguration)", eth_iface)
                     autoconfigure_ethernet(eth_iface)
                 elif not carrier and last_carrier:
-                    log.info("cavo eth scollegato da %s", eth_iface)
+                    log.info("eth cable disconnected from %s", eth_iface)
                     _set_status(
                         "eth", iface=eth_iface, up=False, mode=None, ip=None, cidr=None, addresses=[],
                         candidates=[], reconfiguring=False, error=None, last_change=time.time(),
@@ -717,7 +717,7 @@ def _monitor_loop(stop_event):
             # qui non deve fermarlo per sempre, altrimenti nessuna
             # riconfigurazione automatica avverra' mai piu' finche' non si
             # riavvia il servizio.
-            log.exception("errore nel loop di monitor rete")
+            log.exception("error in the network monitor loop")
         stop_event.wait(config.LINK_POLL_INTERVAL)
 
 

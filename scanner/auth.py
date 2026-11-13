@@ -88,7 +88,7 @@ def _load():
         with open(config.USERS_JSON_PATH, encoding="utf-8") as fh:
             raw = json.load(fh)
     except (OSError, ValueError):
-        log.exception("lettura utenti fallita, ripristino solo il default in memoria")
+        log.exception("reading users failed, restoring only the in-memory default")
         return {}
     return {username: _normalize_record(value) for username, value in raw.items()}
 
@@ -193,7 +193,7 @@ def add_user(username, password, role=DEFAULT_ROLE):
             "role": role,
         }
         _save(users)
-    log.info("utente aggiunto: %s (ruolo %s)", username, role)
+    log.info("user added: %s (role %s)", username, role)
     return True, "User added"
 
 
@@ -210,7 +210,7 @@ def set_password(username, password):
         users[username]["hash"] = generate_password_hash(password)
         users[username]["must_change_password"] = False
         _save(users)
-    log.info("password aggiornata per: %s", username)
+    log.info("password updated for: %s", username)
     return True, "Password updated"
 
 
@@ -223,5 +223,5 @@ def remove_user(username):
             return False, "Cannot remove the only remaining user"
         del users[username]
         _save(users)
-    log.info("utente rimosso: %s", username)
+    log.info("user removed: %s", username)
     return True, "User removed"

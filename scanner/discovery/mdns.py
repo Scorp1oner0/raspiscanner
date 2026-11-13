@@ -183,7 +183,7 @@ def mdns_probe(iface_ip=None, timeout=2.5, reverse_ips=None):
         sock.settimeout(timeout)
         sock.sendto(_build_query(query_names), (MDNS_ADDR, MDNS_PORT))
     except OSError as exc:
-        log.warning("probe mDNS non inviato (%s): %s", iface_ip, exc)
+        log.warning("mDNS probe not sent (%s): %s", iface_ip, exc)
         sock.close()
         return {}
 
@@ -229,7 +229,7 @@ def mdns_probe(iface_ip=None, timeout=2.5, reverse_ips=None):
         except Exception:
             # Un pacchetto malformato/inatteso da un singolo responder non
             # deve interrompere la raccolta delle risposte degli altri.
-            log.debug("risposta mDNS malformata da %s, ignorata", ip)
+            log.debug("malformed mDNS response from %s, ignored", ip)
 
     sock.close()
     return results

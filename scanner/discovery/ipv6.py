@@ -25,7 +25,7 @@ try:
     SCAPY_AVAILABLE = True
 except ImportError:  # scapy (o il layer inet6) non disponibile
     SCAPY_AVAILABLE = False
-    log.warning("scapy non disponibile: la discovery IPv6 e' disabilitata")
+    log.warning("scapy not available: IPv6 discovery is disabled")
 
 ALL_NODES_MULTICAST = "ff02::1"
 ALL_NODES_MULTICAST_MAC = "33:33:00:00:00:01"
@@ -62,7 +62,7 @@ def ipv6_discovery(iface, timeout=None, retry=None):
             / ICMPv6EchoRequest()
         )
     except Exception as exc:
-        log.error("costruzione pacchetto ICMPv6 fallita su %s: %s", iface, exc)
+        log.error("building ICMPv6 packet failed on %s: %s", iface, exc)
         return []
 
     results = {}
@@ -87,13 +87,13 @@ def ipv6_discovery(iface, timeout=None, retry=None):
         # Ampio deliberatamente, come in arp_scan: chiamata in loop su piu'
         # reti da scan_engine, un'eccezione qui non deve interrompere lo
         # scan intero.
-        log.error("IPv6 discovery fallita su %s: %s", iface, exc)
+        log.error("IPv6 discovery failed on %s: %s", iface, exc)
         return []
     finally:
         if sniffer is not None:
             try:
                 sniffer.stop()
             except Exception as exc:
-                log.error("sniffer IPv6 terminato con errore su %s: %s", iface, exc)
+                log.error("IPv6 sniffer exited with an error on %s: %s", iface, exc)
 
     return [{"ipv6": ipv6, "mac": mac} for ipv6, mac in results.items()]

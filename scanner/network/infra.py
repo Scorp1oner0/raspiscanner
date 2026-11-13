@@ -41,7 +41,7 @@ def get_default_gateway(iface):
             capture_output=True, text=True, timeout=5, check=False,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("lettura gateway fallita su %s: %s", iface, exc)
+        log.warning("reading gateway failed on %s: %s", iface, exc)
         return None
     if res.returncode != 0:
         return None

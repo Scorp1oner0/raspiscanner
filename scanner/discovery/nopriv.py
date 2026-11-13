@@ -114,15 +114,15 @@ def tcp_sweep(cidr):
     try:
         network = ipaddress.ip_network(cidr, strict=False)
     except ValueError:
-        log.error("subnet non valida per lo sweep TCP: %s", cidr)
+        log.error("invalid subnet for TCP sweep: %s", cidr)
         return set()
     # Controlla la dimensione PRIMA di materializzare la lista di host: su una
     # subnet enorme (es. /8) generare gli indirizzi uno per uno costerebbe
     # gia' da solo secondi e parecchia memoria.
     if network.num_addresses > _SWEEP_MAX_HOSTS + 2:
         log.warning(
-            "subnet %s troppo grande (%d indirizzi) per lo sweep senza "
-            "privilegi, saltata", cidr, network.num_addresses,
+            "subnet %s too large (%d addresses) for the unprivileged sweep, "
+            "skipped", cidr, network.num_addresses,
         )
         return set()
     hosts = [str(ip) for ip in network.hosts()]
@@ -149,7 +149,7 @@ def fallback_arp_scan(cidr):
     if not ips:
         return []
     log.info(
-        "discovery senza privilegi su %s: %d host (%d via sweep TCP, %d in tabella ARP)",
+        "unprivileged discovery on %s: %d hosts (%d via TCP sweep, %d in ARP table)",
         cidr, len(ips), len(live), len(table),
     )
     return [{"ip": ip, "mac": table.get(ip), "vlan_id": None} for ip in sorted(ips)]
@@ -162,7 +162,7 @@ def fallback_icmp_sweep(cidr):
     live = tcp_sweep(cidr)
     if not live:
         return []
-    log.info("sweep TCP senza privilegi su %s: %d host", cidr, len(live))
+    log.info("unprivileged TCP sweep on %s: %d hosts", cidr, len(live))
     return [{"ip": ip, "mac": None} for ip in sorted(live)]
 
 

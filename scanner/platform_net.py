@@ -40,8 +40,8 @@ except ImportError:  # pragma: no cover - dipende dall'ambiente
     PSUTIL_AVAILABLE = False
     if IS_WINDOWS:
         log.warning(
-            "psutil non disponibile: su Windows le letture di rete (interfacce, "
-            "IP, stato) saranno molto limitate. Installa le dipendenze con "
+            "psutil not available: on Windows, network reads (interfaces, IP, "
+            "status) will be very limited. Install the dependencies from "
             "requirements-windows.txt."
         )
 
@@ -161,7 +161,7 @@ def _run(cmd, timeout=15):
             cmd, capture_output=True, text=True, timeout=timeout, check=False
         )
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-        log.warning("comando fallito %s: %s", cmd, exc)
+        log.warning("command failed %s: %s", cmd, exc)
         return None
 
 
@@ -451,15 +451,15 @@ def wifi_connect(ssid, password=None, name=None):
         cmd.append(f"interface={name}")
     res = _run(cmd, timeout=20)
     if res is None:
-        return False, "netsh non disponibile"
+        return False, "netsh not available"
     ok = res.returncode == 0
     if ok:
-        return True, res.stdout.strip() or "Connessione avviata"
+        return True, res.stdout.strip() or "Connection started"
     hint = (res.stdout + res.stderr).strip()
     if password:
         hint += (
-            "  (nota: la connessione a una rete nuova con password va fatta "
-            "una prima volta dalla UI Wi-Fi di Windows; dopo, il profilo "
-            "salvato permette la riconnessione da qui)"
+            "  (note: connecting to a new password-protected network has to be "
+            "done once from the Windows Wi-Fi UI; after that, the saved "
+            "profile lets you reconnect from here)"
         )
-    return False, hint or "connessione fallita"
+    return False, hint or "connection failed"

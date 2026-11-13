@@ -43,7 +43,7 @@ def _load():
         with open(config.MONITORING_JSON_PATH, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError):
-        log.exception("lettura configurazione continuous monitoring fallita")
+        log.exception("reading continuous monitoring configuration failed")
         return {"enabled": False, "interval_minutes": DEFAULT_INTERVAL_MINUTES}
     return {
         "enabled": bool(data.get("enabled")),
@@ -75,7 +75,7 @@ def set_config(enabled, interval_minutes):
         # dando l'illusione di monitoraggio continuo senza esserlo davvero.
         return False, f"interval_minutes must be at least {MIN_INTERVAL_MINUTES}"
     _save(bool(enabled), interval_minutes)
-    log.info("continuous monitoring aggiornato: enabled=%s interval_minutes=%s", bool(enabled), interval_minutes)
+    log.info("continuous monitoring updated: enabled=%s interval_minutes=%s", bool(enabled), interval_minutes)
     return True, "Continuous monitoring configuration saved"
 
 
@@ -95,7 +95,7 @@ def start_scheduler():
         _scheduler_started = True
     t = threading.Thread(target=_scheduler_loop, daemon=True)
     t.start()
-    log.info("scheduler continuous monitoring avviato (poll ogni %ss)", _POLL_SECONDS)
+    log.info("continuous monitoring scheduler started (polling every %ss)", _POLL_SECONDS)
 
 
 def _scheduler_loop():
@@ -112,17 +112,17 @@ def _scheduler_loop():
             ok, message = scan_engine.run_scan()
             if ok:
                 last_scan_at = time.time()
-                log.info("continuous monitoring: scan automatico avviato")
+                log.info("continuous monitoring: automatic scan started")
             else:
                 # Scan gia' in corso o nessuna rete attiva: non e' un
                 # errore, solo un giro saltato. last_scan_at NON viene
                 # aggiornato, cosi' il prossimo poll (tra _POLL_SECONDS,
                 # non tra un intero interval_minutes) riprova subito
                 # invece di aspettare un intero altro intervallo.
-                log.info("continuous monitoring: scan automatico saltato (%s)", message)
+                log.info("continuous monitoring: automatic scan skipped (%s)", message)
         except Exception:
             # Il loop di scheduling non deve mai morire: un'eccezione
             # imprevista qui spegnerebbe il continuous monitoring in
             # silenzio, senza che l'operatore se ne accorga finche' non
             # nota che gli scan automatici sono smessi di arrivare.
-            log.exception("errore nel loop di continuous monitoring")
+            log.exception("error in the continuous monitoring loop")

@@ -27,7 +27,7 @@ try:
     SCAPY_AVAILABLE = True
 except ImportError:  # scapy (o i moduli contrib) non disponibili
     SCAPY_AVAILABLE = False
-    log.warning("scapy non disponibile: la discovery LLDP/CDP e' disabilitata")
+    log.warning("scapy not available: LLDP/CDP discovery is disabled")
 
 LLDP_ETHERTYPE = 0x88CC
 CDP_DST_MAC = "01:00:0c:cc:cc:cc"
@@ -105,12 +105,12 @@ def lldp_cdp_probe(iface, timeout=3):
         sniffer.start()
         time.sleep(timeout)
     except Exception as exc:
-        log.error("sniff LLDP/CDP fallito su %s: %s", iface, exc)
+        log.error("LLDP/CDP sniff failed on %s: %s", iface, exc)
         return results
     finally:
         if sniffer is not None:
             try:
                 sniffer.stop()
             except Exception as exc:
-                log.error("sniffer LLDP/CDP terminato con errore su %s: %s", iface, exc)
+                log.error("LLDP/CDP sniffer exited with an error on %s: %s", iface, exc)
     return results

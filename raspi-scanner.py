@@ -108,7 +108,7 @@ def _require_auth():
     creds = request.authorization
     if not creds or not auth.verify(creds.username, creds.password):
         return Response(
-            "Accesso non autorizzato.", 401,
+            "Unauthorized.", 401,
             {"WWW-Authenticate": 'Basic realm="RaspiScanner"'},
         )
     if request.path.startswith("/static/"):
@@ -142,7 +142,7 @@ def _ensure_startup():
             return
         _started = True
         network_setup.start_monitor()
-        log.info("monitor rete avviato")
+        log.info("network monitor started")
         monitoring.start_scheduler()
 
 
@@ -588,7 +588,7 @@ class _LateTLSServer(ThreadedWSGIServer):
         except OSError as exc:
             # Handshake fallito o mai completato: nessun rumore nei log, e'
             # traffico normale su una rete che stiamo scansionando.
-            log.debug("stretta di mano TLS non completata da %s: %s",
+            log.debug("TLS handshake not completed from %s: %s",
                       client_address[0] if client_address else "?", exc)
             self.shutdown_request(request)
             return
@@ -605,28 +605,28 @@ def run_dashboard(port=7332):
     cert_path, key_path = tls.ensure_cert()
     if not cert_path:
         log.error(
-            "Certificato TLS non disponibile: mi rifiuto di avviare la "
-            "dashboard su HTTP semplice, che manderebbe le credenziali Basic "
-            "Auth in chiaro sulla rete scansionata. Serve openssl nel PATH "
-            "oppure la libreria Python 'cryptography' (pip install cryptography "
-            "/ requirements-windows.txt), poi riavvia."
+            "TLS certificate not available: refusing to start the dashboard "
+            "over plain HTTP, which would send the Basic Auth credentials in "
+            "clear text over the scanned network. Needs openssl on the PATH "
+            "or the Python library 'cryptography' (pip install cryptography "
+            "/ requirements-windows.txt), then restart."
         )
         print(
-            "ERRORE: certificato TLS non generabile (ne' openssl ne' la "
-            "libreria 'cryptography' disponibili). La dashboard non parte su "
-            "HTTP semplice: installa uno dei due e riavvia.",
+            "ERROR: cannot generate the TLS certificate (neither openssl nor "
+            "the 'cryptography' library is available). The dashboard won't "
+            "start over plain HTTP: install one of the two and restart.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    log.info("TLS attivo (certificato self-signed): il browser mostrera' "
-              "un avviso da accettare la prima volta, e' atteso.")
+    log.info("TLS enabled (self-signed certificate): the browser will show a "
+             "warning to accept the first time, this is expected.")
     _ensure_startup()
 
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert_path, key_path)
     srv = _LateTLSServer("0.0.0.0", port, app, ctx)
-    log.info("dashboard in ascolto su https://0.0.0.0:%d", port)
+    log.info("dashboard listening on https://0.0.0.0:%d", port)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
