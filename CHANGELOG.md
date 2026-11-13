@@ -5,48 +5,77 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Added — Windows field build
-- `start.sh`: quick trial on Linux and Raspberry Pi, twin of `start.bat`
-  (virtualenv, dependencies, dashboard in the foreground, browser). It
-  installs nothing and doesn't touch the network. New `docs/QUICK-START.md`.
-- Platform capabilities now depend on **privileges**, not on the operating
-  system (`platform_net.can_configure_network()`,
-  `has_raw_socket_access()`). On an unprivileged Linux the network
-  interface is no longer reconfigured and the ARP scan falls back to the
-  TCP sweep + ARP table instead of returning an empty list: that fallback
-  used to be Windows-only. `RASPISCANNER_NO_NETWORK_CONFIG=1` disables
-  reconfiguration even as root (full scan, network left intact).
-- The full IEEE registry is downloaded into `data/oui_full.csv`, untracked
-  by git, instead of overwriting the curated list `data/oui.csv`: trying
-  the scanner from a clone no longer dirties the checkout. The curated list
-  keeps precedence for the names it knows (shorter and easier to read in a
-  report). `update_oui.py --if-missing` avoids re-downloading on every
-  launch.
-- Docs: README, `docs/QUICK-START.md` (formerly `docs/PROVA-RAPIDA.md`),
-  `docs/WINDOWS.md` and `docs/ARCHITECTURE.md` are now all in English.
+## [1.1.0] - 2026-11-13
+
+Runs on a technician's laptop as well as on a dedicated Pi, fixes a
+dashboard stall that a single port scan could trigger, and everything the
+user sees is now in English.
+
+### Added
 
 - Runs on a technician's **Windows** laptop via `start.bat` (no Linux, no
   command line). New `docs/WINDOWS.md`, `requirements-windows.txt`
   (`psutil` + `cryptography`).
+- `start.sh`: quick trial on Linux and Raspberry Pi, twin of `start.bat`
+  (virtualenv, dependencies, dashboard in the foreground, browser). It
+  installs nothing and doesn't touch the network. New `docs/QUICK-START.md`.
 - `scanner/platform_net.py`: OS abstraction for interface/IP/MAC/gateway
   reads. On Windows uses `psutil` + `route print` + `netsh wlan`; on
   Linux the existing `ip`/`/sys/class/net` paths are unchanged.
 - `GET /api/platform`: reports host capabilities so the dashboard hides
-  the panels that don't apply on Windows (network reconfiguration,
-  Wi-Fi hotspot) and warns when Npcap is missing.
-- TLS certificate now falls back to the pure-Python `cryptography`
-  library when `openssl` isn't on `PATH` (typical on Windows). `openssl`
-  stays the preferred path on Linux.
+  the panels that don't apply (network reconfiguration, Wi-Fi hotspot)
+  and warns when the full layer-2 scan isn't available.
 - `scanner/discovery/nopriv.py`: when the raw-socket ARP/ICMP scan can't
-  run (Windows without Npcap), falls back to a TCP-connect sweep plus the
-  system ARP table (`arp -a`).
+  run (no root on Linux, no Npcap on Windows), falls back to a
+  TCP-connect sweep plus the system ARP table.
+- `RASPISCANNER_NO_NETWORK_CONFIG=1` disables network reconfiguration even
+  as root: full layer-2 scan, network left intact.
+- TLS certificate falls back to the pure-Python `cryptography` library
+  when `openssl` isn't on `PATH` (typical on Windows). `openssl` stays the
+  preferred path on Linux.
 
 ### Changed
 
+- Platform capabilities now depend on **privileges**, not on the operating
+  system (`platform_net.can_configure_network()`,
+  `has_raw_socket_access()`). On an unprivileged Linux the network
+  interface is no longer reconfigured and the ARP scan uses the fallback
+  above instead of returning an empty list.
 - On Windows the network interface is **read-only**: no DHCP/`dhclient`,
-  no static-fallback probing, no `ip addr` changes. `autoconfigure`
-  just re-reads the addresses Windows already set (`mode: manual`). The
-  Wi-Fi hotspot is not available on Windows.
+  no static-fallback probing, no `ip addr` changes. `autoconfigure` just
+  re-reads the addresses Windows already set (`mode: manual`). The Wi-Fi
+  hotspot is not available on Windows.
+- The full IEEE registry is downloaded into `data/oui_full.csv`, untracked
+  by git, instead of overwriting the curated list `data/oui.csv`: trying
+  the scanner from a clone no longer dirties the checkout. The curated
+  list keeps precedence for the names it knows (shorter and easier to read
+  in a report). `update_oui.py --if-missing` avoids re-downloading on
+  every launch.
+- Everything the user sees is in English: log messages, dashboard error
+  texts, `start.sh`/`start.bat` output, the systemd unit description, and
+  the docs (`docs/PROVA-RAPIDA.md` is now `docs/QUICK-START.md`). If you
+  grep the service log for the old Italian messages, update the patterns.
+
+### Fixed
+
+- **Dashboard stall from a single unfinished TLS handshake.** Werkzeug
+  wrapped the *listening* socket in TLS, so the handshake ran inside
+  `accept()` on the main thread: one client that opened TCP and never
+  completed the handshake (a port scanner is enough, including this one)
+  blocked every later connection for good. Observed in the field: the
+  service stayed "active" for almost six days while serving nothing. The
+  listening socket is now plain, and each connection is wrapped in its own
+  thread with a timeout. Regression tests in
+  `tests/test_tls_handshake_dos.py`.
+- Reverse DNS lookups no longer change the global socket timeout from a
+  thread pool; they run in a dedicated thread with a real time limit.
+- Port 8000 (generic HTTP-Alt) on its own no longer marks a device as a
+  **Camera**: it caused false positives on PCs and other devices with a
+  web panel on that port.
+- A network interface that appears after the service started (typically a
+  VPN connected later) is now scanned instead of failing with
+  "No such device": Scapy's interface list is reloaded before each ARP/ICMP
+  scan.
 
 ## [1.0.0] - 2026-08-28
 

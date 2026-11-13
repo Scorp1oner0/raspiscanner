@@ -36,7 +36,7 @@ requests, not security reports about RaspiScanner itself.
 
 ## Supported Versions
 
-1.0.0 is the current release. Given the small size and best-effort
+1.1.0 is the current release. Given the small size and best-effort
 maintenance of this project, only the latest release is supported —
 "supported" means "fix lands on `main`," not a guarantee of backported
 patches to an older tag.
