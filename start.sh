@@ -8,7 +8,7 @@
 #
 # NON è l'installazione: per l'uso permanente (servizio systemd, avvio al
 # boot, autoconfigurazione della scheda di rete su un Pi dedicato) serve
-# `sudo ./install.sh`. Vedi docs/PROVA-RAPIDA.md.
+# `sudo ./install.sh`. Vedi docs/QUICK-START.md.
 #
 # Cosa NON fa, avviato senza privilegi:
 #  - non tocca la configurazione di rete: la scheda resta come l'ha

@@ -8,23 +8,24 @@ cameras, NVR/DVR, network gear, general hosts — and produces a security
 report from active but non-intrusive probes. Available as a web dashboard
 and as a command-line tool.
 
-## Provarlo subito
+## Try it now
 
-Su Linux, Raspberry Pi OS e Windows il percorso è lo stesso: uno script che
-crea un ambiente Python isolato, avvia la dashboard e apre il browser. Non
-installa nulla, non registra servizi e **non tocca la configurazione di
-rete**.
+On Linux, Raspberry Pi OS, and Windows the path is the same: a script that
+creates an isolated Python environment, starts the dashboard, and opens the
+browser. It installs nothing, registers no service, and **never touches the
+network configuration**.
 
-| Sistema | Comando |
+| System | Command |
 |---|---|
 | Linux / Raspberry Pi OS | `./start.sh` |
-| Windows | doppio click su `start.bat` |
+| Windows | double-click `start.bat` |
 
-Dashboard su <https://127.0.0.1:7332>. Dettagli, scan completo a livello 2 e
-differenze rispetto all'installazione: [`docs/PROVA-RAPIDA.md`](docs/PROVA-RAPIDA.md).
+Dashboard at <https://127.0.0.1:7332>. Details, the full layer-2 scan, and
+how this differs from the installed version:
+[`docs/QUICK-START.md`](docs/QUICK-START.md).
 
-Per l'uso permanente su un **Pi dedicato** (servizio systemd,
-autoconfigurazione della scheda di rete) resta `sudo ./install.sh`.
+For permanent use on a **dedicated Pi** (systemd service, network interface
+auto-configuration), use `sudo ./install.sh` instead.
 
 ## Why RaspiScanner?
 

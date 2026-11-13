@@ -83,7 +83,7 @@ _CAP_NET_ADMIN = 12
 _CAP_NET_RAW = 13
 # Variabile d'ambiente per rinunciare esplicitamente a riconfigurare la rete
 # anche quando si avrebbero i privilegi (usata da start.sh nella modalita'
-# "prova": vedi docs/PROVA-RAPIDA.md).
+# "prova": vedi docs/QUICK-START.md).
 NO_NETWORK_CONFIG_ENV = "RASPISCANNER_NO_NETWORK_CONFIG"
 
 

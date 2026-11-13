@@ -1,76 +1,75 @@
-# RaspiScanner su Windows
+# RaspiScanner on Windows
 
-RaspiScanner nasce per girare **non presidiato su un Raspberry Pi** buttato
-su una rete sconosciuta: si autoconfigura la scheda ethernet (DHCP, poi
-fallback sulle classi private), può fare da hotspot Wi-Fi per essere
-raggiunto senza cavo, gira come servizio `systemd`.
+RaspiScanner was built to run **unattended on a Raspberry Pi** dropped onto
+an unfamiliar network: it auto-configures its Ethernet interface (DHCP, then
+fallback to the private ranges), can act as a Wi-Fi hotspot so you can
+reach it without a cable, and runs as a `systemd` service.
 
-La **build Windows** serve un caso diverso: il tecnico ha già un portatile
-**già connesso** alla rete dell'impianto e vuole, in pochi minuti, sapere
-cosa c'è e com'è messo a sicurezza — senza Linux, senza riga di comando,
-senza toccare la configurazione di rete del portatile. È lo stesso spirito
-di [Field Guardian](https://github.com/Scorp1oner0/field-guardian), ma con
-il motore di discovery/classificazione/assessment di RaspiScanner.
+The **Windows build** serves a different case: a technician already has a
+laptop **already connected** to the installation's network and wants to
+know, in a few minutes, what's on it and how it stands security-wise,
+without Linux, without a command line, and without touching the laptop's
+network configuration. It runs the same discovery, classification, and
+assessment engine as the Pi.
 
-## Avvio
+## Starting it
 
-1. Installa **Python 3.9+** da <https://www.python.org/downloads/>,
-   spuntando **"Add Python to PATH"**.
-2. Scarica/clona il repo, doppio click su **`start.bat`**.
-   Crea un virtualenv, installa `requirements-windows.txt`, apre la
-   dashboard su <https://127.0.0.1:7332> (certificato self-signed: il
-   browser mostra un avviso da accettare una volta).
+1. Install **Python 3.9+** from <https://www.python.org/downloads/>, with
+   **"Add Python to PATH"** checked.
+2. Download or clone the repo, then double-click **`start.bat`**.
+   It creates a virtualenv, installs `requirements-windows.txt`, and opens
+   the dashboard at <https://127.0.0.1:7332> (self-signed certificate: the
+   browser shows a warning you accept once).
 
-Account admin di bootstrap e password casuale sono creati al primo avvio e
-stampati nella finestra del `start.bat` — poi la prima login forza il
-cambio password. Uguale a Linux.
+A bootstrap admin account and a random password are created on first
+launch and printed in the `start.bat` window; the first login then forces a
+password change. Same as on Linux.
 
-## Cosa cambia rispetto al Raspberry Pi
+## How it differs from the Raspberry Pi
 
-| Ambito | Raspberry Pi | Windows |
+| Area | Raspberry Pi | Windows |
 |---|---|---|
-| Scheda di rete | autoconfig: DHCP → fallback classi private, `ip`/`dhclient` | **sola lettura**: si usa quello che ha già impostato Windows. `mode` è sempre `manual` o `no-network`. "Reconfigure network" si limita a ri-leggere gli indirizzi. |
-| Hotspot Wi-Fi | `nmcli device wifi hotspot` | **non disponibile** (l'API "hosted network" di Windows è deprecata e inaffidabile). Il pannello è nascosto. |
-| Wi-Fi client | `nmcli` | best-effort via `netsh wlan`: scansione reti OK; la connessione funziona solo se esiste già un profilo salvato per quell'SSID (la prima volta collegati dalla UI Wi-Fi di Windows). |
-| ARP scan L2 | scapy + root/`cap_net_raw` | scapy + **Npcap** (vedi sotto). Senza Npcap: ripiego automatico su **sweep TCP-connect + tabella ARP di sistema** (`arp -a`). |
-| Gateway / rotte | `ip route` | `route print` + `psutil` |
-| Certificato TLS | `openssl` | libreria Python **`cryptography`** (in `requirements-windows.txt`), nessun `openssl` da installare |
-| Avvio | servizio `systemd` | `start.bat` (in primo piano, una finestra) |
+| Network interface | autoconfig: DHCP, then fallback to private ranges, `ip`/`dhclient` | **read-only**: it uses whatever Windows already set. `mode` is always `manual` or `no-network`. "Reconfigure network" only re-reads the addresses. |
+| Wi-Fi hotspot | `nmcli device wifi hotspot` | **not available** (the Windows "hosted network" API is deprecated and unreliable). The panel is hidden. |
+| Wi-Fi client | `nmcli` | best-effort via `netsh wlan`: network scanning works; connecting only works if a saved profile already exists for that SSID (connect the first time from the Windows Wi-Fi UI). |
+| Layer-2 ARP scan | scapy + root/`cap_net_raw` | scapy + **Npcap** (see below). Without Npcap: automatic fallback to a **TCP-connect sweep + system ARP table** (`arp -a`). |
+| Gateway / routes | `ip route` | `route print` + `psutil` |
+| TLS certificate | `openssl` | the **`cryptography`** Python library (in `requirements-windows.txt`), no `openssl` to install |
+| Startup | `systemd` service | `start.bat` (in the foreground, one window) |
 
-Tutto il resto — port scan, ONVIF/WS-Discovery, mDNS, SNMP, lookup OUI,
-classificazione camera/NVR/apparati, report di assessment, storico, audit,
-webhook, continuous monitoring — è **identico** a Linux.
+Everything else (port scan, ONVIF/WS-Discovery, mDNS, SNMP, OUI lookup,
+camera/NVR/network gear classification, assessment report, history, audit,
+webhooks, continuous monitoring) is **identical** to Linux.
 
-## Npcap (facoltativo ma consigliato)
+## Npcap (optional but recommended)
 
-Per l'ARP scan L2 "vero" (broadcast ARP su tutta la subnet, MAC di ogni
-host anche se non espone porte) serve **Npcap**:
+The "real" layer-2 ARP scan (ARP broadcast across the whole subnet, the MAC
+of every host even if it exposes no port) needs **Npcap**:
 
-1. Installa da <https://npcap.com>, lasciando spuntato
-   **"Install Npcap in WinPcap API-compatible Mode"**.
-2. Avvia `start.bat` **come amministratore** (i socket raw lo richiedono).
+1. Install it from <https://npcap.com>, leaving
+   **"Install Npcap in WinPcap API-compatible Mode"** checked.
+2. Run `start.bat` **as administrator** (raw sockets require it).
 
-Senza Npcap RaspiScanner **funziona lo stesso**: `GET /api/platform`
-riporta `arp_raw_available: false` e la dashboard lo segnala. Il ripiego
-scopre gli host che rispondono su almeno una porta comune
-(HTTP/HTTPS/RTSP/SSH/porte Hikvision-Dahua/SMB/RDP) e recupera il loro MAC
-dalla tabella ARP del sistema operativo — sufficiente per un sopralluogo
-dove telecamere, NVR e apparati espongono quasi sempre un pannello di
-gestione, ma un dispositivo completamente silente può sfuggire.
+Without Npcap RaspiScanner **still works**: `GET /api/platform` reports
+`arp_raw_available: false` and the dashboard says so. The fallback finds
+hosts that answer on at least one common port
+(HTTP/HTTPS/RTSP/SSH/Hikvision-Dahua ports/SMB/RDP) and reads their MAC
+from the operating system's ARP table. That's enough for a site survey,
+where cameras, NVRs, and network gear almost always expose a management
+panel, but a completely silent device can slip through.
 
 ## Firewall
 
-Al primo avvio Windows può chiedere di consentire a `python.exe` di
-accettare connessioni: serve solo se vuoi aprire la dashboard **da un
-altro PC** (`https://<ip-del-portatile>:7332`). Per l'uso locale
-(`127.0.0.1`) puoi negare.
+On first launch Windows may ask whether to allow `python.exe` to accept
+connections: you only need that to open the dashboard **from another PC**
+(`https://<laptop-ip>:7332`). For local use (`127.0.0.1`) you can deny it.
 
-## Limiti noti sulla build Windows
+## Known limitations of the Windows build
 
-- La connessione a una rete Wi-Fi **nuova con password** va fatta la prima
-  volta dalla UI di Windows (poi il profilo salvato permette la
-  riconnessione dalla dashboard).
-- Niente hotspot: se il portatile è in un punto scomodo, collega la
-  dashboard via cavo o via Wi-Fi gestito da Windows.
-- L'IPv6 discovery e l'ascolto passivo LLDP/CDP richiedono Npcap come
-  l'ARP scan; senza, vengono saltati.
+- Connecting to a **new password-protected** Wi-Fi network has to be done
+  the first time from the Windows UI (the saved profile then lets the
+  dashboard reconnect).
+- No hotspot: if the laptop sits somewhere awkward, reach the dashboard
+  over a cable or over Wi-Fi managed by Windows.
+- IPv6 discovery and passive LLDP/CDP listening need Npcap, like the ARP
+  scan; without it they're skipped.

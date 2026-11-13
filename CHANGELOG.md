@@ -6,22 +6,24 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added — Windows field build
-- `start.sh`: prova rapida su Linux e Raspberry Pi, gemello di `start.bat`
-  (virtualenv, dipendenze, dashboard in primo piano, browser). Non installa
-  nulla e non tocca la rete. Nuovo `docs/PROVA-RAPIDA.md`.
-- Le capacita' della piattaforma dipendono ora dai **privilegi**, non dal
-  sistema operativo (`platform_net.can_configure_network()`,
-  `has_raw_socket_access()`). Su un Linux non privilegiato la scheda di rete
-  non viene piu' riconfigurata e l'ARP scan ripiega sullo sweep TCP +
-  tabella ARP invece di restituire una lista vuota: prima quel ripiego era
-  riservato a Windows. `RASPISCANNER_NO_NETWORK_CONFIG=1` disattiva la
-  riconfigurazione anche da root (scan completo, rete intatta).
-- Il registro IEEE completo viene scaricato in `data/oui_full.csv`, non
-  tracciato da git, invece di sovrascrivere la lista curata `data/oui.csv`:
-  provare lo scanner da un clone non sporca piu' il checkout. La lista
-  curata mantiene la precedenza sui nomi che conosce (piu' corti e
-  leggibili in un report). `update_oui.py --if-missing` per non riscaricare
-  a ogni avvio.
+- `start.sh`: quick trial on Linux and Raspberry Pi, twin of `start.bat`
+  (virtualenv, dependencies, dashboard in the foreground, browser). It
+  installs nothing and doesn't touch the network. New `docs/QUICK-START.md`.
+- Platform capabilities now depend on **privileges**, not on the operating
+  system (`platform_net.can_configure_network()`,
+  `has_raw_socket_access()`). On an unprivileged Linux the network
+  interface is no longer reconfigured and the ARP scan falls back to the
+  TCP sweep + ARP table instead of returning an empty list: that fallback
+  used to be Windows-only. `RASPISCANNER_NO_NETWORK_CONFIG=1` disables
+  reconfiguration even as root (full scan, network left intact).
+- The full IEEE registry is downloaded into `data/oui_full.csv`, untracked
+  by git, instead of overwriting the curated list `data/oui.csv`: trying
+  the scanner from a clone no longer dirties the checkout. The curated list
+  keeps precedence for the names it knows (shorter and easier to read in a
+  report). `update_oui.py --if-missing` avoids re-downloading on every
+  launch.
+- Docs: README, `docs/QUICK-START.md` (formerly `docs/PROVA-RAPIDA.md`),
+  `docs/WINDOWS.md` and `docs/ARCHITECTURE.md` are now all in English.
 
 - Runs on a technician's **Windows** laptop via `start.bat` (no Linux, no
   command line). New `docs/WINDOWS.md`, `requirements-windows.txt`
