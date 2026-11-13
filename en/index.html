@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RaspiScanner · network scanner for video surveillance installations</title>
+<meta name="description" content="Open-source network scanner for Raspberry Pi. It configures itself, finds IP cameras, NVRs, DVRs and network gear, and produces a security report. Works offline, no telemetry.">
+<meta name="theme-color" content="#0b0d10">
+<link rel="canonical" href="https://raspiscanner.it/en/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://raspiscanner.it/en/">
+<meta property="og:title" content="RaspiScanner">
+<meta property="og:description" content="Network scanner for video surveillance installations: it finds cameras, NVRs and network gear and tells you what is exposed.">
+<meta property="og:image" content="https://raspiscanner.it/dashboard.png">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<link rel="alternate" hreflang="it" href="https://raspiscanner.it/">
+<link rel="alternate" hreflang="en" href="https://raspiscanner.it/en/">
+<link rel="alternate" hreflang="x-default" href="https://raspiscanner.it/en/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d10'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%232ee6a6'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%232ee6a6' stroke-width='2' opacity='.6'/%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232ee6a6' stroke-width='2' opacity='.3'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --panel: #111417;
+  --panel-2: #171b20;
+  --border: #262b33;
+  --border-soft: #1d2127;
+  --text: #e7eaee;
+  --text-dim: #8b93a1;
+  --text-faint: #5b626f;
+  --accent: #2ee6a6;
+  --accent-fg: #06231a;
+  --accent-dim: #0f4a38;
+  --critical: #ef4444;
+  --high: #f97316;
+  --medium: #eab308;
+  --radius: 10px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre { font-family: var(--font-mono); }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(11, 13, 16, 0.86);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-soft);
+}
+header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 600; }
+.brand:hover { text-decoration: none; }
+.brand svg { width: 26px; height: 26px; }
+nav { display: flex; align-items: center; gap: 24px; font-size: 15px; }
+.lang { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font: 600 12px var(--font-mono); }
+.lang a { padding: 4px 9px; color: var(--text-dim); }
+.lang a[aria-current] { background: var(--panel-2); color: var(--text); }
+nav a { color: var(--text-dim); }
+nav a:hover { color: var(--text); text-decoration: none; }
+
+.hero { padding: 88px 0 56px; }
+.eyebrow {
+  display: inline-flex; gap: 8px; align-items: center;
+  font: 13px var(--font-mono); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+}
+.eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+h1 {
+  font-size: clamp(34px, 5.4vw, 56px); line-height: 1.08; letter-spacing: -0.02em;
+  margin: 22px 0 20px; max-width: 16ch; font-weight: 700;
+}
+.lead { font-size: 19px; color: var(--text-dim); max-width: 60ch; margin: 0 0 32px; }
+.lead strong { color: var(--text); font-weight: 600; }
+.ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 20px; border-radius: 8px; font-weight: 600; font-size: 15px;
+  border: 1px solid var(--border); color: var(--text); background: var(--panel);
+}
+.btn:hover { text-decoration: none; border-color: #333a45; background: var(--panel-2); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.primary:hover { background: #4aedb5; }
+.btn svg { width: 18px; height: 18px; }
+.facts {
+  display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 36px 0 0; padding: 0; list-style: none;
+  font-size: 14px; color: var(--text-dim);
+}
+.facts li::before { content: "✓"; color: var(--accent); margin-right: 8px; }
+
+.shot { padding: 8px 0 32px; }
+.window {
+  border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 30px 80px rgba(0,0,0,.45), 0 0 0 1px rgba(46,230,166,.04);
+}
+.window .bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--border-soft); }
+.window .bar i { width: 11px; height: 11px; border-radius: 50%; background: #262b33; }
+.window .bar span { margin-left: 10px; font: 12px var(--font-mono); color: var(--text-faint); }
+.window img { display: block; width: 100%; height: auto; }
+.caption { font-size: 13px; color: var(--text-faint); margin-top: 12px; text-align: center; }
+
+section.block { padding: 72px 0; border-top: 1px solid var(--border-soft); }
+.kicker { font: 13px var(--font-mono); color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 10px; }
+h2 { font-size: clamp(26px, 3.4vw, 34px); line-height: 1.2; letter-spacing: -0.01em; margin: 0 0 14px; }
+.sub { color: var(--text-dim); max-width: 62ch; margin: 0 0 40px; }
+
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: step; }
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 24px;
+}
+.steps .card { counter-increment: step; }
+.steps .card::before {
+  content: counter(step, decimal-leading-zero);
+  display: block; font: 600 13px var(--font-mono); color: var(--accent); margin-bottom: 14px;
+}
+.card h3 { margin: 0 0 8px; font-size: 18px; }
+.card p { margin: 0; color: var(--text-dim); font-size: 15px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 20px; padding: 0; list-style: none; }
+.chips li {
+  font-size: 14px; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+}
+.chips li.hot { border-color: var(--accent-dim); background: rgba(46,230,166,.07); color: var(--accent); }
+.note { font-size: 14px; color: var(--text-faint); margin: 0; }
+
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+pre.term {
+  margin: 0; padding: 20px 22px; overflow-x: auto;
+  background: #07090b; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 13px; line-height: 1.65; color: #c9ced6;
+}
+pre.term .p { color: var(--text-faint); }
+pre.term .h { color: var(--text); font-weight: 600; }
+pre.term .w { color: var(--medium); }
+pre.term .c { color: var(--critical); }
+pre.term .m { color: var(--medium); }
+pre.term .l { color: var(--text-dim); }
+.findings { margin: 0; padding: 0; list-style: none; }
+.findings li { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border-soft); }
+.findings li:last-child { border-bottom: 0; }
+.sev {
+  flex: none; align-self: flex-start; margin-top: 2px;
+  font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: .05em;
+  padding: 3px 8px; border-radius: 4px; border: 1px solid;
+}
+.sev.c { color: var(--critical); border-color: rgba(239,68,68,.4); }
+.sev.h { color: var(--high); border-color: rgba(249,115,22,.4); }
+.sev.m { color: var(--medium); border-color: rgba(234,179,8,.4); }
+.findings b { display: block; font-weight: 600; }
+.findings span { color: var(--text-dim); font-size: 14px; }
+
+.nots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.nots .card h3::before { content: "✕"; color: var(--text-faint); margin-right: 10px; font-weight: 400; }
+
+.install { display: grid; grid-template-columns: 1.2fr 1fr; gap: 32px; align-items: start; }
+.split > *, .install > *, .steps > *, .nots > *, .options > *, .fetch > * { min-width: 0; }
+.num {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 12px;
+  border-radius: 50%; border: 1px solid var(--accent-dim); color: var(--accent);
+  font: 600 13px var(--font-mono); vertical-align: 2px;
+}
+.step-title { font-size: 20px; margin: 48px 0 18px; }
+.fetch { display: grid; grid-template-columns: 1.6fr 1fr; gap: 32px; align-items: end; }
+.fetch h3 { font-size: 20px; margin: 0 0 18px; }
+.fetch .cmd { margin: 0; }
+.or p { color: var(--text-dim); font-size: 15px; margin: 0 0 12px; }
+.options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.options .card { display: flex; flex-direction: column; }
+.options .cmd { margin: 14px 0 16px; }
+.options .card p:last-child { margin-top: 0; }
+.tag { font: 12px var(--font-mono) !important; color: var(--text-faint) !important; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 6px !important; }
+.options code, .install p code { font-size: 13px; background: var(--panel-2); padding: 1px 6px; border-radius: 4px; color: var(--text); }
+.options + .install { margin-top: 48px; }
+.install .step-title { margin-top: 0; }
+.cmd { position: relative; margin: 0 0 14px; }
+.cmd pre.term { padding-right: 84px; }
+.copy {
+  position: absolute; top: 10px; right: 10px;
+  font: 12px var(--font-ui); color: var(--text-dim); background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer;
+}
+.copy:hover { color: var(--text); }
+.req { margin: 0; padding: 0; list-style: none; }
+.req li { padding: 10px 0; border-bottom: 1px solid var(--border-soft); color: var(--text-dim); font-size: 15px; }
+.req li:last-child { border-bottom: 0; }
+.req b { color: var(--text); font-weight: 600; }
+.req code, .install p code { font-size: 13px; background: var(--panel-2); padding: 1px 6px; border-radius: 4px; color: var(--text); }
+.install p { color: var(--text-dim); font-size: 15px; }
+
+.warn {
+  margin-top: 40px; padding: 18px 22px; border-radius: var(--radius);
+  border: 1px solid rgba(234,179,8,.3); background: rgba(234,179,8,.06);
+  color: var(--text-dim); font-size: 15px;
+}
+.warn b { color: var(--medium); }
+
+footer { border-top: 1px solid var(--border-soft); padding: 32px 0 48px; color: var(--text-faint); font-size: 14px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
+footer a { color: var(--text-dim); }
+
+@media (max-width: 860px) {
+  .steps, .split, .install, .nots, .options, .fetch { grid-template-columns: 1fr; }
+  .hero { padding: 56px 0 40px; }
+  section.block { padding: 56px 0; }
+}
+@media (max-width: 560px) {
+  .wrap { padding: 0 16px; }
+  nav a.opt { display: none; }
+  nav { gap: 16px; }
+  .lead { font-size: 17px; }
+  .btn { flex: 1 1 auto; justify-content: center; }
+  .window .bar span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#111417" stroke="#262b33"/><circle cx="16" cy="16" r="3" fill="#2ee6a6"/><circle cx="16" cy="16" r="8" fill="none" stroke="#2ee6a6" stroke-width="2" opacity=".6"/><circle cx="16" cy="16" r="13" fill="none" stroke="#2ee6a6" stroke-width="2" opacity=".3"/></svg>
+      RaspiScanner
+    </a>
+    <nav>
+      <a class="opt" href="#how-it-works">How it works</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/Scorp1oner0/raspiscanner">GitHub</a>
+      <span class="lang"><a href="../" data-lang="it" hreflang="it" lang="it">IT</a><a href="./" data-lang="en" aria-current="page">EN</a></span>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <span class="eyebrow"><span class="dot"></span>v1.0.0 · open source · MIT license</span>
+      <h1>The network scanner for people who install video surveillance.</h1>
+      <p class="lead">Plug a Raspberry Pi into the network. It configures itself, finds <strong>IP cameras, NVRs, DVRs and network gear</strong>, and hands you a report of what is exposed: open Telnet, reachable RTSP, admin panels without HTTPS.</p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/Scorp1oner0/raspiscanner">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Code on GitHub
+        </a>
+        <a class="btn" href="#install">How to install</a>
+      </div>
+      <ul class="facts">
+        <li>Works offline</li>
+        <li>No telemetry</li>
+        <li>Linux, Raspberry Pi and Windows</li>
+        <li>Web dashboard and command line</li>
+        <li>About 11 seconds for a /24 with 4 devices on a Pi 3B+</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="shot">
+    <div class="wrap">
+      <div class="window">
+        <div class="bar"><i></i><i></i><i></i><span>https://raspiscanner.local:7332</span></div>
+        <img src="../dashboard.png" width="1280" height="1050" alt="RaspiScanner dashboard: counters for devices, cameras and issues by severity, network status and the table of devices found">
+      </div>
+      <p class="caption">Example data: a Hikvision camera and NVR, a TP-Link router and a Raspberry Pi. Not anyone's real network.</p>
+    </div>
+  </section>
+
+  <section class="block" id="how-it-works">
+    <div class="wrap">
+      <p class="kicker">How it works</p>
+      <h2>You don't need to know the network in advance.</h2>
+      <p class="sub">Built for the installation you didn't set up: unknown subnet, no documentation, one free port on the switch.</p>
+      <div class="steps">
+        <div class="card">
+          <h3>Plug in</h3>
+          <p>Ethernet, Wi-Fi or an active VPN. It tries DHCP; if nothing answers, it tries the most common private subnets and keeps the one where it finds devices. If it finds more than one, it doesn't guess: it asks you.</p>
+        </div>
+        <div class="card">
+          <h3>Scan</h3>
+          <p>For each device: TCP ports and HTTP banners, ONVIF for the real make and model, mDNS, vendor from the MAC with an offline database, reverse DNS, plus LLDP/CDP, SNMP and IPv6 when available.</p>
+        </div>
+        <div class="card">
+          <h3>Read the report</h3>
+          <p>Devices grouped by category, issues found and a risk summary from critical to low. From the dashboard, as CSV or JSON, or from the terminal with <code>--report</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <p class="kicker">Classification</p>
+      <h2>It can tell a camera from an NVR.</h2>
+      <p class="sub">Every device goes through four independent classifiers, and the most specific one wins.</p>
+      <ul class="chips">
+        <li class="hot">Camera</li>
+        <li class="hot">NVR / DVR</li>
+        <li>Router</li>
+        <li>Switch</li>
+        <li>Access point</li>
+        <li>Raspberry Pi and IoT</li>
+        <li>Windows PC</li>
+        <li>Mac</li>
+        <li>Phone and tablet</li>
+        <li>Network printer</li>
+        <li>Generic</li>
+      </ul>
+      <p class="note">Cameras and recorders are recognized by the protocols they speak, not by the brand in the MAC address.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap split">
+      <div>
+        <p class="kicker">The report</p>
+        <h2>What is exposed, in plain words.</h2>
+        <p class="sub">Active but non-intrusive probes: a normal connection, like anyone on the same network could make.</p>
+        <ul class="findings">
+          <li><span class="sev c">Critical</span><div><b>Telnet open on a camera or NVR</b><span>The favorite port of IoT botnets. High on other devices.</span></div></li>
+          <li><span class="sev h">High</span><div><b>Admin panel over HTTP only</b><span>No encrypted alternative: the password travels in clear text.</span></div></li>
+          <li><span class="sev m">Medium</span><div><b>RTSP reachable</b><span>The video stream port answers. Credentials are not tested.</span></div></li>
+        </ul>
+      </div>
+      <pre class="term"><span class="p">$ sudo python3 raspi-scanner.py --report</span>
+
+<span class="h">NETWORK ASSESSMENT</span>
+────────────────────────────
+
+Network: 192.168.10.0/24
+
+4 devices discovered
+Summary: 1 camera, 1 NVR/DVR, 1 network device,
+         5 security findings
+
+<span class="h">SECURITY</span>
+  <span class="w">⚠</span> Telnet exposed
+    192.168.10.10 (Hikvision NVR)
+  <span class="w">⚠</span> HTTP service detected, no HTTPS available
+    192.168.10.1 (TP-Link network device)
+  <span class="w">⚠</span> RTSP exposed (stream reachability not verified)
+    192.168.10.10 (Hikvision NVR)
+
+<span class="h">RISK SUMMARY</span>
+  <span class="c">Critical: 1</span>
+  High:     0
+  <span class="m">Medium:   3</span>
+  <span class="l">Low:      1</span></pre>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <p class="kicker">Stated limits</p>
+      <h2>What it doesn't do.</h2>
+      <p class="sub">Better to know before than to find out on site.</p>
+      <div class="nots">
+        <div class="card"><h3>Not a vulnerability scanner</h3><p>No logins, no password guessing, no exploits, no CVE matching. It says what a service exposes, not whether it's actually exploitable.</p></div>
+        <div class="card"><h3>No MAC beyond the router</h3><p>ARP doesn't cross routers. Networks reached through routing or VPN are still scanned, but without MAC or vendor.</p></div>
+        <div class="card"><h3>No multi-hop maps</h3><p>Topology goes one hop: the gateway and the neighbors announced via LLDP/CDP.</p></div>
+        <div class="card"><h3>Sends data to no one</h3><p>No telemetry and no cloud service. Everything it needs, including the TLS certificate, stays on the device.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="install">
+    <div class="wrap">
+      <p class="kicker">Installation</p>
+      <h2>Try it in two minutes, install it when you need to.</h2>
+      <p class="sub">The trial installs nothing and doesn't touch the network configuration. The installation turns a Raspberry Pi into a dedicated appliance to leave on site.</p>
+
+      <div class="fetch">
+        <div>
+          <h3><span class="num">1</span>Get the code</h3>
+          <div class="cmd">
+            <pre class="term" id="cmd-clone">git clone https://github.com/Scorp1oner0/raspiscanner.git
+cd raspiscanner</pre>
+            <button class="copy" type="button" data-copy="cmd-clone">Copy</button>
+          </div>
+        </div>
+        <div class="or">
+          <p>Without git, or on Windows:</p>
+          <a class="btn" href="https://github.com/Scorp1oner0/raspiscanner/archive/refs/heads/main.zip">Download the zip</a>
+        </div>
+      </div>
+
+      <h3 class="step-title"><span class="num">2</span>Start it</h3>
+      <div class="options">
+        <div class="card">
+          <p class="tag">Linux and Raspberry Pi</p>
+          <h3>Quick trial</h3>
+          <div class="cmd">
+            <pre class="term" id="cmd-start">./start.sh</pre>
+            <button class="copy" type="button" data-copy="cmd-start">Copy</button>
+          </div>
+          <p>Creates an isolated Python environment and opens the dashboard at <code>https://127.0.0.1:7332</code>. Stop it with Ctrl-C and it leaves nothing behind.</p>
+        </div>
+        <div class="card">
+          <p class="tag">Windows</p>
+          <h3>Double-click</h3>
+          <div class="cmd">
+            <pre class="term">start.bat</pre>
+          </div>
+          <p>Needs Python 3.9 or later from <a href="https://www.python.org/downloads/">python.org</a>, installed with "Add Python to PATH" checked. The laptop's network is only read, never changed.</p>
+        </div>
+        <div class="card">
+          <p class="tag">Dedicated Raspberry Pi</p>
+          <h3>Installation</h3>
+          <div class="cmd">
+            <pre class="term" id="cmd-install">sudo ./install.sh</pre>
+            <button class="copy" type="button" data-copy="cmd-install">Copy</button>
+          </div>
+          <p>A system service that starts at boot. The Pi configures its own network interface and can act as a Wi-Fi hotspot so you can reach it without a cable.</p>
+        </div>
+      </div>
+
+      <div class="install">
+        <div>
+          <h3 class="step-title"><span class="num">3</span>First login</h3>
+          <p>On first launch an admin user is created with a random password, which you change right away. With the quick trial the password shows up in the terminal window; with the installation you'll find it in the log:</p>
+          <div class="cmd">
+            <pre class="term" id="cmd-log">sudo journalctl -u raspiscanner -n 20 --no-pager</pre>
+            <button class="copy" type="button" data-copy="cmd-log">Copy</button>
+          </div>
+          <p>The browser will flag the certificate as untrusted: that's normal for a device reached by IP on a private network, just like routers and NAS boxes.</p>
+          <p>To also find devices that expose no port at all you need the full ARP scan: on Linux start the trial with <code>sudo -E RASPISCANNER_NO_NETWORK_CONFIG=1 ./start.sh</code>, which still leaves the network untouched; on Windows install <a href="https://npcap.com">Npcap</a> and run <code>start.bat</code> as administrator.</p>
+        </div>
+        <div class="card">
+          <h3>Requirements</h3>
+          <ul class="req">
+            <li><b>Linux</b>, including Raspberry Pi OS, or <b>Windows</b></li>
+            <li><b>Python 3.9</b> or later</li>
+            <li>On Linux: <code>python3-venv</code>, plus <code>isc-dhcp-client</code> for the installation</li>
+            <li><b>Root</b> only for the installation and the full ARP scan</li>
+            <li>Optional: <code>nmcli</code> for Wi-Fi and hotspot, Npcap on Windows</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="wrap">
+      <p class="warn"><b>Only use it on networks you're authorized to scan.</b> The probes are light but real: they send packets and generate traffic visible on the target network.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>RaspiScanner, by Andrea Biral · Scorpionero</span>
+    <span><a href="https://github.com/Scorp1oner0/raspiscanner">GitHub</a> · <a href="https://github.com/Scorp1oner0/raspiscanner#readme">Documentation</a> · <a href="https://github.com/Scorp1oner0/raspiscanner/blob/main/LICENSE">MIT license</a></span>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('[data-lang]').forEach(function (a) {
+  a.addEventListener('click', function () {
+    try { localStorage.setItem('raspiscanner-lang', a.dataset.lang); } catch (e) {}
+  });
+});
+document.querySelectorAll('.copy').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var t = document.getElementById(b.dataset.copy).textContent;
+    navigator.clipboard.writeText(t).then(function () {
+      b.textContent = 'Copied';
+      setTimeout(function () { b.textContent = 'Copy'; }, 1500);
+    });
+  });
+});
+</script>
+</body>
+</html>

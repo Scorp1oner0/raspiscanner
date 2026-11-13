@@ -13,6 +13,20 @@
 <meta property="og:description" content="Scanner di rete per impianti di videosorveglianza: trova telecamere, NVR e apparati di rete e ti dice cosa è esposto.">
 <meta property="og:image" content="https://raspiscanner.it/dashboard.png">
 <meta property="og:locale" content="it_IT">
+<meta property="og:locale:alternate" content="en_US">
+<link rel="alternate" hreflang="it" href="https://raspiscanner.it/">
+<link rel="alternate" hreflang="en" href="https://raspiscanner.it/en/">
+<link rel="alternate" hreflang="x-default" href="https://raspiscanner.it/en/">
+<script>
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('raspiscanner-lang'); } catch (e) {}
+  if (saved === 'it') return;
+  var bot = /bot|crawl|spider|slurp|lighthouse/i.test(navigator.userAgent);
+  var lang = ((navigator.languages && navigator.languages[0]) || navigator.language || '').toLowerCase();
+  if (saved === 'en' || (!saved && !bot && lang && lang.indexOf('it') !== 0)) location.replace('en/');
+})();
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d10'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%232ee6a6'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%232ee6a6' stroke-width='2' opacity='.6'/%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232ee6a6' stroke-width='2' opacity='.3'/%3E%3C/svg%3E">
 <style>
 :root {
@@ -59,7 +73,10 @@ header.top .wrap { display: flex; align-items: center; justify-content: space-be
 .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 600; }
 .brand:hover { text-decoration: none; }
 .brand svg { width: 26px; height: 26px; }
-nav { display: flex; gap: 24px; font-size: 15px; }
+nav { display: flex; align-items: center; gap: 24px; font-size: 15px; }
+.lang { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font: 600 12px var(--font-mono); }
+.lang a { padding: 4px 9px; color: var(--text-dim); }
+.lang a[aria-current] { background: var(--panel-2); color: var(--text); }
 nav a { color: var(--text-dim); }
 nav a:hover { color: var(--text); text-decoration: none; }
 
@@ -232,6 +249,7 @@ footer a { color: var(--text-dim); }
       <a class="opt" href="#come-funziona">Come funziona</a>
       <a href="#installa">Installa</a>
       <a href="https://github.com/Scorp1oner0/raspiscanner">GitHub</a>
+      <span class="lang"><a href="./" data-lang="it" aria-current="page">IT</a><a href="en/" data-lang="en" hreflang="en" lang="en">EN</a></span>
     </nav>
   </div>
 </header>
@@ -454,6 +472,11 @@ cd raspiscanner</pre>
 </footer>
 
 <script>
+document.querySelectorAll('[data-lang]').forEach(function (a) {
+  a.addEventListener('click', function () {
+    try { localStorage.setItem('raspiscanner-lang', a.dataset.lang); } catch (e) {}
+  });
+});
 document.querySelectorAll('.copy').forEach(function (b) {
   b.addEventListener('click', function () {
     var t = document.getElementById(b.dataset.copy).textContent;
