@@ -1,5 +1,5 @@
 [Unit]
-Description=RaspiScanner - dashboard scanner di rete e telecamere IP
+Description=RaspiScanner - network and IP camera scanner dashboard
 After=network.target
 
 [Service]
