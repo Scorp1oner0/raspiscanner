@@ -4,14 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RaspiScanner · scanner di rete per impianti di videosorveglianza</title>
-<meta name="description" content="Scanner di rete open source per Raspberry Pi. Si configura da solo, trova telecamere IP, NVR, DVR e apparati di rete e produce un report di sicurezza. Funziona offline, senza telemetria.">
+<meta name="description" content="Scanner di rete open source per Raspberry Pi: trova telecamere IP, NVR e apparati di rete e segnala cosa è esposto. Offline, senza telemetria.">
 <meta name="theme-color" content="#0b0d10">
 <link rel="canonical" href="https://raspiscanner.it/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://raspiscanner.it/">
 <meta property="og:title" content="RaspiScanner">
 <meta property="og:description" content="Scanner di rete per impianti di videosorveglianza: trova telecamere, NVR e apparati di rete e ti dice cosa è esposto.">
-<meta property="og:image" content="https://raspiscanner.it/dashboard.png">
+<meta property="og:site_name" content="RaspiScanner">
+<meta property="og:image" content="https://raspiscanner.it/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Dashboard di RaspiScanner con i dispositivi trovati e i problemi per gravità">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="RaspiScanner · scanner di rete per impianti di videosorveglianza">
+<meta name="twitter:description" content="Scanner di rete per impianti di videosorveglianza: trova telecamere, NVR e apparati di rete e ti dice cosa è esposto.">
+<meta name="twitter:image" content="https://raspiscanner.it/og-image.png">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "RaspiScanner",
+  "url": "https://raspiscanner.it/",
+  "inLanguage": "it",
+  "description": "Scanner di rete open source per Raspberry Pi: trova telecamere IP, NVR e apparati di rete e segnala cosa è esposto. Offline, senza telemetria.",
+  "applicationCategory": "SecurityApplication",
+  "operatingSystem": "Linux, Raspberry Pi OS, Windows",
+  "softwareVersion": "1.0.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Andrea Biral"
+  },
+  "downloadUrl": "https://github.com/Scorp1oner0/raspiscanner/archive/refs/heads/main.zip",
+  "screenshot": "https://raspiscanner.it/dashboard.png",
+  "sameAs": [
+    "https://github.com/Scorp1oner0/raspiscanner"
+  ]
+}
+</script>
 <meta property="og:locale" content="it_IT">
 <meta property="og:locale:alternate" content="en_US">
 <link rel="alternate" hreflang="it" href="https://raspiscanner.it/">
@@ -27,7 +65,9 @@
   if (saved === 'en' || (!saved && !bot && lang && lang.indexOf('it') !== 0)) location.replace('en/');
 })();
 </script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d10'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%232ee6a6'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%232ee6a6' stroke-width='2' opacity='.6'/%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232ee6a6' stroke-width='2' opacity='.3'/%3E%3C/svg%3E">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
 :root {
   color-scheme: dark;
