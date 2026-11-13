@@ -8,6 +8,8 @@ cameras, NVR/DVR, network gear, general hosts — and produces a security
 report from active but non-intrusive probes. Available as a web dashboard
 and as a command-line tool.
 
+**Website:** <https://raspiscanner.it> (English and Italian).
+
 ## Try it now
 
 On Linux, Raspberry Pi OS, and Windows the path is the same: a script that
