@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-11-17
+
+### Fixed
+
+- **Map: text that did not fit.** The boxes of the path to the Internet were too
+  narrow for an address plus the delay (`192.168.10.1 · 0.4 ms` was cut), and
+  the port name on the line of a device hanging under an access point or a
+  switch (`wlan0`, `Gi0/1`) was partly covered by the box. Both have more room.
+
 ## [1.10.0] - 2026-11-17
 
 ### Changed

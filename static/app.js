@@ -551,7 +551,7 @@ function renderNetMap(map) {
   let lines = "", boxes = "";
 
   if (path) {
-    const hopW = 118, hopGap = 26, top = 8;
+    const hopW = 138, hopGap = 22, top = 8;
     const chain = [{ title: "This scanner", sub: "", cls: "nm-self" }].concat(path.hops.map((h) => ({
       title: h.label || (h.ip ? (h.is_public ? "Provider router" : "Router") : "no reply"),
       sub: h.ip ? `${h.ip}${h.rtt_ms != null ? " · " + h.rtt_ms + " ms" : ""}` : `hop ${h.ttl}`,
@@ -564,7 +564,7 @@ function renderNetMap(map) {
       if (i > 0) lines += `<path class="nm-line" d="M${x - hopGap} ${top + 26} H ${x}"/><path class="nm-line" d="M${x - 6} ${top + 22} L ${x} ${top + 26} L ${x - 6} ${top + 30}"/>`;
       boxes += `<g><rect class="nm-box ${c.cls}" x="${x}" y="${top}" width="${hopW}" height="52" rx="8"/>
         <text x="${x + 9}" y="${top + 22}" font-size="12">${escapeHtml(trunc(c.title, 17))}</text>
-        <text class="nm-dim" x="${x + 9}" y="${top + 38}">${escapeHtml(trunc(c.sub, 20))}</text></g>`;
+        <text class="nm-dim" x="${x + 9}" y="${top + 38}">${escapeHtml(trunc(c.sub, 24))}</text></g>`;
     });
     boxes += `<text class="nm-tag" x="14" y="${top + 68}">Path to the Internet (first hops of a traceroute)</text>`;
     lines += `<path class="nm-line" d="M73 ${top + 52} V ${selfY - 28}"/>`;
@@ -595,7 +595,7 @@ function renderNetMap(map) {
     const placed = new Map();
     b.list.forEach((entry, i) => {
       const d = entry.d, col = i % b.cols, row = Math.floor(i / b.cols);
-      const ind = entry.indent * 44, bw = BW - ind;
+      const ind = entry.indent * 54, bw = BW - ind;
       const x = dx + col * (BW + GX) + ind, dy = b.y + 7 + row * (BH + GY);
       placed.set(d.ip, { x, dy });
       pos[d.ip + "|" + d.network] = { x, y: dy, w: bw };
