@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-17
+
+### Added
+
+- **The network map is the last page of the PDF report.** The downloaded
+  PDF of the current scan ends with the same map the History tab draws:
+  the scanner, each network with its gateway, the devices found in it, and
+  a dashed line for a device seen in two networks. It is drawn as vector
+  graphics, continues on more pages when a network has many devices, and is
+  left out of the audit PDF of an older saved scan, because the saved scan
+  keeps the devices but not the interfaces and gateways it was made on.
+
+### Fixed
+
+- The History tab (network map and one-hop topology) showed "No map yet"
+  when it was opened while a scan was still running, and stayed that way
+  after the scan ended. It now refreshes by itself when the scan finishes
+  while History is open.
+
 ## [1.5.0] - 2026-11-17
 
 ### Added

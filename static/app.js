@@ -356,12 +356,16 @@ async function refreshSecurityStats() {
   }
 }
 
+let scanWasRunning = false;
+
 async function refreshScan() {
   try {
     const res = await fetch("/api/scan/status");
     const state = await res.json();
 
     const running = state.running;
+    if (scanWasRunning && !running && !$("panel-history").classList.contains("hidden")) refreshHistory();
+    scanWasRunning = running;
     $("btn-scan-start").disabled = running;
     $("scan-status").textContent = running
       ? `Scanning... (${state.progress}/${state.total || "?"}) ${state.current_ip || ""}`

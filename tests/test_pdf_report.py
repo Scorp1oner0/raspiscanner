@@ -186,5 +186,62 @@ class TestReportData(unittest.TestCase):
                 self.assertIn(f"{message} — {ip}", text)
 
 
+
+def _netmap(devices):
+    return {
+        "networks": [{"iface": "eth0", "cidr": "192.168.1.0/24", "gateway": "192.168.1.1", "kind": "ethernet"},
+                     {"iface": "wlan0", "cidr": "172.20.10.0/24", "gateway": "172.20.10.1", "kind": "wifi"}],
+        "devices": devices,
+        "links": [],
+    }
+
+
+def _node(ip, network, iface, label=None, **extra):
+    node = {"ip": ip, "label": label or ip, "vendor": None, "device_type": "Generic", "mac": None,
+            "iface": iface, "network": network, "is_gateway": False, "is_self": False,
+            "is_camera": False, "is_bridge": False}
+    node.update(extra)
+    return node
+
+
+class TestNetworkMapSection(unittest.TestCase):
+    def test_map_is_the_last_section(self):
+        nodes = [_node("192.168.1.1", "192.168.1.0/24", "eth0", "router", is_gateway=True),
+                 _node("192.168.1.9", "192.168.1.0/24", "eth0", "This scanner", is_self=True)]
+        pages = _pages_text(_render(netmap=_netmap(nodes)))
+        self.assertIn("NETWORK MAP", pages[-1])
+        self.assertIn("router", pages[-1])
+        self.assertIn("eth0", pages[-1])
+        self.assertTrue(all("NETWORK MAP" not in page for page in pages[:-1]))
+
+    def test_no_map_without_netmap(self):
+        self.assertNotIn("NETWORK MAP", " ".join(_pages_text(_render())))
+        self.assertNotIn("NETWORK MAP", " ".join(_pages_text(_render(netmap={}))))
+
+    def test_linked_devices_are_drawn_dashed(self):
+        nodes = [_node("192.168.1.5", "192.168.1.0/24", "eth0", "pi", is_bridge=True),
+                 _node("172.20.10.5", "172.20.10.0/24", "wlan0", "pi", is_bridge=True)]
+        nm = _netmap(nodes)
+        nm["links"] = [{"a": "192.168.1.5", "b": "172.20.10.5", "kind": "same_device", "name": "pi"}]
+        streams = re.findall(rb"stream\n(.*?)\nendstream", _render(netmap=nm), re.S)
+        self.assertIn("[3 2] 0 d", zlib.decompress(streams[-1]).decode("latin-1"))
+
+    def test_many_devices_continue_on_more_pages(self):
+        nodes = [_node(f"192.168.1.{i}", "192.168.1.0/24", "eth0") for i in range(2, 120)]
+        nodes += [_node(f"172.20.10.{i}", "172.20.10.0/24", "wlan0") for i in range(2, 60)]
+        blob = _render(netmap=_netmap(nodes))
+        pages = _pages_text(blob)
+        self.assertGreater(len(pages), 3)
+        self.assertIn("192.168.1.119", " ".join(pages))
+        self.assertIn("172.20.10.59", " ".join(pages))
+        self.assertTrue(blob.rstrip().endswith(b"%%EOF"))
+
+    def test_long_names_are_cut_not_overflowing(self):
+        nodes = [_node("192.168.1.7", "192.168.1.0/24", "eth0", "x" * 200)]
+        text = " ".join(_pages_text(_render(netmap=_netmap(nodes))))
+        self.assertNotIn("x" * 60, text)
+        self.assertIn("...", text)
+
+
 if __name__ == "__main__":
     unittest.main()

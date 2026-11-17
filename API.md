@@ -230,7 +230,9 @@ in two networks under the same hostname (a Pi on cable and Wi-Fi) gets
 `is_bridge` and a `same_device` link between its two entries; the scanner's
 own addresses are linked the same way (`is_self`). It can't tell which switch
 port or access point a device of the same network hangs on: that data
-lives only in the network gear.
+lives only in the network gear. The PDF from `GET /api/report?format=pdf`
+ends with this same map; the audit PDF of a saved scan does not, because a
+saved scan keeps the devices but not the interfaces and gateways.
 
 ### `GET /api/devices` — viewer
 `[device, ...]` — every device found by the last (or current) scan. See

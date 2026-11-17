@@ -379,7 +379,7 @@ _PARTIAL_NOTICE = (
 )
 
 
-def _report_file(fmt, devices, started_at, finished_at, changes, partial, name, subtitle=None):
+def _report_file(fmt, devices, started_at, finished_at, changes, partial, name, subtitle=None, netmap_data=None):
     """Il report come file da scaricare: `pdf` o `txt`. Stessi dati e stessa
     logica del report a video, solo con un'altra forma."""
     if fmt not in ("pdf", "txt"):
@@ -391,6 +391,8 @@ def _report_file(fmt, devices, started_at, finished_at, changes, partial, name, 
     filename = f"{name}-{stamp}.{fmt}"
     if fmt == "pdf":
         options = {"subtitle": subtitle} if subtitle else {}
+        if netmap_data:
+            options["netmap"] = netmap_data
         body, mimetype = pdf_report.render(data, partial=partial, **options), "application/pdf"
     else:
         text = assessment.generate_all(devices, started_at=started_at, finished_at=finished_at, changes=changes)
@@ -408,7 +410,8 @@ def api_report():
     fmt = request.args.get("format", "json")
     if fmt != "json":
         return _report_file(fmt, state["devices"], state["started_at"], state["finished_at"],
-                            changes=None, partial=state["running"], name="raspiscanner-report")
+                            changes=None, partial=state["running"], name="raspiscanner-report",
+                            netmap_data=netmap.build_map(state["topology"], state["devices"], scan_engine.get_local_ips()))
     text = assessment.generate_all(state["devices"], started_at=state["started_at"], finished_at=state["finished_at"])
     if state["running"]:
         text = _PARTIAL_NOTICE + text

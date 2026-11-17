@@ -29,6 +29,11 @@ ACCENT = (0.18, 0.90, 0.65)
 WHITE = (1.0, 1.0, 1.0)
 AMBER_BG = (1.0, 0.96, 0.84)
 AMBER_INK = (0.50, 0.33, 0.02)
+BLUE = (0.20, 0.45, 0.85)
+GREEN = (0.10, 0.62, 0.45)
+GREEN_BG = (0.88, 0.97, 0.93)
+AMBER = (0.78, 0.55, 0.05)
+NET_COLOR = {"ethernet": GREEN, "wifi": BLUE, "vpn": AMBER}
 
 # severita' -> (colore di riempimento, colore del testo sul riempimento)
 SEVERITY = {
@@ -160,6 +165,19 @@ class _Doc:
     def hline(self, x1, x2, top, color=RULE, line=0.6, page=None):
         op = f"{_color('RG', color)} {line} w {x1:.2f} {PAGE_H - top:.2f} m {x2:.2f} {PAGE_H - top:.2f} l S"
         (self.pages[page] if page is not None else self.pages[-1]).append(op)
+
+    def line(self, points, color=RULE, width=0.8, dash=None, page=None, at=None):
+        """Linea spezzata tra punti (x, top); `dash` = (tratto, vuoto). Con
+        `at` la inserisce in quella posizione della pagina, cioe' sotto
+        quello che e' stato disegnato dopo."""
+        path = " ".join(f"{x:.2f} {PAGE_H - top:.2f} {'m' if i == 0 else 'l'}" for i, (x, top) in enumerate(points))
+        pattern = f"[{dash[0]} {dash[1]}] 0 d" if dash else "[] 0 d"
+        op = f"q {_color('RG', color)} {width} w {pattern} {path} S Q"
+        target = self.pages[page] if page is not None else self.pages[-1]
+        if at is None:
+            target.append(op)
+        else:
+            target.insert(at, op)
 
     def paragraph(self, text, x=MARGIN, width=CONTENT_W, font="F1", size=10, color=INK, leading=1.4, gap=0):
         """Testo che va a capo e, se serve, cambia pagina riga per riga."""
@@ -368,6 +386,132 @@ def _disclaimers(doc, texts):
     doc.y += height
 
 
+def _fit(text, font, size, max_w):
+    text = text or ""
+    if _width(text, font, size) <= max_w:
+        return text
+    while len(text) > 1 and _width(text + "...", font, size) > max_w:
+        text = text[:-1]
+    return text + "..."
+
+
+_MAP_SELF_W, _MAP_NET_X, _MAP_NET_W, _MAP_BUS_X = 62, MARGIN + 78, 84, MARGIN + 176
+_MAP_DEV_X, _MAP_DEV_W, _MAP_DEV_H, _MAP_GAP, _MAP_COLS = MARGIN + 186, 118, 26, 6, 2
+
+
+def _map_bands(netmap):
+    bands = []
+    for net in netmap["networks"]:
+        devs = [d for d in netmap["devices"] if d.get("iface") == net["iface"] and d.get("network") == net["cidr"]]
+        devs.sort(key=lambda d: (not d["is_self"], not d["is_gateway"], [int(p) if p.isdigit() else 0 for p in d["ip"].split(".")]))
+        rows = max(1, -(-len(devs) // _MAP_COLS))
+        bands.append({"net": net, "devs": devs, "h": max(rows * (_MAP_DEV_H + _MAP_GAP) + 6, 44)})
+    return bands
+
+
+def _map_device(doc, dev, x, top):
+    stroke, line = RULE, 0.6
+    if dev["is_gateway"]:
+        stroke, line = AMBER, 1.1
+    if dev.get("is_bridge"):
+        stroke, line = BLUE, 1.1
+    if dev["is_self"]:
+        stroke, line = GREEN, 1.1
+    doc.rect(x, top, _MAP_DEV_W, _MAP_DEV_H, fill=GREEN_BG if dev["is_self"] else STRIPE, stroke=stroke, line=line)
+    doc.text(x + 5, top + 10.5, _fit(dev["label"], "F2", 7.2, _MAP_DEV_W - 10), "F2", 7.2, INK)
+    detail = dev["ip"] + (f"  {dev['device_type']}" if dev.get("device_type") and dev["device_type"] != "Generic" else "")
+    doc.text(x + 5, top + 20.5, _fit(detail, "F1", 6.2, _MAP_DEV_W - 10), "F1", 6.2, MUTED)
+
+
+def _netmap(doc, netmap):
+    """Ultima sezione: la mappa delle reti scansionate, disegnata in vettoriale.
+    Stesso schema della dashboard: scanner, reti con gateway, apparecchi. I
+    collegamenti tratteggiati uniscono lo stesso apparecchio visto in due reti."""
+    bands = _map_bands(netmap)
+    if not bands:
+        return
+    doc.new_page()
+    _section_title(doc, "Network map")
+    doc.paragraph("The networks covered by the scan, the gateway of each and the devices found in them. A device seen "
+                  "in two networks under the same name is linked with a dashed line. Built only from what the scan "
+                  "saw: which switch port or access point a device hangs on is not known.",
+                  size=8.5, color=MUTED, gap=6)
+
+    groups, current, used = [], [], 0
+    limit = PAGE_H - MARGIN_BOTTOM - 22
+    start = doc.y
+    for band in bands:
+        if current and start + used + band["h"] > limit:
+            groups.append(current)
+            current, used, start = [], 0, MARGIN_TOP + 22
+        current.append(band)
+        used += band["h"] + 6
+    groups.append(current)
+
+    pos, marks = {}, {}
+    for gi, group in enumerate(groups):
+        if gi > 0:
+            doc.new_page()
+            doc.y += 22
+        page = len(doc.pages) - 1
+        marks[page] = len(doc.pages[page])
+        top = doc.y
+        centers = []
+        for band in group:
+            cy = top + band["h"] / 2
+            centers.append(cy)
+            net = band["net"]
+            color = NET_COLOR.get(net["kind"], MUTED)
+            doc.rect(_MAP_NET_X, cy - 17, _MAP_NET_W, 34, fill=WHITE, stroke=color, line=1.2)
+            doc.text(_MAP_NET_X + 5, cy - 6, _fit(f"{net['iface']}  {net['kind']}", "F2", 7.4, _MAP_NET_W - 10), "F2", 7.4, INK)
+            doc.text(_MAP_NET_X + 5, cy + 3.5, _fit(net.get("cidr") or "", "F1", 6.6, _MAP_NET_W - 10), "F1", 6.6, MUTED)
+            doc.text(_MAP_NET_X + 5, cy + 12, _fit(f"gw {net.get('gateway') or '-'}", "F1", 6.2, _MAP_NET_W - 10), "F1", 6.2, FAINT)
+            doc.line([(_MAP_NET_X + _MAP_NET_W, cy), (_MAP_BUS_X, cy)])
+            rows = -(-len(band["devs"]) // _MAP_COLS) if band["devs"] else 0
+            if rows:
+                first_y = top + 3 + _MAP_DEV_H / 2
+                last_y = top + 3 + (rows - 1) * (_MAP_DEV_H + _MAP_GAP) + _MAP_DEV_H / 2
+                doc.line([(_MAP_BUS_X, min(first_y, cy)), (_MAP_BUS_X, max(last_y, cy))])
+            for i, dev in enumerate(band["devs"]):
+                col, row = i % _MAP_COLS, i // _MAP_COLS
+                x = _MAP_DEV_X + col * (_MAP_DEV_W + 8)
+                dy = top + 3 + row * (_MAP_DEV_H + _MAP_GAP)
+                doc.line([(_MAP_BUS_X, dy + _MAP_DEV_H / 2), (x, dy + _MAP_DEV_H / 2)])
+                _map_device(doc, dev, x, dy)
+                pos[(dev["ip"], dev["network"])] = (len(doc.pages) - 1, x, dy)
+            top += band["h"] + 6
+        span_top, span_bottom = centers[0], centers[-1]
+        mid = (span_top + span_bottom) / 2
+        trunk_x = MARGIN + _MAP_SELF_W + 8
+        doc.rect(MARGIN, mid - 22, _MAP_SELF_W, 44, fill=GREEN_BG, stroke=GREEN, line=1.2)
+        doc.text(MARGIN + 6, mid - 4, "This scanner", "F2", 7.4, INK)
+        doc.text(MARGIN + 6, mid + 8, f"{len(netmap['networks'])} network{'s' if len(netmap['networks']) != 1 else ''}",
+                 "F1", 6.4, MUTED)
+        doc.line([(MARGIN + _MAP_SELF_W, mid), (trunk_x, mid)])
+        doc.line([(trunk_x, min(span_top, mid)), (trunk_x, max(span_bottom, mid))])
+        for cy in centers:
+            doc.line([(trunk_x, cy), (_MAP_NET_X, cy)])
+        doc.y = top
+
+    links = netmap.get("links") or []
+    gutter = _MAP_DEV_X + _MAP_COLS * (_MAP_DEV_W + 8) - 2
+    for k, link in enumerate(links):
+        a = next((v for key, v in pos.items() if key[0] == link["a"]), None)
+        b = next((v for key, v in pos.items() if key[0] == link["b"]), None)
+        if not a or not b or a[0] != b[0]:
+            continue
+        gx = gutter + 3 * (k % 8)
+        ay, by = a[2] + _MAP_DEV_H / 2, b[2] + _MAP_DEV_H / 2
+        doc.line([(a[1] + _MAP_DEV_W, ay), (gx, ay), (gx, by), (b[1] + _MAP_DEV_W, by)], color=BLUE, width=1.0,
+                 dash=(3, 2), page=a[0], at=marks[a[0]])
+
+    doc.y += 6
+    doc.ensure(24)
+    doc.text(MARGIN, doc.y + 8, "Green: this scanner   Amber border: gateway   Blue border: seen in two networks   "
+             "Dashed: same device in two networks", "F1", 7, FAINT)
+    doc.y += 14
+
+
 def _footers(doc, label):
     total = len(doc.pages)
     for index in range(total):
@@ -418,7 +562,7 @@ def _assemble(pages, title, generated_at):
     return bytes(out)
 
 
-def render(data, generated_at=None, partial=False, subtitle="Network assessment report"):
+def render(data, generated_at=None, partial=False, subtitle="Network assessment report", netmap=None):
     """PDF (bytes) a partire da assessment.report_data(). `partial` aggiunge
     l'avviso di istantanea parziale, per un report generato a scan in corso."""
     generated_at = generated_at or time.time()
@@ -433,5 +577,7 @@ def render(data, generated_at=None, partial=False, subtitle="Network assessment 
         _network(doc, net, first=index == 0)
     doc.y += 8
     _disclaimers(doc, data["disclaimers"])
+    if netmap:
+        _netmap(doc, netmap)
     _footers(doc, "RaspiScanner network assessment report")
     return _assemble(doc.pages, f"RaspiScanner - {subtitle}", generated_at)

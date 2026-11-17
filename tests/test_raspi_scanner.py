@@ -704,7 +704,7 @@ class TestReportDownloads(RaspiScannerAppTestCase):
 
     def setUp(self):
         super().setUp()
-        self._orig_state = {k: scan_engine._state[k] for k in ("devices", "started_at", "finished_at", "running")}
+        self._orig_state = {k: scan_engine._state[k] for k in ("devices", "started_at", "finished_at", "running", "topology")}
         scan_engine._state.update(devices={d["ip"]: dict(d) for d in self.DEVICES},
                                   started_at=1_700_000_000, finished_at=1_700_000_030, running=False)
 
@@ -720,6 +720,19 @@ class TestReportDownloads(RaspiScannerAppTestCase):
         self.assertRegex(resp.headers["Content-Disposition"],
                          r'^attachment; filename="raspiscanner-report-\d{4}-\d{2}-\d{2}-\d{4}\.pdf"$')
         self.assertEqual(resp.headers["Cache-Control"], "no-store")
+
+    def test_current_pdf_ends_with_the_network_map(self):
+        scan_engine._state["topology"] = {"eth0": {"cidr": "192.168.1.0/24", "gateway": "192.168.1.1", "neighbors": []}}
+        with patch.object(scan_engine, "get_local_ips", return_value=set()):
+            pdf_bytes = self.client.get("/api/report?format=pdf", auth=self.operator_auth).data
+        text = self._pdf_text(pdf_bytes)
+        self.assertIn("NETWORK MAP", text)
+        self.assertIn("192.168.1.10", text.split("NETWORK MAP")[1])
+
+    def test_current_pdf_without_topology_has_no_map(self):
+        scan_engine._state["topology"] = {}
+        pdf_bytes = self.client.get("/api/report?format=pdf", auth=self.operator_auth).data
+        self.assertNotIn("NETWORK MAP", self._pdf_text(pdf_bytes))
 
     def test_txt_download_matches_the_screen_report(self):
         shown = self.client.get("/api/report", auth=self.operator_auth).get_json()["text"]
