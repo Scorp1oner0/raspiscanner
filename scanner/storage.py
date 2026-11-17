@@ -67,10 +67,12 @@ def _connect():
     conn = sqlite3.connect(config.HISTORY_DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
+    if "netmap_json" not in {r["name"] for r in conn.execute("PRAGMA table_info(scans)")}:
+        conn.execute("ALTER TABLE scans ADD COLUMN netmap_json TEXT")
     return conn
 
 
-def save_scan(devices, started_at, finished_at):
+def save_scan(devices, started_at, finished_at, netmap_data=None):
     """Salva uno snapshot completo dello scan e aggiorna l'asset
     database. Ritorna l'id dello scan salvato. Un device senza MAC
     aggiorna comunque scan_devices (fa parte dello snapshot) ma non
@@ -79,8 +81,9 @@ def save_scan(devices, started_at, finished_at):
     with closing(_connect()) as conn:
         with conn:
             cur = conn.execute(
-                "INSERT INTO scans (started_at, finished_at, device_count) VALUES (?, ?, ?)",
-                (started_at, finished_at, len(devices)),
+                "INSERT INTO scans (started_at, finished_at, device_count, netmap_json) VALUES (?, ?, ?, ?)",
+                (started_at, finished_at, len(devices),
+                 json.dumps(netmap_data, ensure_ascii=False) if netmap_data else None),
             )
             scan_id = cur.lastrowid
             for d in devices:
@@ -121,6 +124,19 @@ def list_scans(limit=20):
             (limit,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_scan_netmap(scan_id):
+    """La mappa di rete com'era alla fine dello scan, o None per gli scan
+    salvati prima che la mappa venisse conservata."""
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT netmap_json FROM scans WHERE id = ?", (scan_id,)).fetchone()
+    if not row or not row["netmap_json"]:
+        return None
+    try:
+        return json.loads(row["netmap_json"])
+    except ValueError:
+        return None
 
 
 def get_scan_meta(scan_id):

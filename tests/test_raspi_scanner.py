@@ -782,6 +782,25 @@ class TestReportDownloads(RaspiScannerAppTestCase):
         self.assertIn(f"Audit report - scan #{scan_id}", self._pdf_text(resp.data))
         self.assertIn(f"/Title (RaspiScanner - Audit report - scan #{scan_id})".encode(), resp.data)
 
+    def test_audit_report_pdf_draws_the_map_saved_with_the_scan(self):
+        saved = {"networks": [{"iface": "eth0", "cidr": "192.168.88.0/24", "gateway": "192.168.88.2", "kind": "ethernet"}],
+                 "devices": [{"ip": "192.168.88.2", "label": "Pi-hole", "vendor": None, "device_type": "Generic",
+                              "mac": None, "iface": "eth0", "network": "192.168.88.0/24", "is_gateway": True,
+                              "is_self": False, "is_camera": False, "is_bridge": False}],
+                 "links": []}
+        scan_id = storage.save_scan(list(scan_engine._state["devices"].values()), 1_700_000_000, 1_700_000_030,
+                                    netmap_data=saved)
+        text = self._pdf_text(self.client.get(f"/api/audit/report?scan_id={scan_id}&format=pdf",
+                                              auth=self.operator_auth).data)
+        self.assertIn("NETWORK MAP", text)
+        self.assertIn("Pi-hole", text.split("NETWORK MAP")[1])
+
+    def test_audit_report_pdf_of_a_scan_without_a_map_has_no_map_section(self):
+        scan_id = storage.save_scan(list(scan_engine._state["devices"].values()), 1_700_000_000, 1_700_000_030)
+        text = self._pdf_text(self.client.get(f"/api/audit/report?scan_id={scan_id}&format=pdf",
+                                              auth=self.operator_auth).data)
+        self.assertNotIn("NETWORK MAP", text)
+
     @staticmethod
     def _pdf_text(blob):
         import re

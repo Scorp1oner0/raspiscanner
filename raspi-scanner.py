@@ -574,7 +574,8 @@ def api_audit_report():
     if fmt != "json":
         return _report_file(fmt, devices, meta["started_at"], meta["finished_at"], changes=changes,
                             partial=False, name=f"raspiscanner-audit-scan{scan_id}",
-                            subtitle=f"Audit report - scan #{scan_id}")
+                            subtitle=f"Audit report - scan #{scan_id}",
+                            netmap_data=storage.get_scan_netmap(scan_id))
     text = assessment.generate_all(
         devices, started_at=meta["started_at"], finished_at=meta["finished_at"], changes=changes,
     )

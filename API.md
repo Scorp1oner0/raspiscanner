@@ -416,7 +416,9 @@ exist, or if no scan has ever been saved and none was given.
 
 `&format=pdf` or `&format=txt` downloads the same audit report as a file,
 named `raspiscanner-audit-scan<id>-<date>-<time>`; the PDF includes the
-"Changes since previous scan" section.
+"Changes since previous scan" section. It also ends with the network map
+as it was when that scan finished (kept with each scan since 1.7.1); scans
+saved earlier have no map, so their PDF has no map page.
 
 ## Scan targets
 

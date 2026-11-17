@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-17
+
+### Fixed
+
+- **The audit PDF now draws the network map.** Only the live report had it:
+  the PDF of a saved scan (History, Audit) was missing the map page. Each scan
+  now keeps its map when it finishes, and the audit PDF draws that one, so an
+  old scan shows the network as it was then, not as it is now. Scans saved
+  before this version have no map and their PDF stays without the map page.
+
 ## [1.7.0] - 2026-11-17
 
 ### Added

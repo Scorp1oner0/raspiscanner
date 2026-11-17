@@ -62,6 +62,31 @@ class TestSaveAndListScans(StorageTestCase):
         self.assertEqual(camera["model"], "DS-2CD2043G0")
 
 
+class TestScanNetmap(StorageTestCase):
+    _MAP = {"networks": [{"iface": "eth0", "cidr": "192.168.88.0/24"}], "devices": [], "links": []}
+
+    def test_map_is_stored_and_returned_with_the_scan(self):
+        scan_id = storage.save_scan([_DEVICE_A], 1000.0, 1010.0, netmap_data=self._MAP)
+        self.assertEqual(storage.get_scan_netmap(scan_id), self._MAP)
+
+    def test_scan_saved_without_a_map_returns_none(self):
+        scan_id = storage.save_scan([_DEVICE_A], 1000.0, 1010.0)
+        self.assertIsNone(storage.get_scan_netmap(scan_id))
+        self.assertIsNone(storage.get_scan_netmap(9999))
+
+    def test_database_created_before_the_map_column_is_upgraded(self):
+        import sqlite3
+        conn = sqlite3.connect(config.HISTORY_DB_PATH)
+        conn.execute("CREATE TABLE scans (id INTEGER PRIMARY KEY AUTOINCREMENT, started_at REAL, "
+                     "finished_at REAL, device_count INTEGER NOT NULL)")
+        conn.execute("INSERT INTO scans (started_at, finished_at, device_count) VALUES (1, 2, 0)")
+        conn.commit()
+        conn.close()
+        self.assertIsNone(storage.get_scan_netmap(1))
+        new_id = storage.save_scan([_DEVICE_A], 3.0, 4.0, netmap_data=self._MAP)
+        self.assertEqual(storage.get_scan_netmap(new_id), self._MAP)
+
+
 class TestAssetDatabase(StorageTestCase):
     def test_new_device_creates_an_asset(self):
         storage.save_scan([_DEVICE_A], 1000.0, 1010.0)

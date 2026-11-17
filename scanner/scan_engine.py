@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 
-from . import config, platform_net, storage, targets, vendor, webhooks
+from . import config, netmap, platform_net, storage, targets, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import (
@@ -692,7 +692,12 @@ def _run_scan_thread(networks, ports=None):
         # mai far sembrare fallito lo scan appena completato.
         try:
             state = get_state()
-            scan_id = storage.save_scan(state["devices"], state["started_at"], state["finished_at"])
+            try:
+                map_data = netmap.build_map(state["topology"], state["devices"], get_local_ips(), state.get("uplink"))
+            except Exception:
+                log.exception("building the network map for the history failed (non-blocking)")
+                map_data = None
+            scan_id = storage.save_scan(state["devices"], state["started_at"], state["finished_at"], netmap_data=map_data)
             # Continuous Monitoring (P4): il valore di uno scan automatico
             # e' sapere COSA e' cambiato, non solo che uno scan e' finito
             # — calcolato per OGNI scan (manuale o automatico), non solo
