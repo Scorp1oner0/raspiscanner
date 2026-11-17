@@ -17,6 +17,7 @@ c'e' L2 su queste interfacce), solo IP.
 """
 import ipaddress
 import logging
+import random
 import time
 
 from .. import config
@@ -67,6 +68,9 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     lasciarlo decidere al routing di scapy — stesso motivo di arp_scan:
     dopo un cambio di rete l'IP sorgente di default puo' non essere piu'
     valido.
+
+    Come in arp_scan, le richieste partono distanziate e in ordine casuale
+    invece che in un'unica raffica.
     """
     if not SCAPY_AVAILABLE or not platform_net.has_raw_socket_access():
         return nopriv.fallback_icmp_sweep(cidr)
@@ -98,10 +102,9 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         # send falliscono con "[Errno 19] No such device" anche se il
         # kernel la vede benissimo (verificato su wg0 in produzione).
         scapy_conf.ifaces.reload()
-        ip_kwargs = {"dst": targets}
-        if psrc:
-            ip_kwargs["src"] = psrc
-        pkt = IP(**ip_kwargs) / ICMP()
+        ip_kwargs = {"src": psrc} if psrc else {}
+        packets = [IP(dst=ip, **ip_kwargs) / ICMP() for ip in targets]
+        random.shuffle(packets)
     except Exception as exc:
         log.error("building ICMP packet failed on %s (%s): %s", iface, cidr, exc)
         return nopriv.fallback_icmp_sweep(cidr)
@@ -109,7 +112,7 @@ def icmp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     try:
         sniffer = AsyncSniffer(iface=iface, prn=_on_packet, store=False)
         sniffer.start()
-        send(pkt, iface=iface, verbose=0)
+        send(packets, iface=iface, verbose=0, inter=config.SWEEP_SEND_INTERVAL)
         time.sleep(timeout)
     except Exception as exc:
         # Ampio deliberatamente, stesso motivo di arp_scan: non deve

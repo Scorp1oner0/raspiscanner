@@ -5,6 +5,22 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-17
+
+### Fixed
+
+- **Hosts missing from the ARP scan on networks that drop broadcast
+  bursts.** The whole subnet was sent in a single burst, and a slow network
+  card (a Raspberry Pi 3B+, whose Ethernet sits behind USB) or a switch with
+  storm control dropped whole blocks of requests, always in the same
+  positions. On a `/24` the tail from `.219` up never arrived in any of the
+  three rounds, so a device at `.248` never received its own request and
+  never showed up, while ping and SSH to it worked fine. Requests are now
+  sent with a short gap between them (`config.SWEEP_SEND_INTERVAL`, 2 ms:
+  about half a second per `/24` round) and in a different random order every
+  round, so a loss can no longer hit the same addresses each time. The ICMP
+  sweep used for VPN tunnels and routed networks gets the same treatment.
+
 ## [1.1.0] - 2026-11-13
 
 Runs on a technician's laptop as well as on a dedicated Pi, fixes a

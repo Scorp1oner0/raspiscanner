@@ -45,3 +45,34 @@ class TestParseIcmpReply(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIcmpScanSending(unittest.TestCase):
+    """Stessa regola dell'ARP: richieste distanziate e in ordine casuale,
+    non un'unica raffica."""
+
+    def test_sweep_is_paced_and_shuffled(self):
+        from unittest.mock import MagicMock, patch
+
+        from scanner import config
+        from scanner.discovery import icmp
+
+        sent = []
+
+        def _record(packets, **kwargs):
+            sent.append(([p[IP].dst for p in packets], [p[IP].src for p in packets], kwargs))
+
+        with patch.object(icmp.platform_net, "has_raw_socket_access", return_value=True), \
+                patch.object(icmp, "scapy_conf", MagicMock()), \
+                patch.object(icmp, "AsyncSniffer", MagicMock()), \
+                patch.object(icmp, "send", side_effect=_record), \
+                patch.object(icmp.time, "sleep"), \
+                patch.object(icmp.nopriv, "fallback_icmp_sweep", return_value=[]):
+            icmp.icmp_scan("10.0.0.0/24", "wg0", psrc="10.0.0.3")
+
+        self.assertEqual(len(sent), 1)
+        dsts, srcs, kwargs = sent[0]
+        self.assertEqual(set(dsts), {f"10.0.0.{i}" for i in range(1, 255)})
+        self.assertNotEqual(dsts, sorted(dsts, key=lambda ip: int(ip.split(".")[-1])))
+        self.assertEqual(set(srcs), {"10.0.0.3"})
+        self.assertEqual(kwargs.get("inter"), config.SWEEP_SEND_INTERVAL)

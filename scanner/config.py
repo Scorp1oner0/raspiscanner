@@ -115,6 +115,13 @@ PORT_SCAN_THREADS = 60
 ARP_SCAN_TIMEOUT = 4
 ARP_SCAN_RETRY = 2
 
+# Pausa tra una richiesta e la successiva negli sweep ARP e ICMP (secondi).
+# Mandare l'intera subnet in un'unica raffica faceva perdere blocchi interi
+# di richieste a schede di rete lente (Pi 3B+, Ethernet dietro USB) o a
+# switch con storm control: l'host interessato non riceveva mai la propria
+# domanda e restava invisibile. Con 2 ms una /24 parte in circa mezzo secondo.
+SWEEP_SEND_INTERVAL = 0.002
+
 # Timeout risoluzione hostname (reverse DNS, best-effort)
 HOSTNAME_TIMEOUT = 0.6
 

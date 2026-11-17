@@ -10,6 +10,7 @@ restituire una rete apparentemente vuota.
 """
 import ipaddress
 import logging
+import random
 import socket
 import threading
 import time
@@ -83,6 +84,12 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
     "riconfigura rete"). Senza `psrc` esplicito, dopo un cambio di rete lo
     scan puo' partire con un IP sorgente non piu' valido e non ricevere
     risposta da nessuno, sembrando "bloccato" sulla rete precedente.
+
+    Le richieste partono distanziate (config.SWEEP_SEND_INTERVAL) e in
+    ordine casuale a ogni giro. Una raffica unica perdeva blocchi di
+    richieste sempre nelle stesse posizioni, di solito la coda della
+    subnet: un host con un IP alto non riceveva la propria domanda in
+    nessun giro (visto sul campo con un Pi 3B+ dietro uno switch gestito).
     """
     if not SCAPY_AVAILABLE or not platform_net.has_raw_socket_access():
         # Nessun socket raw: ripiego valido su OGNI piattaforma. Prima era
@@ -103,10 +110,9 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         # collegata a servizio gia' attivo) non e' nella cache di Scapy —
         # route.resync() aggiorna solo il routing, non la lista interfacce.
         scapy_conf.ifaces.reload()
-        arp_kwargs = {"pdst": cidr}
-        if psrc:
-            arp_kwargs["psrc"] = psrc
-        pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(**arp_kwargs)
+        targets = [str(ip) for ip in network.hosts()] or [str(network.network_address)]
+        arp_kwargs = {"psrc": psrc} if psrc else {}
+        packets = [Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip, **arp_kwargs) for ip in targets]
     except Exception as exc:
         log.error("building ARP packet failed on %s (%s): %s", iface, cidr, exc)
         return nopriv.fallback_arp_scan(cidr)
@@ -129,7 +135,8 @@ def arp_scan(cidr, iface, timeout=config.ARP_SCAN_TIMEOUT, psrc=None):
         sniffer.start()
         rounds = config.ARP_SCAN_RETRY + 1
         for round_idx in range(rounds):
-            sendp(pkt, iface=iface, verbose=0)
+            random.shuffle(packets)
+            sendp(packets, iface=iface, verbose=0, inter=config.SWEEP_SEND_INTERVAL)
             if round_idx < rounds - 1:
                 time.sleep(timeout / rounds)
         # ultima finestra di attesa per le risposte piu' lente dell'ultimo giro

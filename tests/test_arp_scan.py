@@ -81,3 +81,54 @@ class TestExtractVlanId(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestArpScanSending(unittest.TestCase):
+    """Le richieste partono distanziate e mescolate a ogni giro. Una raffica
+    unica perdeva sul campo sempre la coda della subnet (.219 in su su una
+    /24), quindi un host con un IP alto non veniva mai trovato."""
+
+    def _run(self, cidr="192.168.88.0/24", psrc=None):
+        from unittest.mock import MagicMock, patch
+
+        from scanner import config
+        from scanner.discovery import arp
+
+        rounds = []
+
+        def _record(packets, **kwargs):
+            rounds.append(([p[ARP].pdst for p in packets], [p[ARP].psrc for p in packets], kwargs))
+
+        with patch.object(arp.platform_net, "has_raw_socket_access", return_value=True), \
+                patch.object(arp, "scapy_conf", MagicMock()), \
+                patch.object(arp, "AsyncSniffer", MagicMock()), \
+                patch.object(arp, "sendp", side_effect=_record), \
+                patch.object(arp.time, "sleep"), \
+                patch.object(arp.nopriv, "fallback_arp_scan", return_value=[]):
+            arp.arp_scan(cidr, "eth0", psrc=psrc)
+        return rounds, config
+
+    def test_every_round_covers_the_whole_subnet(self):
+        rounds, config = self._run()
+        self.assertEqual(len(rounds), config.ARP_SCAN_RETRY + 1)
+        expected = {f"192.168.88.{i}" for i in range(1, 255)}
+        for pdsts, _, _ in rounds:
+            self.assertEqual(len(pdsts), 254)
+            self.assertEqual(set(pdsts), expected)
+
+    def test_requests_are_paced(self):
+        rounds, config = self._run()
+        self.assertGreater(config.SWEEP_SEND_INTERVAL, 0)
+        for _, _, kwargs in rounds:
+            self.assertEqual(kwargs.get("inter"), config.SWEEP_SEND_INTERVAL)
+
+    def test_order_changes_between_rounds(self):
+        rounds, _ = self._run()
+        orders = [tuple(pdsts) for pdsts, _, _ in rounds]
+        self.assertEqual(len(set(orders)), len(orders))
+        self.assertNotEqual(list(orders[0]), sorted(orders[0], key=lambda ip: int(ip.split(".")[-1])))
+
+    def test_explicit_source_ip_is_used(self):
+        rounds, _ = self._run(psrc="192.168.88.250")
+        for _, psrcs, _ in rounds:
+            self.assertEqual(set(psrcs), {"192.168.88.250"})
