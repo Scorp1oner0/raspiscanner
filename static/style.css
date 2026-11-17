@@ -391,3 +391,8 @@ a.link:hover { text-decoration: underline; }
 }
 .deep-scan-results .port-num { font-family: var(--font-mono); color: var(--accent); min-width: 54px; }
 .deep-scan-results .port-web { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* righe-casella delle reti rilevate (Scan targets) */
+label.user-row { cursor: pointer; }
+label.user-row input { margin-right: 8px; vertical-align: middle; }
+.deep-scan-results .port-row span:nth-child(2) { white-space: nowrap; }

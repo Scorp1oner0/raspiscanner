@@ -592,6 +592,33 @@ async function saveMonitoringConfig() {
 // tutta la lista in un colpo solo — vedi scanner.targets.set_config,
 // rifiuta l'intera lista se anche un solo CIDR non e' valido).
 let _pendingCustomTargets = [];
+// Reti rilevate che l'operatore ha tolto dallo scan (CIDR), e quelle viste
+// adesso dall'anteprima: la lista a caselle si disegna da entrambe, cosi' una
+// rete tolta ma non piu' collegata resta visibile e si puo' rimettere.
+let _pendingExcluded = new Set();
+let _detectedNetworks = [];
+
+function renderDetectedNetworks() {
+  const box = $("targets-detected-list");
+  const auto = $("targets-auto-interfaces").checked;
+  const known = new Set(_detectedNetworks.map((n) => n.cidr));
+  const rows = _detectedNetworks.map((n) => ({ cidr: n.cidr, iface: n.iface, absent: false }));
+  for (const cidr of _pendingExcluded) {
+    if (!known.has(cidr)) rows.push({ cidr, iface: null, absent: true });
+  }
+  box.innerHTML = rows.length
+    ? rows.map((r) => `
+        <label class="user-row">
+          <span>
+            <input type="checkbox" class="chk-detected-network" data-cidr="${escapeHtml(r.cidr)}"
+              ${_pendingExcluded.has(r.cidr) ? "" : "checked"} ${auto ? "" : "disabled"}>
+            <span class="mono">${escapeHtml(r.cidr)}</span>
+          </span>
+          <span class="iface-name">${r.absent ? "not connected now" : escapeHtml(r.iface)}</span>
+        </label>
+      `).join("")
+    : '<p class="modal-desc">No network detected right now.</p>';
+}
 
 function renderTargetsCustomList() {
   const list = $("targets-custom-list");
@@ -612,7 +639,9 @@ async function refreshScanTargets() {
     const data = await res.json();
     $("targets-auto-interfaces").checked = !!data.auto_interfaces;
     _pendingCustomTargets = data.custom || [];
+    _pendingExcluded = new Set(data.excluded || []);
     renderTargetsCustomList();
+    renderDetectedNetworks();
   } catch (e) {
     console.error("refreshScanTargets", e);
   }
@@ -625,6 +654,8 @@ async function refreshScanTargetsPreview() {
     const res = await fetch("/api/scan/targets");
     if (!res.ok) return;
     const data = await res.json();
+    _detectedNetworks = data.detected || [];
+    renderDetectedNetworks();
     const lines = [];
     for (const n of data.interfaces) {
       lines.push(`<div class="addr-row"><span>${escapeHtml(n.cidr)}</span><span class="iface-name">${escapeHtml(n.iface)}</span></div>`);
@@ -664,6 +695,7 @@ async function saveScanTargets() {
       body: JSON.stringify({
         auto_interfaces: $("targets-auto-interfaces").checked,
         custom: _pendingCustomTargets,
+        excluded: Array.from(_pendingExcluded),
       }),
     });
     const data = await res.json();
@@ -1223,6 +1255,13 @@ async function init() {
   $("targets-custom-input").addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") { ev.preventDefault(); addTargetNetwork(); }
   });
+  $("targets-auto-interfaces").addEventListener("change", renderDetectedNetworks);
+  $("targets-detected-list").addEventListener("change", (ev) => {
+    const box = ev.target.closest(".chk-detected-network");
+    if (!box) return;
+    if (box.checked) _pendingExcluded.delete(box.dataset.cidr);
+    else _pendingExcluded.add(box.dataset.cidr);
+  });
   $("targets-custom-list").addEventListener("click", (ev) => {
     const btn = ev.target.closest(".btn-remove-target");
     if (btn) removeTargetNetwork(btn.dataset.cidr);
@@ -1288,6 +1327,8 @@ async function init() {
   refreshScan();
   refreshSecurityStats();
   refreshScanTargets();
+  // una VPN o una scheda Wi-Fi collegata a dashboard gia' aperta compare da sola
+  setInterval(() => { if (isAtLeastOperator()) refreshScanTargetsPreview(); }, 10000);
   setInterval(refreshNetwork, 5000);
   setInterval(refreshScan, 1500);
   setInterval(refreshSecurityStats, 5000);

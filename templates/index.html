@@ -130,15 +130,19 @@
       <p class="modal-desc">
         What a scan analyzes, separate from what network this device
         configures itself on (see "Network Status" above). By default a
-        scan covers every network detected on an active interface;
-        custom networks the device has no address in are reached only by
-        routing, so they're scanned via ICMP (no MAC/vendor there), same
-        as a VPN tunnel.
+        scan covers every network detected on an active interface: untick
+        the ones you want to leave out, for example a VPN or a phone
+        hotspot. A network that shows up later is scanned unless you
+        untick it too. Custom networks the device has no address in are
+        reached only by routing, so they're scanned via ICMP (no
+        MAC/vendor there), same as a VPN tunnel.
       </p>
       <label class="iface-name">
         <input type="checkbox" id="targets-auto-interfaces" checked>
-        Automatic interface networks
+        Scan the networks detected on this device
       </label>
+      <div id="targets-detected-list" class="user-list" style="margin-top:10px"></div>
+      <h3 class="settings-subtitle">Extra networks</h3>
       <div id="targets-custom-list" class="user-list" style="margin-top:10px"></div>
       <div class="modal-row">
         <input type="text" id="targets-custom-input" class="modal-input" placeholder="10.20.0.0/24">

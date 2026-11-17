@@ -24,14 +24,14 @@ class TargetsTestCase(unittest.TestCase):
 
 class TestTargetsConfig(TargetsTestCase):
     def test_default_config_is_auto_only(self):
-        self.assertEqual(targets.get_config(), {"auto_interfaces": True, "custom": []})
+        self.assertEqual(targets.get_config(), {"auto_interfaces": True, "custom": [], "excluded": []})
 
     def test_set_and_get_config(self):
         ok, _ = targets.set_config(True, ["192.168.20.0/24", "10.0.5.0/24"])
         self.assertTrue(ok)
         self.assertEqual(
             targets.get_config(),
-            {"auto_interfaces": True, "custom": ["192.168.20.0/24", "10.0.5.0/24"]},
+            {"auto_interfaces": True, "custom": ["192.168.20.0/24", "10.0.5.0/24"], "excluded": []},
         )
 
     def test_auto_interfaces_can_be_disabled(self):
@@ -68,7 +68,55 @@ class TestTargetsConfig(TargetsTestCase):
     def test_malformed_file_falls_back_to_default(self):
         with open(config.TARGETS_JSON_PATH, "w") as fh:
             fh.write("{not valid json")
-        self.assertEqual(targets.get_config(), {"auto_interfaces": True, "custom": []})
+        self.assertEqual(targets.get_config(), {"auto_interfaces": True, "custom": [], "excluded": []})
+
+
+class TestExcludedNetworks(TargetsTestCase):
+    """Le reti rilevate sulle interfacce che l'operatore non vuole scansionare."""
+
+    def test_excluded_is_saved_and_normalized(self):
+        ok, _ = targets.set_config(True, [], ["10.0.0.5/24", "172.20.10.0/24", "10.0.0.0/24"])
+        self.assertTrue(ok)
+        self.assertEqual(targets.get_config()["excluded"], ["10.0.0.0/24", "172.20.10.0/24"])
+
+    def test_leaving_excluded_out_keeps_the_saved_list(self):
+        targets.set_config(True, [], ["10.0.0.0/24"])
+        targets.set_config(True, ["192.168.20.0/24"])
+        self.assertEqual(targets.get_config()["excluded"], ["10.0.0.0/24"])
+
+    def test_empty_list_clears_the_exclusions(self):
+        targets.set_config(True, [], ["10.0.0.0/24"])
+        targets.set_config(True, [], [])
+        self.assertEqual(targets.get_config()["excluded"], [])
+
+    def test_invalid_excluded_rejects_everything(self):
+        targets.set_config(True, [], ["10.0.0.0/24"])
+        ok, message = targets.set_config(False, ["192.168.20.0/24"], ["nonsense"])
+        self.assertFalse(ok)
+        self.assertIn("Invalid network", message)
+        self.assertEqual(targets.get_config(),
+                         {"auto_interfaces": True, "custom": [], "excluded": ["10.0.0.0/24"]})
+
+    def test_ipv6_is_rejected(self):
+        ok, _ = targets.set_config(True, [], ["fe80::/64"])
+        self.assertFalse(ok)
+
+    def test_excluded_has_no_size_or_privacy_policy(self):
+        # non e' una rete da scansionare: toglie una rete che l'interfaccia ha gia'
+        ok, _ = targets.set_config(True, [], ["10.0.0.0/8"])
+        self.assertTrue(ok)
+
+    def test_old_file_without_excluded_loads(self):
+        import json
+        with open(config.TARGETS_JSON_PATH, "w") as fh:
+            json.dump({"auto_interfaces": False, "custom": ["10.0.5.0/24"]}, fh)
+        self.assertEqual(targets.get_config(),
+                         {"auto_interfaces": False, "custom": ["10.0.5.0/24"], "excluded": []})
+
+    def test_defaults_do_not_share_lists_between_calls(self):
+        first = targets.get_config()
+        first["excluded"].append("1.2.3.0/24")
+        self.assertEqual(targets.get_config()["excluded"], [])
 
 
 class TestTargetsPolicy(TargetsTestCase):

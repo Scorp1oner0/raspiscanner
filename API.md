@@ -174,9 +174,17 @@ custom target, already resolved to a real egress interface. See
 {
   "auto_interfaces": true,
   "interfaces": [{"iface": "eth0", "cidr": "192.168.1.0/24"}],
-  "routed": [{"iface": "eth0", "cidr": "10.20.0.0/24"}]
+  "routed": [{"iface": "eth0", "cidr": "10.20.0.0/24"}],
+  "detected": [
+    {"iface": "eth0", "cidr": "192.168.1.0/24", "scanned": true},
+    {"iface": "wg0", "cidr": "10.0.0.0/24", "scanned": false}
+  ],
+  "excluded": ["10.0.0.0/24"]
 }
 ```
+`interfaces` are the detected networks the next scan will cover; `detected`
+lists **every** network seen on an active interface right now with whether
+it will be scanned, and `excluded` is the saved list of networks left out.
 `routed` entries are reached only through routing (no local address
 there), so they're scanned via ICMP, not ARP — no MAC/vendor for hosts
 found there, same limitation as a VPN tunnel (see **Scan targets**).
@@ -390,8 +398,11 @@ Two independent settings, deliberately not mixed together:
 - **Scan targets** (this section): decides what a scan actually
   *analyzes*. Defaults to every network detected on an active interface
   (`auto_interfaces: true`, the original, only behavior before this was
-  configurable) — optionally combined with, or replaced by, networks the
-  operator adds explicitly.
+  configurable) — optionally with some of them left out (`excluded`, for
+  example a VPN or a phone hotspot), and combined with, or replaced by,
+  networks the operator adds explicitly. A detected network that is not in
+  `excluded` is scanned, so one that shows up later (a VPN connected while
+  the service is running) is included until you leave it out.
 
 A custom network the device has no address in at all can't be reached by
 ARP (ARP doesn't cross a router — see README, "What it doesn't do"): it's
@@ -403,10 +414,18 @@ Use `GET /api/scan/targets` to see exactly what the next scan would do
 before running it.
 
 ### `GET /api/settings/targets` — operator
-`{"auto_interfaces": true, "custom": ["192.168.20.0/24"]}`.
+`{"auto_interfaces": true, "custom": ["192.168.20.0/24"], "excluded": ["10.0.0.0/24"]}`.
 
 ### `POST /api/settings/targets` — operator
-Body: `{"auto_interfaces": true, "custom": ["192.168.20.0/24", "10.0.5.0/24"]}`.
+Body: `{"auto_interfaces": true, "custom": ["192.168.20.0/24", "10.0.5.0/24"], "excluded": ["10.0.0.0/24"]}`.
+`excluded` lists detected networks to leave out of the scan; omit it to keep
+the saved list as it is, send `[]` to scan every detected network again.
+Entries must be valid IPv4 CIDRs and are normalized like `custom`, but have
+no privacy or size limit (they are networks the device already has, not
+places to point it at); a network that is both excluded and in `custom` is
+not scanned. If every detected network is excluded and there is nothing
+else to scan, `POST /api/scan/start` answers `409` with
+"Every detected network is unticked in Scan targets".
 Each entry in `custom` is normalized to its network address (`.5/24`
 becomes `.0/24`); `400` if any entry isn't a valid IPv4 CIDR, isn't a
 **private** network (`ipaddress.is_private` — rejects public ranges and

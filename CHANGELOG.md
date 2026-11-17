@@ -5,6 +5,34 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-17
+
+### Added
+
+- **Choose which detected networks to scan.** Until now the dashboard could
+  only scan every network found on an active interface or none of them. The
+  "Scan targets" card now lists each detected network (Ethernet, every
+  Wi-Fi adapter, every VPN tunnel) with a checkbox, so a scan can cover the
+  home network and skip a VPN or a phone hotspot. The choice is saved in
+  `data/targets.json` as a new `excluded` list and applies to manual scans
+  and to Continuous Monitoring alike. A network that shows up later is
+  scanned until you untick it, and an unticked one that is not connected
+  right now stays in the list ("not connected now") so it can be ticked
+  again. The list refreshes every 10 seconds, so a VPN connected while the
+  dashboard is open appears by itself.
+- `POST /api/settings/targets` takes `excluded` (omit it to keep the saved
+  list), `GET /api/settings/targets` returns it, and `GET /api/scan/targets`
+  adds `detected` (every network seen now, with `scanned: true|false`) and
+  `excluded`. A scan with every detected network unticked answers `409`
+  with a message saying so, instead of the generic "no active network".
+
+### Fixed
+
+- The plain-text report download sent `Content-Type: text/plain;
+  charset=utf-8; charset=utf-8` (the charset twice). It is now sent once.
+- In the deep scan window, a service name such as "HTTP-Alt" no longer
+  wraps onto two lines.
+
 ## [1.3.1] - 2026-11-17
 
 ### Fixed

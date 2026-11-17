@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.3.1.** A network discovery and security-exposure scanner for
+**Status: 1.4.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -59,7 +59,8 @@ of some of the same discovery mechanisms.
    step above ("Scan targets" on the dashboard, next to "Start scan"):
    by default, every network detected on an active interface — Ethernet,
    every Wi-Fi adapter present, every active VPN tunnel (WireGuard,
-   OpenVPN, PPP, Tailscale, ZeroTier) — plus any custom network you add
+   OpenVPN, PPP, Tailscale, ZeroTier), each with a checkbox to leave it
+   out of the scan — plus any custom network you add
    explicitly (must be a **private** IPv4 network, `/22` or smaller —
    this isn't meant to point the device at arbitrary public hosts, or
    at a range too big for the sequential per-host scan to finish in a

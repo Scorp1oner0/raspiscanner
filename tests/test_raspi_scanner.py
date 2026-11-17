@@ -511,7 +511,7 @@ class TestScanTargetsSettings(RaspiScannerAppTestCase):
 
     def test_operator_can_get_and_set_targets_config(self):
         resp = self.client.get("/api/settings/targets", auth=self.operator_auth)
-        self.assertEqual(resp.get_json(), {"auto_interfaces": True, "custom": []})
+        self.assertEqual(resp.get_json(), {"auto_interfaces": True, "custom": [], "excluded": []})
 
         resp = self.client.post(
             "/api/settings/targets", auth=self.operator_auth,
@@ -520,7 +520,35 @@ class TestScanTargetsSettings(RaspiScannerAppTestCase):
         self.assertEqual(resp.status_code, 200)
 
         resp = self.client.get("/api/settings/targets", auth=self.operator_auth)
-        self.assertEqual(resp.get_json(), {"auto_interfaces": False, "custom": ["192.168.20.0/24"]})
+        self.assertEqual(resp.get_json(), {"auto_interfaces": False, "custom": ["192.168.20.0/24"], "excluded": []})
+
+    def test_excluded_networks_roundtrip_and_survive_a_save_without_them(self):
+        resp = self.client.post("/api/settings/targets", auth=self.operator_auth,
+                                json={"auto_interfaces": True, "custom": [], "excluded": ["10.0.0.0/24"]})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.client.get("/api/settings/targets", auth=self.operator_auth).get_json()["excluded"],
+                         ["10.0.0.0/24"])
+        self.client.post("/api/settings/targets", auth=self.operator_auth,
+                         json={"auto_interfaces": True, "custom": []})
+        self.assertEqual(self.client.get("/api/settings/targets", auth=self.operator_auth).get_json()["excluded"],
+                         ["10.0.0.0/24"])
+
+    def test_invalid_excluded_network_rejected(self):
+        resp = self.client.post("/api/settings/targets", auth=self.operator_auth,
+                                json={"auto_interfaces": True, "custom": [], "excluded": ["nope"]})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_viewer_cannot_change_excluded_networks(self):
+        resp = self.client.post("/api/settings/targets", auth=self.viewer_auth,
+                                json={"auto_interfaces": True, "custom": [], "excluded": ["10.0.0.0/24"]})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_preview_includes_detected_and_excluded(self):
+        resp = self.client.get("/api/scan/targets", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertIn("detected", data)
+        self.assertIn("excluded", data)
 
     def test_invalid_custom_network_rejected(self):
         resp = self.client.post(
@@ -687,7 +715,9 @@ class TestReportDownloads(RaspiScannerAppTestCase):
         shown = self.client.get("/api/report", auth=self.operator_auth).get_json()["text"]
         resp = self.client.get("/api/report?format=txt", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
-        self.assertTrue(resp.mimetype.startswith("text/plain"))
+        self.assertEqual(resp.mimetype, "text/plain")
+        # la codifica una volta sola: Flask la aggiunge da se' ai tipi text/*
+        self.assertEqual(resp.headers["Content-Type"], "text/plain; charset=utf-8")
         self.assertIn('.txt"', resp.headers["Content-Disposition"])
         self.assertEqual(resp.data.decode("utf-8").strip(), shown.strip())
 

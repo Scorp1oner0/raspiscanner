@@ -4,7 +4,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from scanner import config, scan_engine
+from scanner import config, scan_engine, targets
 from scanner.network import setup as network_setup
 
 
@@ -288,6 +288,77 @@ class TestPreviewScanTargets(TargetsConfigTestCase):
         preview = scan_engine.preview_scan_targets()
         self.assertEqual(preview["interfaces"], [{"iface": "eth0", "cidr": "192.168.88.0/24"}])
         self.assertEqual(preview["routed"], [{"iface": "eth0", "cidr": "10.20.0.0/24"}])
+
+
+class TestExcludedNetworksInTheEngine(TargetsConfigTestCase):
+    """L'elenco `excluded` toglie singole reti rilevate dallo scan e dalla anteprima."""
+
+    def setUp(self):
+        super().setUp()
+        self._orig_active = scan_engine._active_networks
+        self._orig_egress = scan_engine._egress_interface_for
+        scan_engine._active_networks = lambda: [
+            ("eth0", "192.168.88.0/24", "192.168.88.250"),
+            ("wlan0", "172.20.10.0/24", "172.20.10.2"),
+            ("wg0", "10.0.0.0/24", "10.0.0.3"),
+        ]
+        scan_engine._egress_interface_for = lambda cidr: "eth0"
+        self._orig_running = scan_engine._state["running"]
+        scan_engine._state["running"] = False
+
+    def tearDown(self):
+        scan_engine._active_networks = self._orig_active
+        scan_engine._egress_interface_for = self._orig_egress
+        scan_engine._state["running"] = self._orig_running
+        super().tearDown()
+
+    def test_everything_is_scanned_by_default(self):
+        cidrs = [c for _, c, _ in scan_engine._selected_interface_networks(targets.get_config())]
+        self.assertEqual(cidrs, ["192.168.88.0/24", "172.20.10.0/24", "10.0.0.0/24"])
+
+    def test_excluded_networks_are_left_out_and_the_rest_keeps_its_local_ip(self):
+        targets.set_config(True, [], ["10.0.0.0/24", "172.20.10.0/24"])
+        selected = scan_engine._selected_interface_networks(targets.get_config())
+        self.assertEqual(selected, [("eth0", "192.168.88.0/24", "192.168.88.250")])
+
+    def test_a_network_that_appears_later_is_scanned(self):
+        targets.set_config(True, [], ["10.0.0.0/24"])
+        scan_engine._active_networks = lambda: [("eth0", "192.168.88.0/24", "192.168.88.250"),
+                                               ("tailscale0", "100.64.0.0/24", "100.64.0.2")]
+        cidrs = [c for _, c, _ in scan_engine._selected_interface_networks(targets.get_config())]
+        self.assertEqual(cidrs, ["192.168.88.0/24", "100.64.0.0/24"])
+
+    def test_auto_off_selects_no_detected_network(self):
+        targets.set_config(False, [], [])
+        self.assertEqual(scan_engine._selected_interface_networks(targets.get_config()), [])
+
+    def test_an_excluded_network_does_not_come_back_as_a_custom_target(self):
+        targets.set_config(True, ["10.0.0.0/24"], ["10.0.0.0/24"])
+        self.assertEqual(scan_engine._routed_target_networks(known_cidrs=set()), [])
+
+    def test_preview_lists_every_detected_network_with_its_state(self):
+        targets.set_config(True, [], ["10.0.0.0/24"])
+        preview = scan_engine.preview_scan_targets()
+        self.assertEqual(preview["detected"], [
+            {"iface": "eth0", "cidr": "192.168.88.0/24", "scanned": True},
+            {"iface": "wlan0", "cidr": "172.20.10.0/24", "scanned": True},
+            {"iface": "wg0", "cidr": "10.0.0.0/24", "scanned": False},
+        ])
+        self.assertEqual([n["cidr"] for n in preview["interfaces"]], ["192.168.88.0/24", "172.20.10.0/24"])
+        self.assertEqual(preview["excluded"], ["10.0.0.0/24"])
+
+    def test_run_scan_says_so_when_everything_is_unticked(self):
+        targets.set_config(True, [], ["192.168.88.0/24", "172.20.10.0/24", "10.0.0.0/24"])
+        ok, message = scan_engine.run_scan()
+        self.assertFalse(ok)
+        self.assertIn("unticked", message)
+
+    def test_run_scan_keeps_the_old_message_when_nothing_is_connected(self):
+        scan_engine._active_networks = lambda: []
+        targets.set_config(True, [], ["10.0.0.0/24"])
+        ok, message = scan_engine.run_scan()
+        self.assertFalse(ok)
+        self.assertIn("No active network", message)
 
 
 class TestOrphanOnvifIps(unittest.TestCase):

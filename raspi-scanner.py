@@ -385,7 +385,7 @@ def _report_file(fmt, devices, started_at, finished_at, changes, partial, name, 
         body, mimetype = pdf_report.render(data, partial=partial, **options), "application/pdf"
     else:
         text = assessment.generate_all(devices, started_at=started_at, finished_at=finished_at, changes=changes)
-        body, mimetype = (_PARTIAL_NOTICE if partial else "") + text + "\n", "text/plain; charset=utf-8"
+        body, mimetype = (_PARTIAL_NOTICE if partial else "") + text + "\n", "text/plain"
     return Response(body, mimetype=mimetype, headers={
         "Content-Disposition": f'attachment; filename="{filename}"',
         "Cache-Control": "no-store",
@@ -530,7 +530,7 @@ def api_settings_targets_set():
     scanner/targets.py. Stesso ruolo minimo di /api/scan/start: chi puo'
     avviare uno scan puo' anche decidere cosa scansiona."""
     data = request.get_json(silent=True) or {}
-    ok, message = targets.set_config(bool(data.get("auto_interfaces", True)), data.get("custom"))
+    ok, message = targets.set_config(bool(data.get("auto_interfaces", True)), data.get("custom"), data.get("excluded"))
     return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
 
 

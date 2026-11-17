@@ -90,6 +90,17 @@ def _active_networks():
     return nets
 
 
+def _selected_interface_networks(cfg):
+    """Le reti rilevate sulle interfacce che questo scan deve coprire: tutte,
+    tranne quelle che l'operatore ha tolto (`excluded`) o, se
+    `auto_interfaces` e' spento, nessuna. Una rete nuova non ancora vista
+    resta inclusa."""
+    if not cfg["auto_interfaces"]:
+        return []
+    excluded = set(cfg["excluded"])
+    return [n for n in _active_networks() if n[1] not in excluded]
+
+
 def _egress_interface_for(cidr):
     """Interfaccia che il kernel userebbe per raggiungere `cidr` (via
     tabella di routing reale, non un'ipotesi): serve per sapere su quale
@@ -133,7 +144,8 @@ def _routed_target_networks(known_cidrs):
     cfg = targets.get_config()
     routed = []
     for cidr in cfg["custom"]:
-        if cidr in known_cidrs:
+        # una rete tolta dall'operatore resta tolta anche se compare tra le custom
+        if cidr in known_cidrs or cidr in cfg["excluded"]:
             continue
         iface = _egress_interface_for(cidr)
         if not iface:
@@ -456,12 +468,18 @@ def preview_scan_targets():
     scanner.targets). Le reti "routed" sono gia' risolte (interfaccia di
     uscita reale via `ip route get`), non solo elencate come stringhe."""
     targets_cfg = targets.get_config()
-    interface_networks = _active_networks() if targets_cfg["auto_interfaces"] else []
+    interface_networks = _selected_interface_networks(targets_cfg)
     routed_networks = _routed_target_networks({cidr for _, cidr, _ in interface_networks})
+    scanned = {cidr for _, cidr, _ in interface_networks}
     return {
         "auto_interfaces": targets_cfg["auto_interfaces"],
         "interfaces": [{"iface": iface, "cidr": cidr} for iface, cidr, _ in interface_networks],
         "routed": [{"iface": iface, "cidr": cidr} for iface, cidr, _ in routed_networks],
+        # tutte le reti rilevate adesso, anche quelle tolte: la dashboard le
+        # elenca con una casella per sceglierle
+        "detected": [{"iface": iface, "cidr": cidr, "scanned": cidr in scanned}
+                     for iface, cidr, _ in _active_networks()],
+        "excluded": targets_cfg["excluded"],
     }
 
 
@@ -485,10 +503,12 @@ def run_scan(port_profile="common"):
         # reti "custom" raggiungibili solo per instradamento (niente ARP
         # possibile li', vedi _routed_target_networks).
         targets_cfg = targets.get_config()
-        interface_networks = _active_networks() if targets_cfg["auto_interfaces"] else []
+        interface_networks = _selected_interface_networks(targets_cfg)
         routed_networks = _routed_target_networks({cidr for _, cidr, _ in interface_networks})
         networks = interface_networks + routed_networks
         if not networks:
+            if targets_cfg["auto_interfaces"] and targets_cfg["excluded"] and _active_networks():
+                return False, "Every detected network is unticked in Scan targets: tick at least one"
             return False, "No active network (eth/wifi) or configured scan target to scan"
         _stop_flag.clear()
         _state.update(running=True, progress=0, total=0, current_ip=None,
