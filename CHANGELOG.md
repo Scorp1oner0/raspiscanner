@@ -5,6 +5,14 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-17
+
+### Fixed
+
+- The PDF of an **audit report** said "Network assessment report" like the
+  live one. It now says "Audit report - scan #N", in the page header and in
+  the document title.
+
 ## [1.3.0] - 2026-11-17
 
 ### Added

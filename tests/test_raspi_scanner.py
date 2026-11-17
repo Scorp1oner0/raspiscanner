@@ -726,6 +726,21 @@ class TestReportDownloads(RaspiScannerAppTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.mimetype, "application/pdf")
         self.assertIn(f"raspiscanner-audit-scan{scan_id}-", resp.headers["Content-Disposition"])
+        self.assertIn(f"Audit report - scan #{scan_id}", self._pdf_text(resp.data))
+        self.assertIn(f"/Title (RaspiScanner - Audit report - scan #{scan_id})".encode(), resp.data)
+
+    @staticmethod
+    def _pdf_text(blob):
+        import re
+        import zlib
+        return " ".join(zlib.decompress(s).decode("latin-1")
+                        for s in re.findall(rb"stream\n(.*?)\nendstream", blob, re.S))
+
+    def test_live_report_pdf_keeps_the_assessment_title(self):
+        resp = self.client.get("/api/report?format=pdf", auth=self.operator_auth)
+        text = self._pdf_text(resp.data)
+        self.assertIn("Network assessment report", text)
+        self.assertNotIn("Audit report", text)
 
     def test_audit_report_unknown_scan_is_404_in_every_format(self):
         for fmt in ("json", "pdf"):

@@ -370,7 +370,7 @@ _PARTIAL_NOTICE = (
 )
 
 
-def _report_file(fmt, devices, started_at, finished_at, changes, partial, name):
+def _report_file(fmt, devices, started_at, finished_at, changes, partial, name, subtitle=None):
     """Il report come file da scaricare: `pdf` o `txt`. Stessi dati e stessa
     logica del report a video, solo con un'altra forma."""
     if fmt not in ("pdf", "txt"):
@@ -381,7 +381,8 @@ def _report_file(fmt, devices, started_at, finished_at, changes, partial, name):
     stamp = datetime.fromtimestamp(finished_at or started_at or time.time()).strftime("%Y-%m-%d-%H%M")
     filename = f"{name}-{stamp}.{fmt}"
     if fmt == "pdf":
-        body, mimetype = pdf_report.render(data, partial=partial), "application/pdf"
+        options = {"subtitle": subtitle} if subtitle else {}
+        body, mimetype = pdf_report.render(data, partial=partial, **options), "application/pdf"
     else:
         text = assessment.generate_all(devices, started_at=started_at, finished_at=finished_at, changes=changes)
         body, mimetype = (_PARTIAL_NOTICE if partial else "") + text + "\n", "text/plain; charset=utf-8"
@@ -560,7 +561,8 @@ def api_audit_report():
     changes = storage.compare_scans(previous_id, scan_id) if previous_id is not None else None
     if fmt != "json":
         return _report_file(fmt, devices, meta["started_at"], meta["finished_at"], changes=changes,
-                            partial=False, name=f"raspiscanner-audit-scan{scan_id}")
+                            partial=False, name=f"raspiscanner-audit-scan{scan_id}",
+                            subtitle=f"Audit report - scan #{scan_id}")
     text = assessment.generate_all(
         devices, started_at=meta["started_at"], finished_at=meta["finished_at"], changes=changes,
     )
