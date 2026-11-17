@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-11-17
+
+### Added
+
+- **A finding for the default SNMP community.** A device that answers the
+  community `public` (the only one the scanner ever tries) now gets a
+  medium finding in the report and the PDF, on that device: anyone on the
+  network can read its configuration and tables. Whether the community also
+  allows writing is never tested (no SNMP SET), and the finding says so.
+
 ## [1.9.0] - 2026-11-17
 
 ### Added

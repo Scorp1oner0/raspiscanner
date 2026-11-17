@@ -131,6 +131,18 @@ class TestSecurityFindings(unittest.TestCase):
         self.assertEqual(len(admin_findings), 1)
         self.assertEqual(admin_findings[0]["severity"], "medium")
 
+    def test_snmp_default_community_is_flagged_medium(self):
+        findings = security.find_security_issues({"snmp_info": {"sysDescr": "RouterOS RB941-2nD", "sysName": "mAP"}})
+        snmp = [f for f in findings if f["id"] == "snmp_default_community"]
+        self.assertEqual(len(snmp), 1)
+        self.assertEqual(snmp[0]["severity"], "medium")
+        self.assertIn("public", snmp[0]["message"])
+
+    def test_silent_snmp_is_not_a_finding(self):
+        for info in (None, {}):
+            findings = security.find_security_issues({"snmp_info": info})
+            self.assertFalse([f for f in findings if f["id"] == "snmp_default_community"])
+
     def test_rtsp_exposed_flagged_medium(self):
         findings = security.find_security_issues(CAMERA)
         rtsp_findings = [f for f in findings if f["id"] == "rtsp_exposed"]

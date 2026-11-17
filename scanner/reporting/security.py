@@ -122,6 +122,18 @@ def find_security_issues(device):
             "severity": "medium",
         })
 
+    snmp = device.get("snmp_info") or {}
+    if snmp.get("sysDescr") or snmp.get("sysName"):
+        # La community "public" e' l'unica che lo scanner prova (mai una
+        # lista indovinata): se risponde, e' quella di fabbrica. Se sia
+        # anche in scrittura non si verifica mai: nessun SET.
+        findings.append({
+            "id": "snmp_default_community",
+            "message": "SNMP answers the default community \"public\" (read access confirmed; "
+                       "write access is never tested)",
+            "severity": "medium",
+        })
+
     for port, banner in banners.items():
         title = (banner.get("title") or "").strip().lower()
         if any(marker in title for marker in _DEFAULT_TITLE_MARKERS):
