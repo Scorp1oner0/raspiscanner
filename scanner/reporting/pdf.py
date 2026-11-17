@@ -397,7 +397,7 @@ def _fit(text, font, size, max_w):
 
 _MAP_SELF_W, _MAP_NET_X, _MAP_NET_W, _MAP_BUS_X = 62, MARGIN + 78, 84, MARGIN + 176
 _MAP_DEV_X, _MAP_DEV_W, _MAP_DEV_H, _MAP_GAP, _MAP_COLS = MARGIN + 186, 118, 26, 6, 2
-_MAP_HUB_W, _MAP_HUB_BUS_X, _MAP_HUB_DEV_X = 96, MARGIN + 274, MARGIN + 318
+_MAP_HUB_W, _MAP_HUB_BUS_X, _MAP_HUB_DEV_X, _MAP_INDENT = 96, MARGIN + 274, MARGIN + 318, 34
 _MAP_HUB_SOURCE = {"snmp": "ports read from the switch", "lldp": "port from LLDP", "inferred": "links deduced"}
 
 
@@ -420,8 +420,18 @@ def _map_bands(netmap):
         else:
             devs.sort(key=lambda d: (not d["is_self"], not d["is_gateway"], ip_key(d)))
         cols = 1 if hub else _MAP_COLS
-        rows = max(1, -(-len(devs) // cols))
-        bands.append({"net": net, "devs": devs, "hub": hub, "cols": cols,
+        listed = {d["ip"] for d in devs}
+
+        def under(d):
+            return bool(hub and d.get("behind") and d["behind"] in listed)
+        entries = []
+        for dev in devs:
+            if under(dev):
+                continue
+            entries.append((dev, None))
+            entries.extend((kid, dev) for kid in devs if under(kid) and kid["behind"] == dev["ip"])
+        rows = max(1, -(-len(entries) // cols))
+        bands.append({"net": net, "devs": devs, "entries": entries, "hub": hub, "cols": cols,
                       "h": max(rows * (_MAP_DEV_H + _MAP_GAP) + 6, 54)})
     return bands
 
@@ -429,7 +439,7 @@ def _map_bands(netmap):
 _ROLE_TEXT = {"gateway": "gateway", "dhcp": "DHCP", "dns": "DNS", "bridge": "bridge"}
 
 
-def _map_device(doc, dev, x, top):
+def _map_device(doc, dev, x, top, width=_MAP_DEV_W):
     stroke, line = RULE, 0.6
     if dev["is_gateway"]:
         stroke, line = AMBER, 1.1
@@ -437,17 +447,17 @@ def _map_device(doc, dev, x, top):
         stroke, line = BLUE, 1.1
     if dev["is_self"]:
         stroke, line = GREEN, 1.1
-    doc.rect(x, top, _MAP_DEV_W, _MAP_DEV_H, fill=GREEN_BG if dev["is_self"] else STRIPE, stroke=stroke, line=line)
+    doc.rect(x, top, width, _MAP_DEV_H, fill=GREEN_BG if dev["is_self"] else STRIPE, stroke=stroke, line=line)
     tags = " · ".join(_ROLE_TEXT[r] for r in dev.get("roles") or [] if r in _ROLE_TEXT)
     tags_w = _width(tags, "F1", 5.8) + 6 if tags else 0
-    doc.text(x + 5, top + 10.5, _fit(dev["label"], "F2", 7.2, _MAP_DEV_W - 10 - tags_w), "F2", 7.2, INK)
+    doc.text(x + 5, top + 10.5, _fit(dev["label"], "F2", 7.2, width - 10 - tags_w), "F2", 7.2, INK)
     if tags:
-        doc.text(x + _MAP_DEV_W - 4, top + 9.5, tags, "F1", 5.8, FAINT, align="right")
+        doc.text(x + width - 4, top + 9.5, tags, "F1", 5.8, FAINT, align="right")
     ips = dev.get("ips") or [dev["ip"]]
     detail = dev["ip"] + (f" +{len(ips) - 1}" if len(ips) > 1 else "")
     if dev.get("device_type") and dev["device_type"] != "Generic":
         detail += f"  {dev['device_type']}"
-    doc.text(x + 5, top + 20.5, _fit(detail, "F1", 6.2, _MAP_DEV_W - 10), "F1", 6.2, MUTED)
+    doc.text(x + 5, top + 20.5, _fit(detail, "F1", 6.2, width - 10), "F1", 6.2, MUTED)
 
 
 def _map_path(doc, path, scanner_label="This scanner"):
@@ -536,23 +546,34 @@ def _netmap(doc, netmap):
                 doc.line([(hub_x + _MAP_HUB_W, cy), (bus_x, cy)])
             else:
                 doc.line([(_MAP_NET_X + _MAP_NET_W, cy), (bus_x, cy)])
-            rows = -(-len(band["devs"]) // cols) if band["devs"] else 0
-            if rows:
+            entries = band["entries"]
+            main_rows = [i // cols for i, (_, parent) in enumerate(entries) if parent is None]
+            if main_rows:
                 first_y = top + 3 + _MAP_DEV_H / 2
-                last_y = top + 3 + (rows - 1) * (_MAP_DEV_H + _MAP_GAP) + _MAP_DEV_H / 2
+                last_y = top + 3 + main_rows[-1] * (_MAP_DEV_H + _MAP_GAP) + _MAP_DEV_H / 2
                 doc.line([(bus_x, min(first_y, cy)), (bus_x, max(last_y, cy))])
-            for i, dev in enumerate(band["devs"]):
+            placed = {}
+            for i, (dev, parent) in enumerate(entries):
                 col, row = i % cols, i // cols
-                x = dev_x + col * (_MAP_DEV_W + 8)
+                indent = 0 if parent is None else _MAP_INDENT
+                x = dev_x + col * (_MAP_DEV_W + 8) + indent
                 dy = top + 3 + row * (_MAP_DEV_H + _MAP_GAP)
-                spoke = [(bus_x, dy + _MAP_DEV_H / 2), (x, dy + _MAP_DEV_H / 2)]
-                if hub and dev.get("attach") != "seen":
-                    doc.line(spoke, dash=(3, 2))
+                mid_y = dy + _MAP_DEV_H / 2
+                placed[dev["ip"]] = (x, dy)
+                if parent is not None:
+                    px, pdy = placed[parent["ip"]]
+                    doc.line([(px + 8, pdy + _MAP_DEV_H), (px + 8, mid_y), (x, mid_y)])
+                    if dev.get("via"):
+                        doc.text(px + 11, mid_y - 2, _fit(dev["via"], "F1", 5.6, indent - 12), "F1", 5.6, FAINT)
                 else:
-                    doc.line(spoke)
-                if hub and dev.get("port"):
-                    doc.text(bus_x + 3, dy + _MAP_DEV_H / 2 - 2, _fit(dev["port"], "F1", 5.6, x - bus_x - 4), "F1", 5.6, FAINT)
-                _map_device(doc, dev, x, dy)
+                    spoke = [(bus_x, mid_y), (x, mid_y)]
+                    if hub and dev.get("attach") != "seen":
+                        doc.line(spoke, dash=(3, 2))
+                    else:
+                        doc.line(spoke)
+                    if hub and dev.get("port"):
+                        doc.text(bus_x + 3, mid_y - 2, _fit(dev["port"], "F1", 5.6, x - bus_x - 4), "F1", 5.6, FAINT)
+                _map_device(doc, dev, x, dy, _MAP_DEV_W - indent)
                 pos[(dev["ip"], dev["network"])] = (len(doc.pages) - 1, x, dy)
             top += band["h"] + 6
         span_top, span_bottom = centers[0], centers[-1]

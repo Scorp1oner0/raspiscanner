@@ -532,9 +532,16 @@ function renderNetMap(map) {
       ? (a, b) => (portNo(a) - portNo(b)) || (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || byIp(a, b)
       : (a, b) => (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || byIp(a, b));
     const cols = hubDev ? 1 : COLS;
-    const rows = Math.max(1, Math.ceil(devs.length / cols));
+    const listed = new Set(devs.map((d) => d.ip));
+    const under = (d) => hubDev && d.behind && listed.has(d.behind);
+    const list = [];
+    devs.filter((d) => !under(d)).forEach((d) => {
+      list.push({ d, indent: 0 });
+      devs.filter((k) => under(k) && k.behind === d.ip).forEach((k) => list.push({ d: k, indent: 1, parent: d }));
+    });
+    const rows = Math.max(1, Math.ceil(list.length / cols));
     const h = Math.max(rows * (BH + GY) + 14, NH + 14);
-    bands.push({ net, devs, hubDev, cols, y, h, cy: y + h / 2 });
+    bands.push({ net, devs, list, hubDev, cols, y, h, cy: y + h / 2 });
     y += h + 6;
   });
   const H = y + 4;
@@ -579,26 +586,36 @@ function renderNetMap(map) {
       lines += `<path class="nm-line" d="M${NX + NW} ${b.cy} H ${busX}"/>`;
     }
     if (b.devs.length) {
-      const firstY = b.y + 7 + BH / 2, lastRow = Math.ceil(b.devs.length / b.cols) - 1;
-      const lastY = b.y + 7 + lastRow * (BH + GY) + BH / 2;
+      const mainRows = b.list.map((e, i) => (e.indent ? -1 : i)).filter((i) => i >= 0);
+      const lastRow = Math.floor(mainRows[mainRows.length - 1] / b.cols);
+      const firstY = b.y + 7 + BH / 2, lastY = b.y + 7 + lastRow * (BH + GY) + BH / 2;
       lines += `<path class="nm-line" d="M${busX} ${firstY} V ${lastY}"/>`;
     }
-    b.devs.forEach((d, i) => {
-      const col = i % b.cols, row = Math.floor(i / b.cols);
-      const x = dx + col * (BW + GX), dy = b.y + 7 + row * (BH + GY);
+    const placed = new Map();
+    b.list.forEach((entry, i) => {
+      const d = entry.d, col = i % b.cols, row = Math.floor(i / b.cols);
+      const ind = entry.indent * 44, bw = BW - ind;
+      const x = dx + col * (BW + GX) + ind, dy = b.y + 7 + row * (BH + GY);
+      placed.set(d.ip, { x, dy });
       pos[d.ip + "|" + d.network] = { x, y: dy };
       pos[d.ip] = pos[d.ip] || { x, y: dy };
       const deduced = b.hubDev && d.attach !== "seen" ? ' stroke-dasharray="5 4"' : "";
-      lines += `<path class="nm-line" d="M${busX} ${dy + BH / 2} H ${x}"${deduced}/>`;
-      if (b.hubDev && d.port) boxes += `<text class="nm-tag" x="${busX + 8}" y="${dy + BH / 2 - 4}">${escapeHtml(d.port)}</text>`;
+      if (entry.indent) {
+        const par = placed.get(entry.parent.ip);
+        lines += `<path class="nm-line" d="M${par.x + 16} ${par.dy + BH} V ${dy + BH / 2} H ${x}"/>`;
+        if (d.via) boxes += `<text class="nm-tag" x="${par.x + 20}" y="${dy + BH / 2 - 3}">${escapeHtml(trunc(d.via, 7))}</text>`;
+      } else {
+        lines += `<path class="nm-line" d="M${busX} ${dy + BH / 2} H ${x}"${deduced}/>`;
+        if (b.hubDev && d.port) boxes += `<text class="nm-tag" x="${busX + 8}" y="${dy + BH / 2 - 4}">${escapeHtml(d.port)}</text>`;
+      }
       const cls = "nm-box" + (d.is_self ? " nm-self" : "") + (d.is_gateway ? " nm-gw" : "") + (d.is_bridge ? " nm-bridge" : "");
       const tags = (d.roles || []).filter((r) => r !== "switch").map((r) => ROLE[r] || r).join(" · ");
       const extra = d.ips && d.ips.length > 1 ? ` +${d.ips.length - 1}` : "";
       boxes += `<g><title>${escapeHtml(d.label)} — ${escapeHtml((d.ips || [d.ip]).join(", "))}${d.mac ? " — " + escapeHtml(d.mac) : ""}${d.vendor ? " — " + escapeHtml(d.vendor) : ""}${d.port_name ? " — " + escapeHtml(d.port_name) : ""}</title>
-        <rect class="${cls}" x="${x}" y="${dy}" width="${BW}" height="${BH}" rx="7"/>
-        <text x="${x + 10}" y="${dy + 18}" font-size="12.5">${escapeHtml(trunc(d.label, tags ? 19 : 26))}</text>
+        <rect class="${cls}" x="${x}" y="${dy}" width="${bw}" height="${BH}" rx="7"/>
+        <text x="${x + 10}" y="${dy + 18}" font-size="12.5">${escapeHtml(trunc(d.label, tags ? 19 - Math.round(ind / 8) : 26 - Math.round(ind / 8)))}</text>
         <text class="nm-dim" x="${x + 10}" y="${dy + 34}">${escapeHtml(d.ip)}${extra}${d.device_type ? " · " + escapeHtml(trunc(d.device_type, 16)) : ""}</text>
-        ${tags ? `<text class="nm-tag" x="${x + BW - 8}" y="${dy + 14}" text-anchor="end">${escapeHtml(trunc(tags, 30))}</text>` : ""}</g>`;
+        ${tags ? `<text class="nm-tag" x="${x + bw - 8}" y="${dy + 14}" text-anchor="end">${escapeHtml(trunc(tags, 30 - Math.round(ind / 6)))}</text>` : ""}</g>`;
     });
     const dhcp = (b.net.dhcp || []).map((o) => o.server).join(", ");
     boxes += `<g><rect class="nm-box nm-net-${escapeHtml(b.net.kind)}" x="${NX}" y="${b.cy - NH / 2}" width="${NW}" height="${NH}" rx="9"/>

@@ -211,6 +211,29 @@ class TestSwitchAtTheCentre(unittest.TestCase):
         self.assertEqual((net["hub"]["ip"], net["hub"]["source"]), ("192.168.88.60", "snmp"))
         self.assertEqual(by_ip["192.168.88.2"]["port"], "port 1")
 
+    def test_devices_on_an_access_point_wifi_hang_under_it(self):
+        planet = {"macs": {"74:4d:28:f5:b5:a0": 3, "ac:f4:73:29:b5:88": 3, "b8:27:eb:36:ba:b9": 9,
+                           "e4:a7:a0:f1:07:9d": 2, "b8:27:eb:cf:48:f4": 4}, "ports": {}}
+        ap = {"macs": {"a8:f7:e0:c3:c7:dc": 5, "b8:27:eb:36:ba:b9": 5, "ac:f4:73:29:b5:88": 6},
+              "ports": {5: "ether1", 6: "wlan1"}}
+        mapd = _device("192.168.88.60", "eth0", self.CIDR, mac="74:4D:28:F5:B5:A0", device_type="Router")
+        mapd["switch_ports"] = ap
+        vacuum = _device("192.168.88.198", "eth0", self.CIDR, mac="AC:F4:73:29:B5:88")
+        net, by_ip = self._build([self._switch(switch_ports=planet), mapd, vacuum] + self._others())
+        self.assertEqual(net["hub"]["ip"], "192.168.88.50")
+        self.assertEqual((by_ip["192.168.88.198"]["behind"], by_ip["192.168.88.198"]["via"]), ("192.168.88.60", "wlan1"))
+        self.assertEqual(by_ip["192.168.88.198"]["port"], "port 3")
+        for ip in ("192.168.88.2", "192.168.88.248", "192.168.88.250", "192.168.88.60"):
+            self.assertIsNone(by_ip[ip]["behind"])
+
+    def test_a_device_on_the_access_point_uplink_is_not_behind_it(self):
+        planet = {"macs": {"74:4d:28:f5:b5:a0": 3, "b8:27:eb:36:ba:b9": 3}, "ports": {}}
+        ap = {"macs": {"a8:f7:e0:c3:c7:dc": 5, "b8:27:eb:36:ba:b9": 5}, "ports": {5: "ether1"}}
+        mapd = _device("192.168.88.60", "eth0", self.CIDR, mac="74:4D:28:F5:B5:A0", device_type="Router")
+        mapd["switch_ports"] = ap
+        _, by_ip = self._build([self._switch(switch_ports=planet), mapd] + self._others())
+        self.assertIsNone(by_ip["192.168.88.2"]["behind"])
+
     def test_port_names_survive_a_json_round_trip(self):
         import json
         table = json.loads(json.dumps({"macs": {"b8:27:eb:36:ba:b9": 9}, "ports": {9: "Gi9"}}))

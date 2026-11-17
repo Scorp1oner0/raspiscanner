@@ -5,6 +5,19 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-17
+
+### Added
+
+- **The map shows who hangs under an access point or a router.** When the
+  switch gave a MAC table and a router or access point with a bridge answers
+  the same default community with its own table, the devices it sees on a port
+  that does not lead to the switch (its Wi-Fi, for instance) are drawn under it,
+  with that port's name on the line (`wlan1`). The devices the switch sees on
+  the same port as the access point but the access point does not list stay
+  beside it. One level only. `GET /api/topology/map` has `behind` and `via` on
+  each device.
+
 ## [1.8.0] - 2026-11-17
 
 ### Added

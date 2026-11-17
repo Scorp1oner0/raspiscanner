@@ -128,6 +128,30 @@ def _table_rank(node):
     return (len(set(macs.values())), node["device_type"] == "Switch", len(macs))
 
 
+def _place_behind(hub, members):
+    """Un apparato con una sua tabella MAC (un access point, un router con
+    bridge) dice quali apparecchi gli stanno sulle porte che non portano allo
+    switch: quelli che lo switch vede sulla stessa porta dell'apparato sono
+    dietro di lui. Un solo livello."""
+    table = hub["_fdb"]
+    for bridge in members:
+        if bridge is hub or not bridge["_fdb"]:
+            continue
+        port = _port_of(bridge, table)
+        sub = bridge["_fdb"]
+        uplinks = {sub["macs"][m] for m in hub["macs"] if m in sub["macs"]}
+        if port is None or not uplinks:
+            continue
+        names = sub.get("ports") or {}
+        for node in members:
+            if node is hub or node is bridge or node["behind"] or _port_of(node, table) != port:
+                continue
+            ports = [sub["macs"][m] for m in node["macs"] if sub["macs"].get(m) not in (None, *uplinks)]
+            if ports:
+                node["behind"] = bridge["ip"]
+                node["via"] = names.get(ports[0]) or names.get(str(ports[0])) or f"port {ports[0]}"
+
+
 def _port_label(raw):
     raw = str(raw).strip()
     return f"port {raw}" if raw.isdigit() else raw
@@ -144,6 +168,8 @@ def _attach_hubs(networks, nodes):
         node["attach"] = None
         node["port"] = None
         node["port_name"] = None
+        node["behind"] = None
+        node["via"] = None
     for net in networks:
         net["hub"] = None
         members = [n for n in nodes if n["network"] == net["cidr"]]
@@ -181,6 +207,8 @@ def _attach_hubs(networks, nodes):
                     node["port_name"] = names.get(port) or names.get(str(port))
             elif source == "lldp" and node["is_self"] and hub["_lldp"].get("port_id"):
                 node["attach"], node["port"] = "seen", _port_label(hub["_lldp"]["port_id"])
+        if source == "snmp":
+            _place_behind(hub, members)
 
 
 def _uplink_path(uplink, nodes, networks):

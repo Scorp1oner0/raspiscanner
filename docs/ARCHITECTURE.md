@@ -151,3 +151,5 @@ the minimum required role.
   answered `snmp_probe`), which says on which port each device was seen.
   `netmap.build_map` draws the switch at the centre of its network, with
   the port where it is known and a dashed, deduced link where it is not.
+  The table of an access point or router with a bridge places the devices on
+  its non-uplink ports under it (one level).

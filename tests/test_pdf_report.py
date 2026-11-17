@@ -205,6 +205,17 @@ def _node(ip, network, iface, label=None, **extra):
 
 
 class TestNetworkMapSection(unittest.TestCase):
+    def test_device_behind_an_access_point_is_drawn_under_it(self):
+        nodes = [_node("192.168.1.50", "192.168.1.0/24", "eth0", "Planet", attach="hub", roles=["switch"]),
+                 _node("192.168.1.60", "192.168.1.0/24", "eth0", "mAP", attach="seen", port="port 3"),
+                 _node("192.168.1.198", "192.168.1.0/24", "eth0", "Vacuum", attach="seen", port="port 3",
+                       behind="192.168.1.60", via="wlan1")]
+        nm = _netmap(nodes)
+        nm["networks"][0]["hub"] = {"ip": "192.168.1.50", "label": "Planet", "source": "snmp"}
+        last = _pages_text(_render(netmap=nm))[-1]
+        self.assertIn("Vacuum", last)
+        self.assertIn("wlan1", last)
+
     def test_switch_is_drawn_at_the_centre_with_ports(self):
         nodes = [_node("192.168.1.50", "192.168.1.0/24", "eth0", "Planet", attach="hub", roles=["switch"]),
                  _node("192.168.1.9", "192.168.1.0/24", "eth0", "This scanner", is_self=True, attach="seen", port="port 2"),

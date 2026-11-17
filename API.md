@@ -246,7 +246,9 @@ switch answered the default `public` community and its MAC table gave the port
 of each device), `lldp` (the switch announced itself on the scanner's cable,
 which gives that one port) or `inferred` (the only switch found in the network,
 no port known). Each device then has `attach`: `hub` for the switch itself,
-`seen` (`port` is set, e.g. `"port 9"`), `inferred` (same network as the
+`seen` (`port` is set, e.g. `"port 9"`; `behind` and `via` name the access point
+or router and its port, e.g. `"wlan1"`, when that device's own MAC table says the
+device hangs on it rather than on the switch), `inferred` (same network as the
 switch, nothing more is known) or `unseen` (the switch has a table and the
 device is not in it). With several switches and no solid data there is no
 `hub`. Which port a device uses is never known without the switch telling it:
