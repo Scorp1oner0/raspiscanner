@@ -424,7 +424,7 @@ class TestScanHostSnmp(unittest.TestCase):
             for name in ("scan_ports", "grab_http_banner", "get_device_info_multi",
                          "resolve_hostname", "snmp_probe")
         }
-        scan_engine.scan_ports = lambda ip: []
+        scan_engine.scan_ports = lambda ip, ports=None: []
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
         scan_engine.resolve_hostname = lambda ip, timeout=1: None
         scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
@@ -478,7 +478,7 @@ class TestScanHostModelSource(unittest.TestCase):
             name: getattr(scan_engine, name)
             for name in ("scan_ports", "grab_http_banner", "get_device_info_multi", "resolve_hostname")
         }
-        scan_engine.scan_ports = lambda ip: []
+        scan_engine.scan_ports = lambda ip, ports=None: []
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
         scan_engine.resolve_hostname = lambda ip, timeout=1: None
 
@@ -535,7 +535,7 @@ class TestScanHostVendorSource(unittest.TestCase):
             setattr(scan_engine, name, fn)
 
     def test_oui_vendor_used_when_mac_is_known(self):
-        scan_engine.scan_ports = lambda ip: []
+        scan_engine.scan_ports = lambda ip, ports=None: []
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
         # Prefisso Raspberry Pi Foundation, presente nel database OUI minimo.
         device = scan_engine._scan_host("10.0.0.5", "B8:27:EB:00:00:01", {}, {}, None)
@@ -543,21 +543,21 @@ class TestScanHostVendorSource(unittest.TestCase):
         self.assertEqual(device["vendor_source"], "oui")
 
     def test_banner_fallback_when_oui_is_unknown(self):
-        scan_engine.scan_ports = lambda ip: [{"port": 80, "service": "HTTP"}]
+        scan_engine.scan_ports = lambda ip, ports=None: [{"port": 80, "service": "HTTP"}]
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": "Hikvision - Login"}
         device = scan_engine._scan_host("10.0.0.5", self.UNKNOWN_OUI_MAC, {}, {}, None)
         self.assertEqual(device["vendor"], "Hikvision")
         self.assertEqual(device["vendor_source"], "banner")
 
     def test_vendor_stays_unknown_when_neither_oui_nor_banner_help(self):
-        scan_engine.scan_ports = lambda ip: []
+        scan_engine.scan_ports = lambda ip, ports=None: []
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
         device = scan_engine._scan_host("10.0.0.5", self.UNKNOWN_OUI_MAC, {}, {}, None)
         self.assertEqual(device["vendor"], "Unknown")
         self.assertIsNone(device["vendor_source"])
 
     def test_onvif_manufacturer_overrides_banner_fallback(self):
-        scan_engine.scan_ports = lambda ip: [{"port": 80, "service": "HTTP"}]
+        scan_engine.scan_ports = lambda ip, ports=None: [{"port": 80, "service": "HTTP"}]
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": "Dahua NVR"}
         scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {"manufacturer": "Hikvision"}
         onvif_results = {"10.0.0.5": {"xaddrs": ["http://10.0.0.5/onvif"], "types": ""}}

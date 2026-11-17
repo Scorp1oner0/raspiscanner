@@ -606,3 +606,48 @@ class TestAuditReportRoute(RaspiScannerAppTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPortProfileAndDeepScanApi(RaspiScannerAppTestCase):
+    def test_profiles_are_readable_by_a_viewer(self):
+        resp = self.client.get("/api/scan/profiles", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["common"]["ports"], len(config.PORTS_OF_INTEREST))
+        self.assertGreater(data["extended"]["ports"], data["common"]["ports"])
+
+    def test_unknown_port_profile_is_a_bad_request(self):
+        resp = self.client.post("/api/scan/start", auth=self.operator_auth, json={"port_profile": "everything"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_scan_start_passes_the_chosen_profile(self):
+        with patch.object(scan_engine, "run_scan", return_value=(True, "Scan started")) as run_scan:
+            resp = self.client.post("/api/scan/start", auth=self.operator_auth, json={"port_profile": "extended"})
+        self.assertEqual(resp.status_code, 200)
+        run_scan.assert_called_once_with(port_profile="extended")
+
+    def test_scan_start_without_body_uses_common_ports(self):
+        with patch.object(scan_engine, "run_scan", return_value=(True, "Scan started")) as run_scan:
+            self.client.post("/api/scan/start", auth=self.operator_auth)
+        run_scan.assert_called_once_with(port_profile="common")
+
+    def test_viewer_cannot_start_or_read_a_deep_scan(self):
+        resp = self.client.post("/api/devices/deep-scan", auth=self.viewer_auth, json={"ip": "192.168.1.10"})
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(self.client.get("/api/devices/deep-scan", auth=self.viewer_auth).status_code, 403)
+        self.assertEqual(self.client.post("/api/devices/deep-scan/stop", auth=self.viewer_auth).status_code, 403)
+
+    def test_deep_scan_needs_an_ip(self):
+        resp = self.client.post("/api/devices/deep-scan", auth=self.operator_auth, json={})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_deep_scan_refuses_a_device_not_found_by_the_scan(self):
+        resp = self.client.post("/api/devices/deep-scan", auth=self.operator_auth,
+                                json={"ip": "203.0.113.7", "ports": "1-100"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not among the devices", resp.get_json()["message"])
+
+    def test_operator_can_read_deep_scan_state(self):
+        resp = self.client.get("/api/devices/deep-scan", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("running", resp.get_json())

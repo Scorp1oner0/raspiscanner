@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.1.1.** A network discovery and security-exposure scanner for
+**Status: 1.2.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -66,7 +66,8 @@ of some of the same discovery mechanisms.
    reasonable time). ARP for a network the device has an address in; ICMP
    sweep for one it doesn't (a VPN tunnel the kernel marks NOARP, or a
    custom network reachable only by routing) — no MAC there, ARP can't
-   cross a router. Per host: TCP port scan + HTTP banners, ONVIF
+   cross a router. Per host: TCP port scan (23 common ports, or 84 with
+   the **extended** profile picked next to "Start scan") + HTTP banners, ONVIF
    WS-Discovery (real vendor/model via `GetDeviceInformation` when
    available), mDNS/Bonjour (friendly name, and for Apple devices the
    real hardware model from a TXT record), offline OUI vendor lookup,
@@ -124,6 +125,15 @@ of some of the same discovery mechanisms.
    report from a saved scan (reproducible, unlike the live "Report" tab)
    with a changes-since-previous-scan section prepended automatically.
    Full reference: [`API.md`](API.md).
+
+8. **Deep port scan of one device** ("🔎 Deep scan" on a device's row):
+   checks a range you choose, up to all 65535 TCP ports, on that device
+   only, and reads the banner of every open web port. It finds what the
+   fixed port list can't see, such as a web panel on an unusual port. It
+   runs in the background, one at a time, and adds what it finds to the
+   device's row and to the report's security findings. All 65535 ports take
+   from a few seconds to about ten minutes, depending on how many the
+   device's firewall silently drops.
 
 ## What it doesn't do
 

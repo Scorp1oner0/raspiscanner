@@ -102,8 +102,18 @@
     <div class="scan-controls">
       <button class="btn primary" id="btn-scan-start">▶️ Start scan</button>
       <button class="btn" id="btn-scan-stop">⏹️ Stop</button>
+      <select id="scan-port-profile" class="scan-profile hidden" title="Which TCP ports to check on every device">
+        <option value="common">Common ports</option>
+        <option value="extended">Extended ports</option>
+      </select>
       <span id="scan-status" class="msg"></span>
     </div>
+    <p id="scan-profile-note" class="scan-profile-note hidden">
+      Extended checks more ports on every device, so the scan takes longer.
+      It includes services that honeypots often use as bait (MySQL, Redis,
+      VNC, Docker API, Elasticsearch): an IDS or a honeypot on the network
+      may flag or block this device.
+    </p>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div id="progress-label" class="progress-label"></div>
     <p class="security-note">
@@ -331,6 +341,36 @@
     </div>
   </section>
 </main>
+
+<div class="modal-overlay hidden" id="deep-scan-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span>🔎 Deep port scan</span>
+      <button class="modal-close" id="btn-close-deep-scan">✕</button>
+    </div>
+    <p class="modal-desc">
+      Checks a range of TCP ports on <strong id="deep-scan-ip"></strong> only,
+      and reads the banner of every open web port. All 65535 ports take from
+      a few seconds to about ten minutes, depending on how many the device's
+      firewall silently drops. Open ports are added to the device's row.
+    </p>
+
+    <label class="modal-label">Ports (for example 1-65535, 1-1024 or 22,80,7000-9000)</label>
+    <div class="modal-row">
+      <input type="text" id="deep-scan-ports" class="modal-input" value="1-65535">
+      <button class="btn small deep-scan-preset" data-ports="1-1024">1-1024</button>
+      <button class="btn small deep-scan-preset" data-ports="1-65535">All</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn primary" id="btn-deep-scan-start">▶️ Start</button>
+      <button class="btn" id="btn-deep-scan-stop">⏹️ Stop</button>
+    </div>
+    <div class="progress-bar deep-scan-progress"><div class="progress-fill" id="deep-scan-fill"></div></div>
+    <div id="deep-scan-msg" class="deep-scan-msg"></div>
+    <div id="deep-scan-results" class="deep-scan-results"></div>
+  </div>
+</div>
 
 <div class="modal-overlay hidden" id="hotspot-modal">
   <div class="modal-box">

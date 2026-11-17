@@ -10,13 +10,13 @@ import subprocess
 import threading
 import time
 
-from . import platform_net, storage, targets, vendor, webhooks
+from . import config, platform_net, storage, targets, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import (
     arp_scan, icmp_scan, ipv6_discovery, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe,
 )
-from .fingerprint import grab_http_banner, scan_ports
+from .fingerprint import grab_http_banner, scan_ports, web_banner
 from .hosts import classify_host
 from .network import setup as network_setup
 from .network.infra import classify_network_device, get_default_gateway
@@ -33,6 +33,7 @@ _state = {
     "started_at": None,
     "finished_at": None,
     "error": None,
+    "port_profile": "common",
     "devices": {},  # ip -> dettagli
     # P4 "network topology map": adiacenza a un salto, non un grafo
     # multi-hop (richiederebbe interrogare switch remoti via SNMP walk
@@ -142,14 +143,26 @@ def _routed_target_networks(known_cidrs):
     return routed
 
 
-def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip):
-    open_ports = scan_ports(ip)
+def ports_for_profile(profile):
+    """Porte da controllare per ogni host secondo il profilo scelto allo
+    start: "common" = PORTS_OF_INTEREST, "extended" = in piu' EXTENDED_PORTS."""
+    if profile == "extended":
+        return {**config.PORTS_OF_INTEREST, **config.EXTENDED_PORTS}
+    return config.PORTS_OF_INTEREST
+
+
+def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip, ports=None):
+    open_ports = scan_ports(ip, ports=ports)
     banners = {}
     for p in open_ports:
-        if p["port"] in (80, 81, 8000, 8080, 8081, 8899, 9000):
+        if p["port"] in config.HTTP_BANNER_PORTS:
             banners[p["port"]] = grab_http_banner(ip, p["port"])
-        elif p["port"] in (443, 8443):
+        elif p["port"] in config.HTTPS_BANNER_PORTS:
             banners[p["port"]] = grab_http_banner(ip, p["port"], use_https=True)
+        elif p["port"] in config.ANY_WEB_BANNER_PORTS:
+            banner = web_banner(ip, p["port"])
+            if banner["server"] or banner["title"]:
+                banners[p["port"]] = banner
 
     onvif_info = onvif_results.get(ip)
     mdns_info = mdns_results.get(ip)
@@ -452,7 +465,7 @@ def preview_scan_targets():
     }
 
 
-def run_scan():
+def run_scan(port_profile="common"):
     # Check-then-set atomico sotto lo stesso lock: senza tenerlo per tutto
     # il blocco, due richieste /api/scan/start concorrenti potevano
     # entrambe leggere running=False prima che l'altra lo mettesse a True,
@@ -460,6 +473,8 @@ def run_scan():
     # stesso _state["devices"]). _update() non va chiamata qui dentro:
     # prende lo stesso lock e threading.Lock non e' rientrante, farebbe
     # deadlock — si scrive _state direttamente, gia' dentro il blocco.
+    if port_profile not in config.PORT_PROFILES:
+        return False, f"Unknown port profile: {port_profile}"
     with _lock:
         if _state["running"]:
             return False, "Scan already in progress"
@@ -477,14 +492,15 @@ def run_scan():
             return False, "No active network (eth/wifi) or configured scan target to scan"
         _stop_flag.clear()
         _state.update(running=True, progress=0, total=0, current_ip=None,
-                       started_at=time.time(), finished_at=None, error=None, devices={})
+                       started_at=time.time(), finished_at=None, error=None, devices={},
+                       port_profile=port_profile)
 
-    t = threading.Thread(target=_run_scan_thread, args=(networks,), daemon=True)
+    t = threading.Thread(target=_run_scan_thread, args=(networks, ports_for_profile(port_profile)), daemon=True)
     t.start()
     return True, "Scan started"
 
 
-def _run_scan_thread(networks):
+def _run_scan_thread(networks, ports=None):
     try:
         all_hosts = []  # (ip, mac, iface, cidr)
         onvif_results = {}
@@ -608,7 +624,7 @@ def _run_scan_thread(networks):
             if _stop_flag.is_set():
                 break
             _update(progress=idx, current_ip=ip)
-            device = _scan_host(ip, mac, onvif_results, mdns_results, gateways.get(iface))
+            device = _scan_host(ip, mac, onvif_results, mdns_results, gateways.get(iface), ports=ports)
             device["iface"] = iface
             device["network"] = cidr
             device["vlan_id"] = vlan_id
@@ -665,6 +681,34 @@ def _run_scan_thread(networks):
 
 def stop_scan():
     _stop_flag.set()
+
+
+def merge_deep_scan(ip, open_ports, banners, meta):
+    """Aggiunge al dispositivo le porte e i banner trovati dallo scan
+    approfondito (scanner.deep_scan). La classificazione resta quella dello
+    scan principale; i findings del report si ricalcolano dalle porte, quindi
+    un Telnet scoperto qui compare anche nel report. Ritorna False se il
+    dispositivo non c'e' piu' (uno scan nuovo ha svuotato la lista)."""
+    with _lock:
+        device = _state["devices"].get(ip)
+        if device is None:
+            return False
+        known = {p["port"]: p for p in device.get("open_ports") or []}
+        for p in open_ports:
+            known.setdefault(p["port"], {"port": p["port"], "service": p["service"]})
+        device["open_ports"] = sorted(known.values(), key=lambda p: p["port"])
+        device_banners = dict(device.get("http_banners") or {})
+        for port, banner in banners.items():
+            device_banners.setdefault(port, banner)
+        device["http_banners"] = device_banners
+        device["deep_scan"] = {
+            "ports": meta.get("ports_spec"),
+            "ports_checked": meta.get("ports_done"),
+            "open_ports": [p["port"] for p in open_ports],
+            "stopped": bool(meta.get("stopped")),
+            "finished_at": time.time(),
+        }
+        return True
 
 
 def devices_all():

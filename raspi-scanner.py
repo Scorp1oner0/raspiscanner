@@ -27,7 +27,7 @@ from functools import wraps
 from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.serving import ThreadedWSGIServer
 
-from scanner import auth, monitoring, platform_net, scan_engine, storage, targets, tls, webhooks
+from scanner import auth, config, deep_scan, monitoring, platform_net, scan_engine, storage, targets, tls, webhooks
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -258,8 +258,47 @@ def api_hotspot_stop():
 @app.route("/api/scan/start", methods=["POST"])
 @require_role("operator")
 def api_scan_start():
-    ok, message = scan_engine.run_scan()
+    data = request.get_json(silent=True) or {}
+    profile = data.get("port_profile", "common")
+    if profile not in config.PORT_PROFILES:
+        return jsonify({"ok": False, "message": f"Unknown port profile: {profile}"}), 400
+    ok, message = scan_engine.run_scan(port_profile=profile)
     return jsonify({"ok": ok, "message": message}), (200 if ok else 409)
+
+
+@app.route("/api/scan/profiles")
+@require_role("viewer")
+def api_scan_profiles():
+    return jsonify({
+        "common": {"ports": len(scan_engine.ports_for_profile("common"))},
+        "extended": {"ports": len(scan_engine.ports_for_profile("extended"))},
+    })
+
+
+@app.route("/api/devices/deep-scan", methods=["POST"])
+@require_role("operator")
+def api_deep_scan_start():
+    """Scan approfondito delle porte di un solo dispositivo gia' trovato.
+    Stesso ruolo minimo di /api/scan/start."""
+    data = request.get_json(silent=True) or {}
+    ip = data.get("ip")
+    if not isinstance(ip, str) or not ip:
+        return jsonify({"ok": False, "message": "Missing device IP"}), 400
+    ok, message, status = deep_scan.start(ip, data.get("ports"))
+    return jsonify({"ok": ok, "message": message}), status
+
+
+@app.route("/api/devices/deep-scan")
+@require_role("operator")
+def api_deep_scan_status():
+    return jsonify(deep_scan.get_state())
+
+
+@app.route("/api/devices/deep-scan/stop", methods=["POST"])
+@require_role("operator")
+def api_deep_scan_stop():
+    deep_scan.stop()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/scan/stop", methods=["POST"])

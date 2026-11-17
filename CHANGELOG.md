@@ -5,6 +5,40 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-17
+
+### Added
+
+- **Extended port profile.** A selector next to "Start scan" picks
+  between the 23 common ports (default, unchanged) and an extended list of
+  84: NAS, IoT, databases, MQTT, MikroTik, alternative web and RTSP ports.
+  The dashboard warns that it includes ports honeypots use as bait.
+  `POST /api/scan/start` takes `{"port_profile": "common" | "extended"}`,
+  `GET /api/scan/profiles` returns how many ports each one checks.
+- **Deep port scan of one device.** A "🔎 Deep scan" button on each row of
+  the device table scans a chosen range, up to all 65535 TCP ports, on that
+  device only, in the background and with a progress bar, then reads the
+  banner of every open web port (HTTP, then HTTPS on ports with no fixed
+  scheme). Results are added to the device and count for the report's
+  security findings. New endpoints `POST /api/devices/deep-scan`,
+  `GET /api/devices/deep-scan`, `POST /api/devices/deep-scan/stop`
+  (operator). Only devices found by the last scan can be targeted, and not
+  while a network scan is running.
+
+### Changed
+
+- Web banners are now read on the alternative web ports of the extended
+  list too (3000, 4443, 5001, 7332, 8088, 8888, 9443...), trying HTTP first
+  and HTTPS after on ports that have no fixed scheme.
+
+### Fixed
+
+- **HTTPS banners were always empty.** The banner request verified the
+  certificate, and cameras, NVRs, routers and Pi-hole almost always use a
+  self-signed one, so the connection failed and `http_banners` showed
+  `null` on every HTTPS port. The certificate is no longer verified for
+  this request, which only reads a page and never sends credentials.
+
 ## [1.1.1] - 2026-11-17
 
 ### Fixed

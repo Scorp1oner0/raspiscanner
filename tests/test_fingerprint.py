@@ -32,8 +32,10 @@ class _FakeConnection:
     response = None
     last_request = None
     raise_on_connect = None
+    last_context = None
 
-    def __init__(self, host, port, timeout=None):
+    def __init__(self, host, port, timeout=None, context=None):
+        _FakeConnection.last_context = context
         if _FakeConnection.raise_on_connect:
             raise _FakeConnection.raise_on_connect
 
@@ -84,6 +86,22 @@ class TestGrabHttpBannerNormalCases(GrabHttpBannerTestCase):
         _FakeConnection.response = _FakeResponse(body=b"")
         ports.grab_http_banner("10.0.0.5", 443, use_https=True)
         self.assertEqual(_FakeConnection.last_request[0], "GET")
+
+    def test_https_does_not_verify_self_signed_certificates(self):
+        """Quasi tutti gli apparati hanno un certificato auto-firmato:
+        verificandolo, il banner HTTPS restava sempre vuoto."""
+        import ssl
+        _FakeConnection.response = _FakeResponse(body=b"")
+        ports.grab_http_banner("10.0.0.5", 443, use_https=True)
+        self.assertIsNotNone(_FakeConnection.last_context)
+        self.assertEqual(_FakeConnection.last_context.verify_mode, ssl.CERT_NONE)
+        self.assertFalse(_FakeConnection.last_context.check_hostname)
+
+    def test_plain_http_has_no_tls_context(self):
+        _FakeConnection.response = _FakeResponse(body=b"")
+        _FakeConnection.last_context = "unchanged"
+        ports.grab_http_banner("10.0.0.5", 80)
+        self.assertIsNone(_FakeConnection.last_context)
 
     def test_sends_a_user_agent(self):
         _FakeConnection.response = _FakeResponse(body=b"")

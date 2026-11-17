@@ -140,9 +140,16 @@ No body. `200 {"ok": true, "message": "Hotspot deactivated"}` or `400`.
 ## Scanning
 
 ### `POST /api/scan/start` — operator
-No body. `200 {"ok": true, "message": "Scan started"}`, or
-`409 {"ok": false, "message": "Scan already in progress"}` if one is
-already running.
+Optional body `{"port_profile": "common" | "extended"}` (default `common`).
+`common` checks the fixed list of ports used to recognize cameras, NVRs and
+network gear on every device; `extended` adds more services (NAS, IoT,
+databases, alternative web and RTSP ports). `200 {"ok": true, "message":
+"Scan started"}`, `400` for an unknown profile, or `409 {"ok": false,
+"message": "Scan already in progress"}` if one is already running.
+
+### `GET /api/scan/profiles` — viewer
+How many ports each profile checks on every device:
+`{"common": {"ports": 23}, "extended": {"ports": 84}}`.
 
 ### `POST /api/scan/stop` — operator
 No body. `200 {"ok": true}` — requests the running scan to stop at its
@@ -153,6 +160,7 @@ next checkpoint (not necessarily instantaneous).
 {
   "running": false, "progress": 12, "total": 14, "current_ip": null,
   "started_at": 1735000000.0, "finished_at": 1735000090.0, "error": null,
+  "port_profile": "common",
   "devices": [ /* device objects, see below */ ]
 }
 ```
@@ -201,6 +209,34 @@ is set to this same neighbor object.
 
 ### `GET /api/devices/cameras` — viewer
 Same shape, filtered to `is_camera: true` devices only (includes NVR/DVR).
+
+### `POST /api/devices/deep-scan` — operator
+Deep port scan of **one** device found by the last scan:
+`{"ip": "192.168.1.20", "ports": "1-65535"}`. `ports` accepts single ports
+and ranges separated by commas (`"22,80,7000-9000"`); it defaults to
+`1-65535`. Runs in the background, one at a time; the banner of every open
+web port is read too. When it ends, the open ports and banners are added to
+that device (`open_ports`, `http_banners`, `deep_scan`). `200` when started;
+`400` for a missing or unknown IP or an invalid port list; `409` while a
+network scan or another deep scan is running.
+
+### `GET /api/devices/deep-scan` — operator
+State of the current or last deep scan:
+```json
+{
+  "running": false, "ip": "192.168.1.20", "ports_spec": "1-65535",
+  "ports_total": 65535, "ports_done": 65535, "started_at": 1735000000.0,
+  "finished_at": 1735000300.0, "stopped": false, "error": null,
+  "open_ports": [
+    {"port": 22, "service": "SSH"},
+    {"port": 7332, "service": "RaspiScanner", "http": {"server": null, "title": "RaspiScanner"}}
+  ]
+}
+```
+
+### `POST /api/devices/deep-scan/stop` — operator
+No body. `200 {"ok": true}`: the deep scan stops at the end of the current
+block of ports. What it found so far is kept and added to the device.
 
 ### `GET /api/security/summary` — viewer
 `{"critical": 1, "high": 0, "medium": 3, "low": 1}` — finding counts by
@@ -456,6 +492,11 @@ The shape returned by `/api/devices`, `/api/devices/cameras`,
   answered during the scan's listen window. Not full IPv6 discovery of
   every device's every address, just a supplementary "is this device also
   reachable over IPv6" signal alongside the primary IPv4/ARP scan.
+- `deep_scan`: present only after a deep scan of this device:
+  `{"ports": "1-65535", "ports_checked": 65535, "open_ports": [22, 7332],
+  "stopped": false, "finished_at": ...}`. The device's classification still
+  comes from the network scan; the ports found here count for the security
+  findings in the report.
 - `rtsp_url`/`admin_url` are **candidates**, not verified endpoints:
   guessed from an open port (554 for RTSP; the first open web port for
   admin), never confirmed with an actual handshake — see

@@ -261,10 +261,22 @@ function renderAllTable(devices) {
       <td>${escapeHtml(d.hostname)}</td>
       <td>${escapeHtml(d.iface)}</td>
       <td>${renderNetworkCell(d)}</td>
-      <td>${renderPorts(d)}</td>
+      <td>${renderPorts(d)}${deepScanButton(d)}</td>
       <td>${deviceTypeCell(d)}</td>
     </tr>
   `).join("");
+}
+
+function isAtLeastOperator() {
+  return CURRENT_USER.role === "operator" || CURRENT_USER.role === "admin";
+}
+
+function deepScanButton(d) {
+  // Solo per dispositivi raggiungibili davvero (non i fantasmi ONVIF fuori
+  // rete) e per chi puo' avviare uno scan: il server rifiuta comunque.
+  if (!isAtLeastOperator() || d.network_mismatch) return "";
+  const done = d.deep_scan ? ` title="Deep scan done: ${escapeHtml(d.deep_scan.ports)}"` : "";
+  return `<button class="btn tiny btn-deep-scan" data-ip="${escapeHtml(d.ip)}"${done}>🔎 ${d.deep_scan ? "Again" : "Deep scan"}</button>`;
 }
 
 function renderCameraRowOk(d) {
@@ -689,6 +701,7 @@ function applyRoleBasedTabs() {
   // puo' decidere cosa scansiona), non admin-only come il resto delle
   // Settings — vive per questo nella card "Device scan", non li'.
   $("scan-targets-section").classList.toggle("hidden", !isAtLeastOperator);
+  $("scan-port-profile").classList.toggle("hidden", !isAtLeastOperator);
 }
 
 function setupTabs() {
@@ -812,8 +825,25 @@ async function removeUser(username) {
   }
 }
 
+async function loadPortProfiles() {
+  try {
+    const res = await fetch("/api/scan/profiles");
+    if (!res.ok) return;
+    const profiles = await res.json();
+    const select = $("scan-port-profile");
+    select.querySelector('option[value="common"]').textContent = `Common ports (${profiles.common.ports})`;
+    select.querySelector('option[value="extended"]').textContent = `Extended ports (${profiles.extended.ports})`;
+  } catch (e) {
+    console.error("loadPortProfiles", e);
+  }
+}
+
 async function startScan() {
-  const res = await fetch("/api/scan/start", { method: "POST" });
+  const res = await fetch("/api/scan/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ port_profile: $("scan-port-profile").value }),
+  });
   const data = await res.json();
   if (!data.ok) {
     $("scan-status").textContent = data.message;
@@ -890,6 +920,83 @@ async function openHotspotModal(iface) {
   $("hotspot-ssid").value = "";
   populateHotspotIfaceSelect(iface);
   await refreshHotspotStatus();
+}
+
+let deepScanPolling = false;
+
+function openDeepScanModal(ip) {
+  $("deep-scan-modal").dataset.ip = ip;
+  $("deep-scan-ip").textContent = ip;
+  $("deep-scan-modal").classList.remove("hidden");
+  refreshDeepScan();
+}
+
+function closeDeepScanModal() {
+  $("deep-scan-modal").classList.add("hidden");
+}
+
+async function startDeepScan() {
+  const ip = $("deep-scan-modal").dataset.ip;
+  const res = await fetch("/api/devices/deep-scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ip, ports: $("deep-scan-ports").value }),
+  });
+  const data = await res.json();
+  $("deep-scan-msg").textContent = data.message;
+  if (data.ok) refreshDeepScan();
+}
+
+async function stopDeepScan() {
+  await fetch("/api/devices/deep-scan/stop", { method: "POST" });
+  refreshDeepScan();
+}
+
+function renderDeepScanResults(openPorts) {
+  if (!openPorts.length) return '<div class="port-row">No open ports in this range.</div>';
+  return openPorts.map((p) => {
+    const web = p.http ? [p.http.title, p.http.server].filter(Boolean).join(" · ") : "";
+    return `<div class="port-row"><span class="port-num">${p.port}</span>` +
+      `<span>${escapeHtml(p.service)}</span><span class="port-web">${escapeHtml(web)}</span></div>`;
+  }).join("");
+}
+
+async function refreshDeepScan() {
+  const modal = $("deep-scan-modal");
+  if (modal.classList.contains("hidden")) return;
+  let state;
+  try {
+    const res = await fetch("/api/devices/deep-scan");
+    state = await res.json();
+  } catch (e) {
+    console.error("refreshDeepScan", e);
+    return;
+  }
+  const ip = modal.dataset.ip;
+  const otherRunning = state.running && state.ip !== ip;
+  const mine = state.ip === ip;
+  $("btn-deep-scan-start").disabled = state.running;
+  $("btn-deep-scan-stop").disabled = !(state.running && mine);
+
+  const pct = mine && state.ports_total ? Math.round((state.ports_done / state.ports_total) * 100) : 0;
+  $("deep-scan-fill").style.width = pct + "%";
+  if (otherRunning) {
+    $("deep-scan-msg").textContent = `A deep scan of ${state.ip} is running: wait for it to finish.`;
+  } else if (mine && state.running) {
+    $("deep-scan-msg").textContent = `Checking ports ${state.ports_done}/${state.ports_total} (${pct}%)...`;
+  } else if (mine && state.error) {
+    $("deep-scan-msg").textContent = `Error: ${state.error}`;
+  } else if (mine && state.finished_at) {
+    const verb = state.stopped ? "Stopped after" : "Done:";
+    $("deep-scan-msg").textContent = `${verb} ${state.ports_done} ports checked, ${state.open_ports.length} open.`;
+  }
+  $("deep-scan-results").innerHTML = mine && !state.running && state.finished_at
+    ? renderDeepScanResults(state.open_ports) : "";
+
+  if (state.running && !deepScanPolling) {
+    deepScanPolling = true;
+    setTimeout(() => { deepScanPolling = false; refreshDeepScan(); }, 1000);
+  }
 }
 
 function closeHotspotModal() {
@@ -1126,6 +1233,21 @@ async function init() {
   $("hotspot-modal").addEventListener("click", (ev) => {
     if (ev.target.id === "hotspot-modal") closeHotspotModal();
   });
+  $("scan-port-profile").addEventListener("change", () => {
+    $("scan-profile-note").classList.toggle("hidden", $("scan-port-profile").value !== "extended");
+  });
+  $("table-all").addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".btn-deep-scan");
+    if (btn) openDeepScanModal(btn.dataset.ip);
+  });
+  $("btn-close-deep-scan").addEventListener("click", closeDeepScanModal);
+  $("btn-deep-scan-start").addEventListener("click", startDeepScan);
+  $("btn-deep-scan-stop").addEventListener("click", stopDeepScan);
+  $("deep-scan-modal").addEventListener("click", (ev) => {
+    if (ev.target.id === "deep-scan-modal") closeDeepScanModal();
+    const preset = ev.target.closest(".deep-scan-preset");
+    if (preset) $("deep-scan-ports").value = preset.dataset.ports;
+  });
   $("btn-close-wifi-connect").addEventListener("click", closeWifiConnectModal);
   $("btn-wifi-connect-submit").addEventListener("click", submitWifiConnect);
   $("wifi-connect-modal").addEventListener("click", (ev) => {
@@ -1156,6 +1278,7 @@ async function init() {
   });
 
   loadPlatform();
+  loadPortProfiles();
   refreshNetwork();
   refreshScan();
   refreshSecurityStats();

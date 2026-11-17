@@ -64,7 +64,7 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         scan_engine.mdns_probe = lambda iface_ip=None, timeout=2.5, reverse_ips=None: {}
         scan_engine.lldp_cdp_probe = lambda iface, timeout=3: []
         scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
-        scan_engine.scan_ports = lambda ip: (
+        scan_engine.scan_ports = lambda ip, ports=None: (
             [{"port": 554, "service": "RTSP"}, {"port": 23, "service": "Telnet"}]
             if ip == "192.168.10.21" else []
         )
@@ -167,7 +167,7 @@ class TestFullScanToReportIntegration(unittest.TestCase):
         proceed = threading.Event()
         started_processing = threading.Event()
 
-        def slow_scan_ports(ip):
+        def slow_scan_ports(ip, ports=None):
             started_processing.set()
             proceed.wait(timeout=2)
             return []
@@ -260,7 +260,7 @@ class TestRoutedTargetScanIntegration(unittest.TestCase):
         scan_engine.lldp_cdp_probe = lambda iface, timeout=3: []
         scan_engine.ipv6_discovery = lambda iface, timeout=None: []
         scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
-        scan_engine.scan_ports = lambda ip: []
+        scan_engine.scan_ports = lambda ip, ports=None: []
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
 
         scan_engine._state.update(running=False, devices={}, progress=0, total=0,
