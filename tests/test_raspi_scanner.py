@@ -433,6 +433,16 @@ class TestTopologyRoute(RaspiScannerAppTestCase):
         resp = self.client.get("/api/topology", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
 
+    def test_viewer_cannot_read_topology_map(self):
+        resp = self.client.get("/api/topology/map", auth=self.viewer_auth)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_operator_reads_topology_map(self):
+        resp = self.client.get("/api/topology/map", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(set(data), {"networks", "devices", "links", "limits"})
+
 
 class TestWebhookSettings(RaspiScannerAppTestCase):
     def test_viewer_cannot_read_webhook_config(self):

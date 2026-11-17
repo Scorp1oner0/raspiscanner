@@ -28,7 +28,7 @@ from functools import wraps
 from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.serving import ThreadedWSGIServer
 
-from scanner import auth, config, deep_scan, monitoring, platform_net, scan_engine, storage, targets, tls, webhooks
+from scanner import auth, config, deep_scan, monitoring, netmap, platform_net, scan_engine, storage, targets, tls, webhooks
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
@@ -322,6 +322,15 @@ def api_topology():
     """P4 'network topology map': adiacenza a un salto per interfaccia
     (gateway + vicini LLDP/CDP visti), popolata dall'ultimo scan."""
     return jsonify(scan_engine.get_state()["topology"])
+
+
+@app.route("/api/topology/map")
+@require_role("operator")
+def api_topology_map():
+    """Mappa delle reti scansionate (scanner, reti, gateway, apparecchi e
+    apparecchi presenti in piu' reti), ricavata solo dall'ultimo scan."""
+    state = scan_engine.get_state()
+    return jsonify(netmap.build_map(state["topology"], state["devices"], scan_engine.get_local_ips()))
 
 
 @app.route("/api/scan/targets")

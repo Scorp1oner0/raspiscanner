@@ -396,3 +396,18 @@ a.link:hover { text-decoration: underline; }
 label.user-row { cursor: pointer; }
 label.user-row input { margin-right: 8px; vertical-align: middle; }
 .deep-scan-results .port-row span:nth-child(2) { white-space: nowrap; }
+
+.netmap-box { overflow-x: auto; margin-bottom: 18px; }
+.netmap-svg { width: 100%; min-width: 760px; height: auto; display: block; }
+.netmap-svg text { font-family: var(--font-ui); fill: var(--text); }
+.netmap-svg .nm-dim { fill: var(--text-dim); font-family: var(--font-mono); font-size: 10.5px; }
+.netmap-svg .nm-box { fill: var(--panel-2); stroke: var(--border); stroke-width: 1; }
+.netmap-svg .nm-self { fill: var(--accent-dim); stroke: var(--accent); }
+.netmap-svg .nm-gw { stroke: var(--medium); }
+.netmap-svg .nm-bridge { stroke: var(--info); stroke-width: 1.6; }
+.netmap-svg .nm-line { stroke: var(--border); stroke-width: 1.2; fill: none; }
+.netmap-svg .nm-same { stroke: var(--info); stroke-width: 1.6; stroke-dasharray: 5 4; fill: none; }
+.netmap-svg .nm-net-ethernet { stroke: var(--accent); }
+.netmap-svg .nm-net-wifi { stroke: var(--info); }
+.netmap-svg .nm-net-vpn { stroke: var(--medium); }
+.netmap-svg .nm-tag { font-size: 9.5px; fill: var(--text-faint); }

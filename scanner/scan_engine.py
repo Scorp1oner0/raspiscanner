@@ -90,6 +90,11 @@ def _active_networks():
     return nets
 
 
+def get_local_ips():
+    """Indirizzi IPv4 che la macchina dello scanner ha sulle proprie interfacce attive."""
+    return {ip for _, _, ip in _active_networks()}
+
+
 def _selected_interface_networks(cfg):
     """Le reti rilevate sulle interfacce che questo scan deve coprire: tutte,
     tranne quelle che l'operatore ha tolto (`excluded`) o, se

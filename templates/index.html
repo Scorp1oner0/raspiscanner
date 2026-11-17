@@ -276,6 +276,17 @@
         </table>
       </div>
 
+      <h3 class="settings-subtitle">Network map</h3>
+      <p class="modal-desc">
+        The networks the last scan covered, the gateway of each and the
+        devices found in them. A device seen in two networks under the same
+        name (e.g. a Pi on cable and Wi-Fi) is drawn as a bridge between
+        them. Built only from what the scan already saw: which switch port
+        or access point a device hangs on needs credentials this tool
+        doesn't use.
+      </p>
+      <div id="netmap-box" class="netmap-box"></div>
+
       <h3 class="settings-subtitle">Topology (one-hop)</h3>
       <p class="modal-desc">
         Gateway and LLDP/CDP neighbors seen per interface during the last

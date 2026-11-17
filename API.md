@@ -211,6 +211,27 @@ window. When a neighbor's `chassis_id` matches a MAC seen elsewhere in
 this scan, that device's own `lldp_cdp_info` field (see **Device object**)
 is set to this same neighbor object.
 
+### `GET /api/topology/map` — operator
+Map of the scanned networks, built only from what the last scan already
+saw (no credentials, nothing queried on switches or routers):
+```json
+{
+  "networks": [{"iface": "eth0", "cidr": "192.168.1.0/24", "gateway": "192.168.1.1", "kind": "ethernet"}],
+  "devices": [{"ip": "192.168.1.20", "label": "TestPi.local", "vendor": "Raspberry Pi Foundation",
+               "device_type": "Raspberry Pi", "mac": "b8:27:eb:cf:48:f4", "iface": "eth0",
+               "network": "192.168.1.0/24", "is_gateway": false, "is_self": false,
+               "is_camera": false, "is_bridge": true}],
+  "links": [{"a": "192.168.1.20", "b": "10.42.0.1", "kind": "same_device", "name": "testpi"}],
+  "limits": "..."
+}
+```
+`kind` is `ethernet`, `wifi` or `vpn` (a NOARP interface). A device found
+in two networks under the same hostname (a Pi on cable and Wi-Fi) gets
+`is_bridge` and a `same_device` link between its two entries; the scanner's
+own addresses are linked the same way (`is_self`). It can't tell which switch
+port or access point a device of the same network hangs on: that data
+lives only in the network gear.
+
 ### `GET /api/devices` — viewer
 `[device, ...]` — every device found by the last (or current) scan. See
 **Device object** below for the schema.

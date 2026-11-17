@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.4.0.** A network discovery and security-exposure scanner for
+**Status: 1.5.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -153,8 +153,11 @@ of some of the same discovery mechanisms.
   there, same as a VPN tunnel today.
 - **It doesn't build a multi-hop network map.** Topology (`GET
   /api/topology`) is one hop — the gateway and directly observed LLDP/CDP
-  neighbors — not a full network graph. That would need SNMP-walking
-  remote switches with credentials this tool doesn't have and won't guess.
+  neighbors. The network map (`GET /api/topology/map`) draws the scanned
+  networks and the devices found in them, and links a device seen in two
+  of them, but not which switch port or access point a device hangs on:
+  that would need SNMP-walking remote switches with credentials this tool
+  doesn't have and won't guess.
 - **It isn't tuned for very large networks.** Hosts within a scan are
   processed one at a time; see [Known limitations](#known-limitations).
 - **It doesn't phone home.** No telemetry, no cloud dependency, no

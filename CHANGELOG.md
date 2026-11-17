@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-17
+
+### Added
+
+- **Network map.** The History tab now draws the networks the last scan
+  covered: the scanner on the left, each network on its interface (Ethernet,
+  Wi-Fi or VPN) with its gateway, and the devices found in it. A device seen
+  in two networks under the same name (a Raspberry Pi on cable and Wi-Fi)
+  is marked as a bridge and linked between them, and the scanner's own
+  addresses are linked the same way. It is built only from what the scan
+  already saw, with no credentials and nothing asked of switches or
+  routers, so it can't say which switch port or access point a device of
+  the same network hangs on. New `GET /api/topology/map` (operator), see
+  `API.md`. The existing one-hop `GET /api/topology` is unchanged.
+
 ## [1.4.0] - 2026-11-17
 
 ### Added

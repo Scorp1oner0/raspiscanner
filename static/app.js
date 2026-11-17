@@ -468,6 +468,13 @@ async function refreshHistory() {
   }
 
   try {
+    const res = await fetch("/api/topology/map");
+    renderNetMap(await res.json());
+  } catch (e) {
+    console.error("refreshHistory (netmap)", e);
+  }
+
+  try {
     const res = await fetch("/api/topology");
     const topology = await res.json();
     const ifaces = Object.keys(topology).sort();
@@ -495,6 +502,70 @@ async function refreshHistory() {
   } catch (e) {
     console.error("refreshHistory (topology)", e);
   }
+}
+
+function renderNetMap(map) {
+  const box = $("netmap-box");
+  if (!box) return;
+  if (!map.networks || !map.networks.length) {
+    box.innerHTML = '<p class="modal-desc">No map yet — run a scan first.</p>';
+    return;
+  }
+  const W = 1000, COLS = 2, BW = 218, BH = 46, GX = 14, GY = 10, DX = 420, NX = 200, NW = 150, NH = 54;
+  const trunc = (t, n) => (t && t.length > n ? t.slice(0, n - 1) + "…" : t || "");
+  const bands = [];
+  let y = 8;
+  map.networks.forEach((net) => {
+    const devs = map.devices.filter((d) => d.iface === net.iface && d.network === net.cidr);
+    devs.sort((a, b) => (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || a.ip.localeCompare(b.ip, undefined, { numeric: true }));
+    const rows = Math.max(1, Math.ceil(devs.length / COLS));
+    const h = rows * (BH + GY) + 14;
+    bands.push({ net, devs, y, h, cy: y + h / 2 });
+    y += h + 6;
+  });
+  const H = y + 4;
+  const selfY = H / 2;
+  const pos = {};
+  let lines = "", boxes = "";
+  bands.forEach((b) => {
+    lines += `<path class="nm-line" d="M150 ${selfY} C 175 ${selfY} 175 ${b.cy} ${NX} ${b.cy}"/>`;
+    const busX = DX - 18;
+    if (b.devs.length) {
+      lines += `<path class="nm-line" d="M${NX + NW} ${b.cy} H ${busX}"/>`;
+      const firstY = b.y + 7 + BH / 2, lastRow = Math.ceil(b.devs.length / COLS) - 1;
+      const lastY = b.y + 7 + lastRow * (BH + GY) + BH / 2;
+      lines += `<path class="nm-line" d="M${busX} ${firstY} V ${lastY}"/>`;
+    }
+    b.devs.forEach((d, i) => {
+      const col = i % COLS, row = Math.floor(i / COLS);
+      const x = DX + col * (BW + GX), dy = b.y + 7 + row * (BH + GY);
+      pos[d.ip + "|" + d.network] = { x, y: dy };
+      pos[d.ip] = pos[d.ip] || { x, y: dy };
+      lines += `<path class="nm-line" d="M${busX} ${dy + BH / 2} H ${x}"/>`;
+      const cls = "nm-box" + (d.is_self ? " nm-self" : "") + (d.is_gateway ? " nm-gw" : "") + (d.is_bridge ? " nm-bridge" : "");
+      const tags = [d.is_self ? "this scanner" : "", d.is_gateway ? "gateway" : "", d.is_bridge ? "bridge" : ""].filter(Boolean).join(" · ");
+      boxes += `<g><title>${escapeHtml(d.label)} — ${escapeHtml(d.ip)}${d.mac ? " — " + escapeHtml(d.mac) : ""}${d.vendor ? " — " + escapeHtml(d.vendor) : ""}</title>
+        <rect class="${cls}" x="${x}" y="${dy}" width="${BW}" height="${BH}" rx="7"/>
+        <text x="${x + 10}" y="${dy + 18}" font-size="12.5">${escapeHtml(trunc(d.label, 26))}</text>
+        <text class="nm-dim" x="${x + 10}" y="${dy + 34}">${escapeHtml(d.ip)}${d.device_type ? " · " + escapeHtml(trunc(d.device_type, 16)) : ""}</text>
+        ${tags ? `<text class="nm-tag" x="${x + BW - 8}" y="${dy + 14}" text-anchor="end">${escapeHtml(tags)}</text>` : ""}</g>`;
+    });
+    boxes += `<g><rect class="nm-box nm-net-${escapeHtml(b.net.kind)}" x="${NX}" y="${b.cy - NH / 2}" width="${NW}" height="${NH}" rx="9"/>
+      <text x="${NX + 12}" y="${b.cy - 7}" font-size="12.5">${escapeHtml(b.net.iface)} · ${escapeHtml(b.net.kind)}</text>
+      <text class="nm-dim" x="${NX + 12}" y="${b.cy + 9}">${escapeHtml(b.net.cidr || "")}</text>
+      <text class="nm-tag" x="${NX + 12}" y="${b.cy + 22}">gw ${escapeHtml(b.net.gateway || "-")}</text></g>`;
+  });
+  boxes = `<g><rect class="nm-box nm-self" x="14" y="${selfY - 28}" width="136" height="56" rx="10"/>
+    <text x="26" y="${selfY - 4}" font-size="13" font-weight="600">This scanner</text>
+    <text class="nm-dim" x="26" y="${selfY + 14}">${map.networks.length} network${map.networks.length === 1 ? "" : "s"}</text></g>` + boxes;
+  let links = "";
+  (map.links || []).forEach((l) => {
+    const a = pos[l.a], b = pos[l.b];
+    if (!a || !b) return;
+    const ax = a.x + BW, bx = b.x + BW, ay = a.y + BH / 2, by = b.y + BH / 2;
+    links += `<path class="nm-same" d="M${ax} ${ay} C ${ax + 46} ${ay} ${bx + 46} ${by} ${bx} ${by}"/>`;
+  });
+  box.innerHTML = `<svg class="netmap-svg" viewBox="0 0 ${W + 60} ${H}" role="img" aria-label="Network map">${lines}${links}${boxes}</svg>`;
 }
 
 async function compareScans() {
