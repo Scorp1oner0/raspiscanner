@@ -330,7 +330,7 @@ def api_topology_map():
     """Mappa delle reti scansionate (scanner, reti, gateway, apparecchi e
     apparecchi presenti in piu' reti), ricavata solo dall'ultimo scan."""
     state = scan_engine.get_state()
-    return jsonify(netmap.build_map(state["topology"], state["devices"], scan_engine.get_local_ips()))
+    return jsonify(netmap.build_map(state["topology"], state["devices"], scan_engine.get_local_ips(), state.get("uplink")))
 
 
 @app.route("/api/scan/targets")
@@ -411,7 +411,7 @@ def api_report():
     if fmt != "json":
         return _report_file(fmt, state["devices"], state["started_at"], state["finished_at"],
                             changes=None, partial=state["running"], name="raspiscanner-report",
-                            netmap_data=netmap.build_map(state["topology"], state["devices"], scan_engine.get_local_ips()))
+                            netmap_data=netmap.build_map(state["topology"], state["devices"], scan_engine.get_local_ips(), state.get("uplink")))
     text = assessment.generate_all(state["devices"], started_at=state["started_at"], finished_at=state["finished_at"])
     if state["running"]:
         text = _PARTIAL_NOTICE + text

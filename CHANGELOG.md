@@ -5,6 +5,34 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-17
+
+### Added
+
+- **The network map now works on a network it has never seen.** It uses two
+  new probes and no credentials, and nothing about any particular network is
+  written in the code:
+  - **Path to the Internet.** The first hops of a traceroute to
+    `1.1.1.1`, stopping at the first public address (the provider's router),
+    drawn as a row above the networks: scanner, each router on the way
+    (named when the scan found it, otherwise "Router" with its address and
+    delay), then the provider router and Internet. This is the one probe
+    that leaves the local network, towards a single address. Switch it off
+    with `RASPISCANNER_TRACE_TARGET=` (empty) or point it elsewhere.
+  - **DHCP servers.** On each Ethernet and Wi-Fi network it sends one
+    DHCPDISCOVER with an invented hardware address and listens for the
+    offers, never sending the request, so no address is taken. For every
+    server it shows who it is, the gateway and DNS it recommends. Switch it
+    off with `RASPISCANNER_DHCP_PROBE=0`.
+  - **Roles.** Each device carries its roles: gateway, DHCP server, DNS
+    (offered by DHCP or with port 53 open), bridge between two networks, or
+    this scanner. Each network box shows its gateway and its DHCP servers.
+  - **One device, several addresses.** Addresses answering with the same MAC
+    in the same network are drawn as one device with "+N".
+- The same additions are drawn in the PDF map. `GET /api/topology` now has a
+  `dhcp` list per interface and `GET /api/topology/map` has `uplink`, `roles`,
+  `ips` and each network's `dhcp`; `GET /api/scan/status` carries `uplink`.
+
 ## [1.6.0] - 2026-11-17
 
 ### Added

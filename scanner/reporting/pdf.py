@@ -405,8 +405,11 @@ def _map_bands(netmap):
         devs = [d for d in netmap["devices"] if d.get("iface") == net["iface"] and d.get("network") == net["cidr"]]
         devs.sort(key=lambda d: (not d["is_self"], not d["is_gateway"], [int(p) if p.isdigit() else 0 for p in d["ip"].split(".")]))
         rows = max(1, -(-len(devs) // _MAP_COLS))
-        bands.append({"net": net, "devs": devs, "h": max(rows * (_MAP_DEV_H + _MAP_GAP) + 6, 44)})
+        bands.append({"net": net, "devs": devs, "h": max(rows * (_MAP_DEV_H + _MAP_GAP) + 6, 54)})
     return bands
+
+
+_ROLE_TEXT = {"gateway": "gateway", "dhcp": "DHCP", "dns": "DNS", "bridge": "bridge"}
 
 
 def _map_device(doc, dev, x, top):
@@ -418,9 +421,40 @@ def _map_device(doc, dev, x, top):
     if dev["is_self"]:
         stroke, line = GREEN, 1.1
     doc.rect(x, top, _MAP_DEV_W, _MAP_DEV_H, fill=GREEN_BG if dev["is_self"] else STRIPE, stroke=stroke, line=line)
-    doc.text(x + 5, top + 10.5, _fit(dev["label"], "F2", 7.2, _MAP_DEV_W - 10), "F2", 7.2, INK)
-    detail = dev["ip"] + (f"  {dev['device_type']}" if dev.get("device_type") and dev["device_type"] != "Generic" else "")
+    tags = " · ".join(_ROLE_TEXT[r] for r in dev.get("roles") or [] if r in _ROLE_TEXT)
+    tags_w = _width(tags, "F1", 5.8) + 6 if tags else 0
+    doc.text(x + 5, top + 10.5, _fit(dev["label"], "F2", 7.2, _MAP_DEV_W - 10 - tags_w), "F2", 7.2, INK)
+    if tags:
+        doc.text(x + _MAP_DEV_W - 4, top + 9.5, tags, "F1", 5.8, FAINT, align="right")
+    ips = dev.get("ips") or [dev["ip"]]
+    detail = dev["ip"] + (f" +{len(ips) - 1}" if len(ips) > 1 else "")
+    if dev.get("device_type") and dev["device_type"] != "Generic":
+        detail += f"  {dev['device_type']}"
     doc.text(x + 5, top + 20.5, _fit(detail, "F1", 6.2, _MAP_DEV_W - 10), "F1", 6.2, MUTED)
+
+
+def _map_path(doc, path, scanner_label="This scanner"):
+    """Il percorso verso Internet: una fila di caselle (due se serve)."""
+    chain = [(scanner_label, "", GREEN)]
+    for hop in path["hops"]:
+        title = hop.get("label") or ("Provider router" if hop["is_public"] else "Router" if hop["ip"] else "no reply")
+        sub = hop["ip"] or f"hop {hop['ttl']}"
+        chain.append((title, sub, AMBER if hop["is_public"] else RULE))
+    if path.get("internet"):
+        chain.append(("Internet", f"via {path['target']}" if path.get("target") else "", GREEN))
+    box_w, gap, box_h, per_row = 58, 12, 24, 7
+    for index, (title, sub, color) in enumerate(chain):
+        row, col = divmod(index, per_row)
+        x, top = MARGIN + col * (box_w + gap), doc.y + row * (box_h + 8)
+        if col:
+            doc.line([(x - gap, top + box_h / 2), (x, top + box_h / 2)])
+        doc.rect(x, top, box_w, box_h, fill=GREEN_BG if color == GREEN else STRIPE, stroke=color, line=1.0)
+        doc.text(x + 4, top + 10, _fit(title, "F2", 6.4, box_w - 8), "F2", 6.4, INK)
+        doc.text(x + 4, top + 19, _fit(sub, "F1", 5.6, box_w - 8), "F1", 5.6, MUTED)
+    rows = -(-len(chain) // per_row)
+    doc.y += rows * (box_h + 8) + 2
+    doc.text(MARGIN, doc.y + 6, "Path to the Internet: the first hops of a traceroute", "F1", 6.4, FAINT)
+    doc.y += 16
 
 
 def _netmap(doc, netmap):
@@ -437,6 +471,8 @@ def _netmap(doc, netmap):
                   "saw: which switch port or access point a device hangs on is not known.",
                   size=8.5, color=MUTED, gap=6)
 
+    if netmap.get("uplink"):
+        _map_path(doc, netmap["uplink"])
     groups, current, used = [], [], 0
     limit = PAGE_H - MARGIN_BOTTOM - 22
     start = doc.y
@@ -462,10 +498,13 @@ def _netmap(doc, netmap):
             centers.append(cy)
             net = band["net"]
             color = NET_COLOR.get(net["kind"], MUTED)
-            doc.rect(_MAP_NET_X, cy - 17, _MAP_NET_W, 34, fill=WHITE, stroke=color, line=1.2)
-            doc.text(_MAP_NET_X + 5, cy - 6, _fit(f"{net['iface']}  {net['kind']}", "F2", 7.4, _MAP_NET_W - 10), "F2", 7.4, INK)
-            doc.text(_MAP_NET_X + 5, cy + 3.5, _fit(net.get("cidr") or "", "F1", 6.6, _MAP_NET_W - 10), "F1", 6.6, MUTED)
-            doc.text(_MAP_NET_X + 5, cy + 12, _fit(f"gw {net.get('gateway') or '-'}", "F1", 6.2, _MAP_NET_W - 10), "F1", 6.2, FAINT)
+            doc.rect(_MAP_NET_X, cy - 22, _MAP_NET_W, 44, fill=WHITE, stroke=color, line=1.2)
+            doc.text(_MAP_NET_X + 5, cy - 11, _fit(f"{net['iface']}  {net['kind']}", "F2", 7.4, _MAP_NET_W - 10), "F2", 7.4, INK)
+            doc.text(_MAP_NET_X + 5, cy - 2, _fit(net.get("cidr") or "", "F1", 6.6, _MAP_NET_W - 10), "F1", 6.6, MUTED)
+            doc.text(_MAP_NET_X + 5, cy + 7, _fit(f"gateway {net.get('gateway') or '-'}", "F1", 6.0, _MAP_NET_W - 10), "F1", 6.0, FAINT)
+            dhcp = ", ".join(o["server"] for o in net.get("dhcp") or [])
+            doc.text(_MAP_NET_X + 5, cy + 16, _fit(f"DHCP {dhcp}" if dhcp else "DHCP not seen", "F1", 6.0, _MAP_NET_W - 10),
+                     "F1", 6.0, FAINT)
             doc.line([(_MAP_NET_X + _MAP_NET_W, cy), (_MAP_BUS_X, cy)])
             rows = -(-len(band["devs"]) // _MAP_COLS) if band["devs"] else 0
             if rows:
@@ -508,7 +547,7 @@ def _netmap(doc, netmap):
     doc.y += 6
     doc.ensure(24)
     doc.text(MARGIN, doc.y + 8, "Green: this scanner   Amber border: gateway   Blue border: seen in two networks   "
-             "Dashed: same device in two networks", "F1", 7, FAINT)
+             "Dashed: same device in two networks   +N: more addresses of the same device", "F1", 7, FAINT)
     doc.y += 14
 
 

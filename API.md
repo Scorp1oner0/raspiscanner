@@ -225,7 +225,15 @@ saw (no credentials, nothing queried on switches or routers):
   "limits": "..."
 }
 ```
-`kind` is `ethernet`, `wifi` or `vpn` (a NOARP interface). A device found
+`kind` is `ethernet`, `wifi` or `vpn` (a NOARP interface). Each network also
+has `dhcp`: the DHCP servers that answered a DHCPDISCOVER on it
+(`server`, `router`, `dns`, `domain`; empty when none answered or the probe is
+off). A device has `ips` (all addresses sharing its MAC in that network, the
+first one is `ip`) and `roles`, a list of `scanner`, `gateway`, `dhcp`, `dns`,
+`bridge`. `uplink` is `null` or the path to the Internet:
+`{"target": "1.1.1.1", "internet": true, "via": "eth0", "hops": [{"ttl": 1,
+"ip": "192.168.1.1", "rtt_ms": 0.6, "private": true, "label": "router",
+"known": true, "is_public": false}]}`; a hop with no reply has `ip: null`. A device found
 in two networks under the same hostname (a Pi on cable and Wi-Fi) gets
 `is_bridge` and a `same_device` link between its two entries; the scanner's
 own addresses are linked the same way (`is_self`). It can't tell which switch

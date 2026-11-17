@@ -14,7 +14,8 @@ from . import config, platform_net, storage, targets, vendor, webhooks
 from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, guess_vendor_from_banner
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import (
-    arp_scan, icmp_scan, ipv6_discovery, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe,
+    arp_scan, dhcp_probe, icmp_scan, ipv6_discovery, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe,
+    trace_uplink,
 )
 from .fingerprint import grab_http_banner, scan_ports, web_banner
 from .hosts import classify_host
@@ -40,6 +41,9 @@ _state = {
     # con credenziali che non abbiamo — fuori scope per un tool non
     # intrusivo). {iface: {"cidr":.., "gateway":.., "neighbors": [...]}}
     "topology": {},
+    # Percorso dallo scanner verso Internet (scanner.discovery.uplink): i
+    # salti fino al primo indirizzo pubblico, o None se la sonda e' spenta.
+    "uplink": None,
 }
 _stop_flag = threading.Event()
 
@@ -533,6 +537,11 @@ def _run_scan_thread(networks, ports=None):
         gateways = {}
         topology = {}
         ipv6_by_iface = {}
+        # Il percorso verso Internet non dipende da una rete in particolare:
+        # parte subito in un thread suo e si raccoglie dopo il giro delle reti.
+        uplink_result = {}
+        t_uplink = threading.Thread(target=lambda: uplink_result.update(trace_uplink() or {}), daemon=True)
+        t_uplink.start()
         for iface, cidr, iface_ip in networks:
             if _stop_flag.is_set():
                 break
@@ -595,6 +604,7 @@ def _run_scan_thread(networks, ports=None):
             # IPv6 discovery invia un frame Ethernet multicast che non ha
             # senso su un link punto-punto senza L2 (WireGuard/tun).
             onvif_partial, mdns_partial, lldp_cdp_neighbors, ipv6_partial = {}, {}, [], []
+            dhcp_servers = []
             t_onvif = threading.Thread(target=lambda: onvif_partial.update(onvif_probe(iface_ip=iface_ip, timeout=3)))
             # reverse_ips=seen_ips: query PTR inversa per gli host gia'
             # trovati da ARP/ICMP su questa rete, oltre alle query per i
@@ -609,8 +619,10 @@ def _run_scan_thread(networks, ports=None):
             if not is_noarp_iface:
                 t_lldp_cdp = threading.Thread(target=lambda: lldp_cdp_neighbors.extend(lldp_cdp_probe(iface, timeout=3)))
                 t_ipv6 = threading.Thread(target=lambda: ipv6_partial.extend(ipv6_discovery(iface)))
+                t_dhcp = threading.Thread(target=lambda: dhcp_servers.extend(dhcp_probe(iface)))
                 threads.append(t_lldp_cdp)
                 threads.append(t_ipv6)
+                threads.append(t_dhcp)
             for t in threads:
                 t.start()
             for t in threads:
@@ -630,8 +642,10 @@ def _run_scan_thread(networks, ports=None):
             # apparato LLDP/CDP-capable presente", vedi discovery.lldp_cdp).
             topology[iface] = {
                 "cidr": cidr, "gateway": gateways[iface], "neighbors": lldp_cdp_neighbors,
+                "dhcp": dhcp_servers,
             }
-        _update(topology=topology)
+        t_uplink.join(timeout=config.UPLINK_MAX_HOPS * config.UPLINK_HOP_TIMEOUT + 2)
+        _update(topology=topology, uplink=uplink_result or None)
 
         known_ips = {h[0] for h in all_hosts}
         orphan_ips = _orphan_onvif_ips(onvif_results, known_ips)

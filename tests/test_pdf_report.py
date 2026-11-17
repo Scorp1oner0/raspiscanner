@@ -242,6 +242,30 @@ class TestNetworkMapSection(unittest.TestCase):
         self.assertNotIn("x" * 60, text)
         self.assertIn("...", text)
 
+    def test_path_to_the_internet_is_drawn_before_the_networks(self):
+        nodes = [_node("192.168.1.1", "192.168.1.0/24", "eth0", "router", is_gateway=True, roles=["gateway", "dhcp"])]
+        nm = _netmap(nodes)
+        nm["uplink"] = {"target": "1.1.1.1", "internet": True, "via": "eth0", "hops": [
+            {"ttl": 1, "ip": "192.168.1.1", "rtt_ms": 0.5, "private": True, "label": "router", "known": True, "is_public": False},
+            {"ttl": 2, "ip": None, "rtt_ms": None, "private": None, "label": None, "known": False, "is_public": False},
+            {"ttl": 3, "ip": "151.5.0.1", "rtt_ms": 9.0, "private": False, "label": None, "known": False, "is_public": True}]}
+        text = _pages_text(_render(netmap=nm))[-1]
+        self.assertIn("Path to the Internet", text)
+        self.assertIn("Provider router", text)
+        self.assertIn("no reply", text)
+        self.assertIn("Internet", text)
+        self.assertLess(text.index("Path to the Internet"), text.index("eth0"))
+
+    def test_roles_dhcp_and_extra_addresses_are_written(self):
+        node = _node("192.168.1.1", "192.168.1.0/24", "eth0", "router", is_gateway=True, roles=["gateway", "dhcp", "dns"],
+                     ips=["192.168.1.1", "192.168.1.2"])
+        nm = _netmap([node])
+        nm["networks"][0]["dhcp"] = [{"server": "192.168.1.1", "router": "192.168.1.1", "dns": [], "domain": None}]
+        text = _pages_text(_render(netmap=nm))[-1]
+        self.assertIn("DHCP 192.168.1.1", text)
+        self.assertIn("+1", text)
+        self.assertIn("DHCP not seen", text)
+
 
 if __name__ == "__main__":
     unittest.main()

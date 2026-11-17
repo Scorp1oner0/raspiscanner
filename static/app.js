@@ -515,22 +515,46 @@ function renderNetMap(map) {
     box.innerHTML = '<p class="modal-desc">No map yet — run a scan first.</p>';
     return;
   }
-  const W = 1000, COLS = 2, BW = 218, BH = 46, GX = 14, GY = 10, DX = 420, NX = 200, NW = 150, NH = 54;
+  const W = 1000, COLS = 2, BW = 218, BH = 46, GX = 14, GY = 10, DX = 420, NX = 200, NW = 150, NH = 66;
   const trunc = (t, n) => (t && t.length > n ? t.slice(0, n - 1) + "…" : t || "");
+  const ROLE = { dhcp: "DHCP", dns: "DNS", gateway: "gateway", scanner: "this scanner", bridge: "bridge" };
+  const path = map.uplink;
+  const pathH = path ? 92 : 0;
   const bands = [];
-  let y = 8;
+  let y = 8 + pathH;
   map.networks.forEach((net) => {
     const devs = map.devices.filter((d) => d.iface === net.iface && d.network === net.cidr);
     devs.sort((a, b) => (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || a.ip.localeCompare(b.ip, undefined, { numeric: true }));
     const rows = Math.max(1, Math.ceil(devs.length / COLS));
-    const h = rows * (BH + GY) + 14;
+    const h = Math.max(rows * (BH + GY) + 14, NH + 14);
     bands.push({ net, devs, y, h, cy: y + h / 2 });
     y += h + 6;
   });
   const H = y + 4;
-  const selfY = H / 2;
+  const selfY = pathH + (H - pathH) / 2;
   const pos = {};
   let lines = "", boxes = "";
+
+  if (path) {
+    const hopW = 118, hopGap = 26, top = 8;
+    const chain = [{ title: "This scanner", sub: "", cls: "nm-self" }].concat(path.hops.map((h) => ({
+      title: h.label || (h.ip ? (h.is_public ? "Provider router" : "Router") : "no reply"),
+      sub: h.ip ? `${h.ip}${h.rtt_ms != null ? " · " + h.rtt_ms + " ms" : ""}` : `hop ${h.ttl}`,
+      cls: h.is_public ? "nm-gw" : "",
+    })));
+    if (path.internet) chain.push({ title: "Internet", sub: path.target ? "via " + path.target : "", cls: "nm-net-ethernet" });
+    chain.forEach((c, i) => {
+      const x = 14 + i * (hopW + hopGap);
+      if (x + hopW > W + 40) return;
+      if (i > 0) lines += `<path class="nm-line" d="M${x - hopGap} ${top + 26} H ${x}"/><path class="nm-line" d="M${x - 6} ${top + 22} L ${x} ${top + 26} L ${x - 6} ${top + 30}"/>`;
+      boxes += `<g><rect class="nm-box ${c.cls}" x="${x}" y="${top}" width="${hopW}" height="52" rx="8"/>
+        <text x="${x + 9}" y="${top + 22}" font-size="12">${escapeHtml(trunc(c.title, 17))}</text>
+        <text class="nm-dim" x="${x + 9}" y="${top + 38}">${escapeHtml(trunc(c.sub, 20))}</text></g>`;
+    });
+    boxes += `<text class="nm-tag" x="14" y="${top + 68}">Path to the Internet (first hops of a traceroute)</text>`;
+    lines += `<path class="nm-line" d="M73 ${top + 52} V ${selfY - 28}"/>`;
+  }
+
   bands.forEach((b) => {
     lines += `<path class="nm-line" d="M150 ${selfY} C 175 ${selfY} 175 ${b.cy} ${NX} ${b.cy}"/>`;
     const busX = DX - 18;
@@ -547,17 +571,20 @@ function renderNetMap(map) {
       pos[d.ip] = pos[d.ip] || { x, y: dy };
       lines += `<path class="nm-line" d="M${busX} ${dy + BH / 2} H ${x}"/>`;
       const cls = "nm-box" + (d.is_self ? " nm-self" : "") + (d.is_gateway ? " nm-gw" : "") + (d.is_bridge ? " nm-bridge" : "");
-      const tags = [d.is_self ? "this scanner" : "", d.is_gateway ? "gateway" : "", d.is_bridge ? "bridge" : ""].filter(Boolean).join(" · ");
-      boxes += `<g><title>${escapeHtml(d.label)} — ${escapeHtml(d.ip)}${d.mac ? " — " + escapeHtml(d.mac) : ""}${d.vendor ? " — " + escapeHtml(d.vendor) : ""}</title>
+      const tags = (d.roles || []).map((r) => ROLE[r] || r).join(" · ");
+      const extra = d.ips && d.ips.length > 1 ? ` +${d.ips.length - 1}` : "";
+      boxes += `<g><title>${escapeHtml(d.label)} — ${escapeHtml((d.ips || [d.ip]).join(", "))}${d.mac ? " — " + escapeHtml(d.mac) : ""}${d.vendor ? " — " + escapeHtml(d.vendor) : ""}</title>
         <rect class="${cls}" x="${x}" y="${dy}" width="${BW}" height="${BH}" rx="7"/>
-        <text x="${x + 10}" y="${dy + 18}" font-size="12.5">${escapeHtml(trunc(d.label, 26))}</text>
-        <text class="nm-dim" x="${x + 10}" y="${dy + 34}">${escapeHtml(d.ip)}${d.device_type ? " · " + escapeHtml(trunc(d.device_type, 16)) : ""}</text>
-        ${tags ? `<text class="nm-tag" x="${x + BW - 8}" y="${dy + 14}" text-anchor="end">${escapeHtml(tags)}</text>` : ""}</g>`;
+        <text x="${x + 10}" y="${dy + 18}" font-size="12.5">${escapeHtml(trunc(d.label, tags ? 19 : 26))}</text>
+        <text class="nm-dim" x="${x + 10}" y="${dy + 34}">${escapeHtml(d.ip)}${extra}${d.device_type ? " · " + escapeHtml(trunc(d.device_type, 16)) : ""}</text>
+        ${tags ? `<text class="nm-tag" x="${x + BW - 8}" y="${dy + 14}" text-anchor="end">${escapeHtml(trunc(tags, 30))}</text>` : ""}</g>`;
     });
+    const dhcp = (b.net.dhcp || []).map((o) => o.server).join(", ");
     boxes += `<g><rect class="nm-box nm-net-${escapeHtml(b.net.kind)}" x="${NX}" y="${b.cy - NH / 2}" width="${NW}" height="${NH}" rx="9"/>
-      <text x="${NX + 12}" y="${b.cy - 7}" font-size="12.5">${escapeHtml(b.net.iface)} · ${escapeHtml(b.net.kind)}</text>
-      <text class="nm-dim" x="${NX + 12}" y="${b.cy + 9}">${escapeHtml(b.net.cidr || "")}</text>
-      <text class="nm-tag" x="${NX + 12}" y="${b.cy + 22}">gw ${escapeHtml(b.net.gateway || "-")}</text></g>`;
+      <text x="${NX + 12}" y="${b.cy - 15}" font-size="12.5">${escapeHtml(b.net.iface)} · ${escapeHtml(b.net.kind)}</text>
+      <text class="nm-dim" x="${NX + 12}" y="${b.cy}">${escapeHtml(b.net.cidr || "")}</text>
+      <text class="nm-tag" x="${NX + 12}" y="${b.cy + 14}">gateway ${escapeHtml(b.net.gateway || "-")}</text>
+      <text class="nm-tag" x="${NX + 12}" y="${b.cy + 26}">${dhcp ? "DHCP " + escapeHtml(trunc(dhcp, 20)) : "DHCP not seen"}</text></g>`;
   });
   boxes = `<g><rect class="nm-box nm-self" x="14" y="${selfY - 28}" width="136" height="56" rx="10"/>
     <text x="26" y="${selfY - 4}" font-size="13" font-weight="600">This scanner</text>

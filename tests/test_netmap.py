@@ -98,5 +98,68 @@ class TestNetworkMap(unittest.TestCase):
         self.assertEqual((result["networks"], result["devices"], result["links"]), ([], [], []))
 
 
+class TestRolesAndPath(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(netmap.network_setup, "is_noarp", side_effect=lambda i: i.startswith("wg"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _topology(self, dhcp):
+        return {"eth0": {"cidr": "192.168.88.0/24", "gateway": "192.168.88.2", "neighbors": [], "dhcp": dhcp}}
+
+    def test_dhcp_server_and_dns_roles_come_from_the_offer(self):
+        offer = {"server": "192.168.88.200", "router": "192.168.88.2", "dns": ["192.168.88.2"], "domain": "casa.lan"}
+        devices = [_device("192.168.88.200", "eth0", "192.168.88.0/24", "mikrotik"),
+                   _device("192.168.88.2", "eth0", "192.168.88.0/24", "pihole")]
+        result = netmap.build_map(self._topology([offer]), devices)
+        roles = {d["ip"]: d["roles"] for d in result["devices"]}
+        self.assertEqual(roles["192.168.88.200"], ["dhcp"])
+        self.assertEqual(roles["192.168.88.2"], ["gateway", "dns"])
+        self.assertEqual(result["networks"][0]["dhcp"][0]["router"], "192.168.88.2")
+
+    def test_open_dns_port_marks_a_dns_server(self):
+        device = _device("192.168.88.9", "eth0", "192.168.88.0/24", "nas")
+        device["open_ports"] = [{"port": 53, "service": "DNS"}]
+        result = netmap.build_map(self._topology([]), [device])
+        self.assertIn("dns", result["devices"][0]["roles"])
+
+    def test_same_mac_in_a_network_is_one_device_with_all_its_addresses(self):
+        devices = [_device("192.168.88.10", "eth0", "192.168.88.0/24", mac="AA:BB:CC:00:00:01"),
+                   _device("192.168.88.11", "eth0", "192.168.88.0/24", mac="aa:bb:cc:00:00:01"),
+                   _device("192.168.88.5", "eth0", "192.168.88.0/24", mac="AA:BB:CC:00:00:01")]
+        result = netmap.build_map(self._topology([]), devices)
+        self.assertEqual(len(result["devices"]), 1)
+        self.assertEqual(result["devices"][0]["ips"], ["192.168.88.5", "192.168.88.10", "192.168.88.11"])
+
+    def test_same_mac_in_two_networks_stays_two_devices(self):
+        devices = [_device("192.168.88.10", "eth0", "192.168.88.0/24", mac="AA:BB:CC:00:00:01"),
+                   _device("172.20.10.4", "wlan0", "172.20.10.0/28", mac="AA:BB:CC:00:00:01")]
+        result = netmap.build_map(TOPOLOGY, devices)
+        self.assertEqual(len(result["devices"]), 2)
+
+    def test_devices_without_mac_are_never_merged(self):
+        devices = [_device("10.0.0.1", "wg0", "10.0.0.0/24"), _device("10.0.0.2", "wg0", "10.0.0.0/24")]
+        self.assertEqual(len(netmap.build_map(TOPOLOGY, devices)["devices"]), 2)
+
+    def test_uplink_path_names_known_hops_and_marks_the_public_one(self):
+        uplink = {"target": "1.1.1.1", "internet": True, "reached": False, "hops": [
+            {"ttl": 1, "ip": "192.168.88.2", "rtt_ms": 0.6, "private": True},
+            {"ttl": 2, "ip": "192.168.1.1", "rtt_ms": 4.0, "private": True},
+            {"ttl": 3, "ip": None, "rtt_ms": None, "private": None},
+            {"ttl": 4, "ip": "151.5.0.1", "rtt_ms": 12.0, "private": False}]}
+        devices = [_device("192.168.88.2", "eth0", "192.168.88.0/24", "pihole")]
+        result = netmap.build_map(self._topology([]), devices, uplink=uplink)
+        path = result["uplink"]
+        self.assertEqual(path["via"], "eth0")
+        self.assertTrue(path["internet"])
+        self.assertEqual([h["label"] for h in path["hops"]], ["pihole", None, None, None])
+        self.assertEqual([h["known"] for h in path["hops"]], [True, False, False, False])
+        self.assertEqual([h["is_public"] for h in path["hops"]], [False, False, False, True])
+
+    def test_no_uplink_gives_none(self):
+        self.assertIsNone(netmap.build_map(TOPOLOGY, [])["uplink"])
+        self.assertIsNone(netmap.build_map(TOPOLOGY, [], uplink={"hops": []})["uplink"])
+
+
 if __name__ == "__main__":
     unittest.main()

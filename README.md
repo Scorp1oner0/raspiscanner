@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.6.0.** A network discovery and security-exposure scanner for
+**Status: 1.7.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -440,6 +440,15 @@ generate traffic visible on the target network. Security findings
 describe what a service *exposes* to a normal connection (an open Telnet
 port, an HTTP admin panel with no HTTPS, ...), never whether it is
 actually exploitable.
+
+The network map adds two more probes. A **DHCPDISCOVER** is sent on each
+Ethernet and Wi-Fi network with an invented hardware address (the same
+technique rogue-DHCP detectors use): it only listens to the offers, never
+sends the request, so no address is leased. A **traceroute to `1.1.1.1`**
+(first hops only, stopping at the first public router) is the one probe that
+leaves the local network, towards a single address. Turn them off with
+`RASPISCANNER_DHCP_PROBE=0` and `RASPISCANNER_TRACE_TARGET=` (empty), set in
+the service's environment, if the network you scan must not see them.
 
 ### Dashboard authentication
 

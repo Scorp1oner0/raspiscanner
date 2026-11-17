@@ -441,7 +441,7 @@ class TestTopologyRoute(RaspiScannerAppTestCase):
         resp = self.client.get("/api/topology/map", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
-        self.assertEqual(set(data), {"networks", "devices", "links", "limits"})
+        self.assertEqual(set(data), {"networks", "devices", "links", "uplink", "limits"})
 
 
 class TestWebhookSettings(RaspiScannerAppTestCase):

@@ -179,3 +179,13 @@ HOSTNAME_TIMEOUT = 0.6
 # mezzo) e solo supplementare alla scoperta IPv4 principale.
 IPV6_DISCOVERY_TIMEOUT = 2
 IPV6_DISCOVERY_RETRY = 1
+
+
+# Sonde della mappa delle reti (scanner.discovery.uplink e .dhcp). Si
+# spengono dall'ambiente: RASPISCANNER_TRACE_TARGET vuoto = niente percorso
+# verso Internet, RASPISCANNER_DHCP_PROBE=0 = niente ricerca dei server DHCP.
+UPLINK_TRACE_TARGET = os.environ.get("RASPISCANNER_TRACE_TARGET", "1.1.1.1").strip()
+UPLINK_MAX_HOPS = 8
+UPLINK_HOP_TIMEOUT = 1.2
+DHCP_PROBE_ENABLED = os.environ.get("RASPISCANNER_DHCP_PROBE", "1").strip().lower() not in ("0", "false", "no")
+DHCP_PROBE_TIMEOUT = 3.0
