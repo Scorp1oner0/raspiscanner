@@ -521,6 +521,7 @@ function renderNetMap(map) {
   const path = map.uplink;
   const pathH = path ? 92 : 0;
   const bands = [];
+  const wifiIps = new Set((map.links || []).filter((l) => l.kind === "wifi").flatMap((l) => [l.a, l.b]));
   let y = 8 + pathH;
   map.networks.forEach((net) => {
     let devs = map.devices.filter((d) => d.iface === net.iface && d.network === net.cidr);
@@ -531,7 +532,7 @@ function renderNetMap(map) {
     devs.sort(hubDev
       ? (a, b) => (portNo(a) - portNo(b)) || (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || byIp(a, b)
       : (a, b) => (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || byIp(a, b));
-    const cols = hubDev ? 1 : COLS;
+    const cols = hubDev || devs.some((d) => wifiIps.has(d.ip)) ? 1 : COLS;
     const listed = new Set(devs.map((d) => d.ip));
     const under = (d) => hubDev && d.behind && listed.has(d.behind);
     const list = [];
@@ -597,13 +598,13 @@ function renderNetMap(map) {
       const ind = entry.indent * 44, bw = BW - ind;
       const x = dx + col * (BW + GX) + ind, dy = b.y + 7 + row * (BH + GY);
       placed.set(d.ip, { x, dy });
-      pos[d.ip + "|" + d.network] = { x, y: dy };
-      pos[d.ip] = pos[d.ip] || { x, y: dy };
+      pos[d.ip + "|" + d.network] = { x, y: dy, w: bw };
+      pos[d.ip] = pos[d.ip] || { x, y: dy, w: bw };
       const deduced = b.hubDev && d.attach !== "seen" ? ' stroke-dasharray="5 4"' : "";
       if (entry.indent) {
         const par = placed.get(entry.parent.ip);
-        lines += `<path class="nm-line" d="M${par.x + 16} ${par.dy + BH} V ${dy + BH / 2} H ${x}"/>`;
-        if (d.via) boxes += `<text class="nm-tag" x="${par.x + 20}" y="${dy + BH / 2 - 3}">${escapeHtml(trunc(d.via, 7))}</text>`;
+        lines += `<path class="${d.behind_wifi ? "nm-wifi" : "nm-line"}" d="M${par.x + 16} ${par.dy + BH} V ${dy + BH / 2} H ${x}"/>`;
+        if (d.via) boxes += `<text class="nm-tag${d.behind_wifi ? " nm-wifi-text" : ""}" x="${par.x + 20}" y="${dy + BH / 2 - 3}">${escapeHtml(trunc(d.via, 7))}</text>`;
       } else {
         lines += `<path class="nm-line" d="M${busX} ${dy + BH / 2} H ${x}"${deduced}/>`;
         if (b.hubDev && d.port) boxes += `<text class="nm-tag" x="${busX + 8}" y="${dy + BH / 2 - 4}">${escapeHtml(d.port)}</text>`;
@@ -631,8 +632,10 @@ function renderNetMap(map) {
   (map.links || []).forEach((l) => {
     const a = pos[l.a], b = pos[l.b];
     if (!a || !b) return;
-    const ax = a.x + BW, bx = b.x + BW, ay = a.y + BH / 2, by = b.y + BH / 2;
-    links += `<path class="nm-same" d="M${ax} ${ay} C ${ax + 46} ${ay} ${bx + 46} ${by} ${bx} ${by}"/>`;
+    const ax = a.x + (a.w || BW), bx = b.x + (b.w || BW), ay = a.y + BH / 2, by = b.y + BH / 2;
+    const wifi = l.kind === "wifi";
+    links += `<path class="${wifi ? "nm-wifi" : "nm-same"}" d="M${ax} ${ay} C ${ax + 46} ${ay} ${bx + 46} ${by} ${bx} ${by}"/>`;
+    if (wifi) links += `<text class="nm-tag nm-wifi-text" x="${Math.max(ax, bx) + 38}" y="${(ay + by) / 2 + 3}">Wi-Fi${l.via ? " " + escapeHtml(trunc(l.via, 7)) : ""}</text>`;
   });
   box.innerHTML = `<svg class="netmap-svg" viewBox="0 0 ${W + 60} ${H}" role="img" aria-label="Network map">${lines}${links}${boxes}</svg>`;
 }

@@ -94,14 +94,13 @@ class TestNetworkMap(unittest.TestCase):
         self.assertEqual(result["links"], [])
         self.assertFalse(any(d["is_bridge"] for d in result["devices"]))
 
-    def test_scanner_own_addresses_are_linked_across_networks(self):
+    def test_scanner_in_two_networks_is_not_drawn_as_a_link(self):
         devices = [
             _device("192.168.88.250", "eth0", "192.168.88.0/24", "localhost"),
-            _device("172.20.10.2", "wlan0", "172.20.10.0/28", "localhost"),
+            _device("172.20.10.9", "wlan0", "172.20.10.0/28", "localhost"),
         ]
-        result = netmap.build_map(TOPOLOGY, devices, local_ips={"192.168.88.250", "172.20.10.2"})
-        self.assertEqual(len(result["links"]), 1)
-        self.assertEqual(result["links"][0]["name"], "self")
+        result = netmap.build_map(TOPOLOGY, devices, local_ips={"192.168.88.250", "172.20.10.9"})
+        self.assertEqual(result["links"], [])
 
     def test_label_falls_back_to_vendor_then_type_then_ip(self):
         devices = [
@@ -225,6 +224,7 @@ class TestSwitchAtTheCentre(unittest.TestCase):
         self.assertEqual(by_ip["192.168.88.198"]["port"], "port 3")
         for ip in ("192.168.88.2", "192.168.88.248", "192.168.88.250", "192.168.88.60"):
             self.assertIsNone(by_ip[ip]["behind"])
+        self.assertTrue(by_ip["192.168.88.198"]["behind_wifi"])
 
     def test_a_device_on_the_access_point_uplink_is_not_behind_it(self):
         planet = {"macs": {"74:4d:28:f5:b5:a0": 3, "b8:27:eb:36:ba:b9": 3}, "ports": {}}
@@ -249,6 +249,60 @@ class TestSwitchAtTheCentre(unittest.TestCase):
     def test_no_switch_no_centre(self):
         net, _ = self._build(self._others())
         self.assertIsNone(net["hub"])
+
+
+class TestWifiLinks(unittest.TestCase):
+    CIDR = "192.168.1.0/24"
+
+    def setUp(self):
+        patcher = mock.patch.object(netmap.network_setup, "is_noarp", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _topology(self, bssid=None, iface="wlan0"):
+        return {iface: {"cidr": self.CIDR, "gateway": "192.168.1.1", "neighbors": [], "bssid": bssid}}
+
+    def _router(self, mac="C8:54:4B:E5:2A:0C"):
+        return _device("192.168.1.1", "wlan0", self.CIDR, mac=mac, device_type="Router", vendor="Zyxel")
+
+    def _me(self):
+        return _device("192.168.1.191", "wlan0", self.CIDR, "testpi", mac="B8:27:EB:CF:48:F4")
+
+    def _wifi(self, result):
+        return [(l["a"], l["b"]) for l in result["links"] if l["kind"] == "wifi"]
+
+    def test_scanner_is_linked_to_the_access_point_it_is_associated_with(self):
+        result = netmap.build_map(self._topology("c8:54:4b:e5:2a:0d"), [self._router(), self._me()],
+                                  local_ips={"192.168.1.191"})
+        self.assertEqual(self._wifi(result), [("192.168.1.191", "192.168.1.1")])
+
+    def test_no_link_when_the_access_point_is_not_among_the_devices(self):
+        result = netmap.build_map(self._topology("aa:aa:aa:aa:aa:01"), [self._router(), self._me()],
+                                  local_ips={"192.168.1.191"})
+        self.assertEqual(self._wifi(result), [])
+
+    def test_no_link_without_an_association(self):
+        result = netmap.build_map(self._topology(None), [self._router(), self._me()], local_ips={"192.168.1.191"})
+        self.assertEqual(self._wifi(result), [])
+
+    def test_a_far_mac_of_the_same_vendor_is_not_the_access_point(self):
+        result = netmap.build_map(self._topology("c8:54:4b:e5:2a:ff"), [self._router(), self._me()],
+                                  local_ips={"192.168.1.191"})
+        self.assertEqual(self._wifi(result), [])
+
+    def test_clients_on_the_wireless_port_of_an_access_point_are_linked_to_it(self):
+        ap = _device("192.168.1.60", "wlan0", self.CIDR, mac="74:4D:28:F5:B5:A0", device_type="Router")
+        ap["switch_ports"] = {"macs": {"ac:f4:73:29:b5:88": 6, "b8:27:eb:cf:48:f4": 5}, "ports": {5: "ether1", 6: "wlan1"}}
+        phone = _device("192.168.1.99", "wlan0", self.CIDR, mac="AC:F4:73:29:B5:88")
+        result = netmap.build_map(self._topology(), [ap, phone, self._me()], local_ips={"192.168.1.191"})
+        self.assertEqual(self._wifi(result), [("192.168.1.99", "192.168.1.60")])
+        self.assertEqual(next(l for l in result["links"] if l["kind"] == "wifi")["via"], "wlan1")
+
+    def test_a_wired_port_never_makes_a_wifi_link(self):
+        ap = _device("192.168.1.60", "wlan0", self.CIDR, mac="74:4D:28:F5:B5:A0", device_type="Router")
+        ap["switch_ports"] = {"macs": {"b8:27:eb:cf:48:f4": 5}, "ports": {5: "ether1"}}
+        result = netmap.build_map(self._topology(), [ap, self._me()], local_ips=set())
+        self.assertEqual(self._wifi(result), [])
 
 
 class TestRolesAndPath(unittest.TestCase):

@@ -403,6 +403,7 @@ _MAP_HUB_SOURCE = {"snmp": "ports read from the switch", "lldp": "port from LLDP
 
 def _map_bands(netmap):
     bands = []
+    wifi_ips = {ip for link in netmap.get("links") or [] if link["kind"] == "wifi" for ip in (link["a"], link["b"])}
     for net in netmap["networks"]:
         devs = [d for d in netmap["devices"] if d.get("iface") == net["iface"] and d.get("network") == net["cidr"]]
         hub = next((d for d in devs if net.get("hub") and d["ip"] == net["hub"]["ip"]), None)
@@ -419,7 +420,7 @@ def _map_bands(netmap):
             devs.sort(key=lambda d: (port_no(d), not d["is_self"], not d["is_gateway"], ip_key(d)))
         else:
             devs.sort(key=lambda d: (not d["is_self"], not d["is_gateway"], ip_key(d)))
-        cols = 1 if hub else _MAP_COLS
+        cols = 1 if hub or any(d["ip"] in wifi_ips for d in devs) else _MAP_COLS
         listed = {d["ip"] for d in devs}
 
         def under(d):
@@ -562,9 +563,11 @@ def _netmap(doc, netmap):
                 placed[dev["ip"]] = (x, dy)
                 if parent is not None:
                     px, pdy = placed[parent["ip"]]
-                    doc.line([(px + 8, pdy + _MAP_DEV_H), (px + 8, mid_y), (x, mid_y)])
+                    wifi = bool(dev.get("behind_wifi"))
+                    doc.line([(px + 8, pdy + _MAP_DEV_H), (px + 8, mid_y), (x, mid_y)], color=BLUE if wifi else RULE,
+                             width=1.2 if wifi else 0.8)
                     if dev.get("via"):
-                        doc.text(px + 11, mid_y - 2, _fit(dev["via"], "F1", 5.6, indent - 12), "F1", 5.6, FAINT)
+                        doc.text(px + 11, mid_y - 2, _fit(dev["via"], "F1", 5.6, indent - 12), "F1", 5.6, BLUE if wifi else FAINT)
                 else:
                     spoke = [(bus_x, mid_y), (x, mid_y)]
                     if hub and dev.get("attach") != "seen":
@@ -574,7 +577,7 @@ def _netmap(doc, netmap):
                     if hub and dev.get("port"):
                         doc.text(bus_x + 3, mid_y - 2, _fit(dev["port"], "F1", 5.6, x - bus_x - 4), "F1", 5.6, FAINT)
                 _map_device(doc, dev, x, dy, _MAP_DEV_W - indent)
-                pos[(dev["ip"], dev["network"])] = (len(doc.pages) - 1, x, dy)
+                pos[(dev["ip"], dev["network"])] = (len(doc.pages) - 1, x, dy, _MAP_DEV_W - indent)
             top += band["h"] + 6
         span_top, span_bottom = centers[0], centers[-1]
         mid = (span_top + span_bottom) / 2
@@ -590,7 +593,7 @@ def _netmap(doc, netmap):
         doc.y = top
 
     links = netmap.get("links") or []
-    gutter = _MAP_DEV_X + _MAP_COLS * (_MAP_DEV_W + 8) - 2
+    gutter = max(_MAP_DEV_X + _MAP_COLS * (_MAP_DEV_W + 8), _MAP_HUB_DEV_X + _MAP_DEV_W + 8) - 2
     for k, link in enumerate(links):
         a = next((v for key, v in pos.items() if key[0] == link["a"]), None)
         b = next((v for key, v in pos.items() if key[0] == link["b"]), None)
@@ -598,15 +601,20 @@ def _netmap(doc, netmap):
             continue
         gx = gutter + 3 * (k % 8)
         ay, by = a[2] + _MAP_DEV_H / 2, b[2] + _MAP_DEV_H / 2
-        doc.line([(a[1] + _MAP_DEV_W, ay), (gx, ay), (gx, by), (b[1] + _MAP_DEV_W, by)], color=BLUE, width=1.0,
-                 dash=(3, 2), page=a[0], at=marks[a[0]])
+        wifi = link["kind"] == "wifi"
+        doc.line([(a[1] + a[3], ay), (gx, ay), (gx, by), (b[1] + b[3], by)], color=BLUE if wifi else MUTED,
+                 width=1.2 if wifi else 1.0, dash=None if wifi else (3, 2), page=a[0], at=marks[a[0]])
+        if wifi:
+            label = "Wi-Fi" + (f" {link['via']}" if link.get("via") else "")
+            doc.text(gx + 3, (ay + by) / 2 + 2, _fit(label, "F1", 5.6, 40), "F1", 5.6, BLUE, page=a[0])
 
     doc.y += 6
-    doc.ensure(32)
+    doc.ensure(40)
     doc.text(MARGIN, doc.y + 8, "Green: this scanner   Amber border: gateway   Blue border: seen in two networks, or the switch   "
              "+N: more addresses of the same device", "F1", 7, FAINT)
-    doc.text(MARGIN, doc.y + 19, "Dashed: same device in two networks, or a link deduced rather than told by the switch", "F1", 7, FAINT)
-    doc.y += 26
+    doc.text(MARGIN, doc.y + 19, "Blue line: Wi-Fi link from a client to its access point", "F1", 7, FAINT)
+    doc.text(MARGIN, doc.y + 30, "Dashed: same device in two networks, or a link deduced rather than told by the switch", "F1", 7, FAINT)
+    doc.y += 37
 
 
 def _footers(doc, label):

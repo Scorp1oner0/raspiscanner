@@ -225,7 +225,11 @@ saw (no credentials, nothing queried on switches or routers):
   "limits": "..."
 }
 ```
-`kind` is `ethernet`, `wifi` or `vpn` (a NOARP interface). Each network also
+`kind` is `ethernet`, `wifi` or `vpn` (a NOARP interface). A network also has
+`bssids`: the access point(s) the scanner's Wi-Fi interface is associated with,
+read locally from NetworkManager (empty on cable). A `wifi` network also
+has `bssids`: the access point(s) the scanner's interface is associated with,
+read locally from NetworkManager. Each network also
 has `dhcp`: the DHCP servers that answered a DHCPDISCOVER on it
 (`server`, `router`, `dns`, `domain`; empty when none answered or the probe is
 off). A device has `ips` (all addresses sharing its MAC in that network, the
@@ -235,10 +239,18 @@ first one is `ip`) and `roles`, a list of `scanner`, `gateway`, `dhcp`, `dns`,
 "ip": "192.168.1.1", "rtt_ms": 0.6, "private": true, "label": "router",
 "known": true, "is_public": false}]}`; a hop with no reply has `ip: null`. A device found
 in two networks under the same hostname (a Pi on cable and Wi-Fi) gets
-`is_bridge` and a `same_device` link between its two entries; the scanner's
-own addresses are linked the same way (`is_self`). Two interfaces on the same
-addressing (cable and Wi-Fi to one network) are one network with `ifaces`
-listing both.
+`is_bridge` and a `same_device` link between its two entries (the scanner's own
+addresses are not linked: it is one box connected to each network). Two
+interfaces on the same addressing (cable and Wi-Fi to one network) are one
+network with `ifaces` listing both.
+
+A Wi-Fi link is `{"a": client, "b": access point, "kind": "wifi", "via": "wlan1"}`
+(`via` only when it comes from the access point's table). It exists only where the
+data shows it: the access point the scanner's own interface is associated with
+(`bssids` on a `wifi` network, matched to the device whose MAC is that BSSID or one
+few steps from it), and the devices that an access point's MAC table lists on its
+wireless port. A device's Wi-Fi link to a router that gives no table can't be
+known, so none is drawn for it.
 
 When a network has exactly one switch, or the scan has solid data, the
 network carries `hub`: `{"ip", "label", "source"}` where `source` is `snmp` (the

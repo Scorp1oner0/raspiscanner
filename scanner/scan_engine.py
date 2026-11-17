@@ -15,7 +15,7 @@ from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, 
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import (
     arp_scan, dhcp_probe, icmp_scan, ipv6_discovery, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe,
-    switch_fdb, trace_uplink,
+    switch_fdb, trace_uplink, wifi_link,
 )
 from .fingerprint import grab_http_banner, scan_ports, web_banner
 from .hosts import classify_host
@@ -644,7 +644,7 @@ def _run_scan_thread(networks, ports=None):
             # apparato LLDP/CDP-capable presente", vedi discovery.lldp_cdp).
             topology[iface] = {
                 "cidr": cidr, "gateway": gateways[iface], "neighbors": lldp_cdp_neighbors,
-                "dhcp": dhcp_servers,
+                "dhcp": dhcp_servers, "bssid": wifi_link.associated_bssid(iface),
             }
         t_uplink.join(timeout=config.UPLINK_MAX_HOPS * config.UPLINK_HOP_TIMEOUT + 2)
         _update(topology=topology, uplink=uplink_result or None)

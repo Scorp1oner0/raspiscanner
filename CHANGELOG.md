@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-17
+
+### Changed
+
+- **A Wi-Fi line joins a client to its access point.** The map used to draw a
+  blue dashed line between the scanner's two boxes when it was in two
+  networks, which looked like Wi-Fi but meant "same device". That line is gone
+  (the scanner is one box connected to each network) and a dashed link between a
+  device seen in two networks is now grey.
+
+### Added
+
+- **Real Wi-Fi links, in blue, labelled "Wi-Fi".** From two sources, never
+  guessed: the access point the scanner's own Wi-Fi interface is associated with
+  (its BSSID, read locally from NetworkManager and matched to the router or
+  access point of that network), and the devices an access point's MAC table
+  lists on its wireless port (`wlan1` on a MikroTik). A device whose Wi-Fi router
+  gives no table cannot be shown as Wi-Fi: no line is drawn for it.
+
 ## [1.9.1] - 2026-11-17
 
 ### Added

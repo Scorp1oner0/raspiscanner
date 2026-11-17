@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.9.1.** A network discovery and security-exposure scanner for
+**Status: 1.10.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -535,6 +535,7 @@ scanner/
     mdns.py                       mDNS/Bonjour probe (friendly name + Apple model)
     snmp.py                       Optional SNMP probe (sysDescr/sysName)
     switch_fdb.py                 MAC table of a switch answering `public` (port of each device)
+    wifi_link.py                  Access point (BSSID) a Wi-Fi interface is associated with
     lldp_cdp.py                   Passive LLDP/CDP listening (network topology)
     ipv6.py                       IPv6 discovery (ICMPv6 Echo to ff02::1)
   fingerprint/

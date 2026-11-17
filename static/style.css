@@ -407,8 +407,10 @@ label.user-row input { margin-right: 8px; vertical-align: middle; }
 .netmap-svg .nm-hub { stroke: var(--info); stroke-width: 1.8; }
 .netmap-svg .nm-bridge { stroke: var(--info); stroke-width: 1.6; }
 .netmap-svg .nm-line { stroke: var(--border); stroke-width: 1.2; fill: none; }
-.netmap-svg .nm-same { stroke: var(--info); stroke-width: 1.6; stroke-dasharray: 5 4; fill: none; }
+.netmap-svg .nm-same { stroke: var(--text-faint); stroke-width: 1.4; stroke-dasharray: 5 4; fill: none; }
+.netmap-svg .nm-wifi { stroke: var(--info); stroke-width: 1.8; fill: none; }
 .netmap-svg .nm-net-ethernet { stroke: var(--accent); }
 .netmap-svg .nm-net-wifi { stroke: var(--info); }
 .netmap-svg .nm-net-vpn { stroke: var(--medium); }
 .netmap-svg .nm-tag { font-size: 9.5px; fill: var(--text-faint); }
+.netmap-svg .nm-wifi-text { fill: var(--info); }

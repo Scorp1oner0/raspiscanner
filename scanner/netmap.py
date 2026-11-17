@@ -20,6 +20,8 @@ import re
 
 from .network import setup as network_setup
 
+_WIRELESS_PORT = re.compile(r"^(wlan|wifi|ath|ra|wl)\d", re.IGNORECASE)
+
 _GENERIC_NAMES = {"", "localhost", "_gateway", "gateway", "unknown"}
 
 
@@ -150,6 +152,7 @@ def _place_behind(hub, members):
             if ports:
                 node["behind"] = bridge["ip"]
                 node["via"] = names.get(ports[0]) or names.get(str(ports[0])) or f"port {ports[0]}"
+                node["behind_wifi"] = bool(_WIRELESS_PORT.match(node["via"]))
 
 
 def _port_label(raw):
@@ -170,6 +173,7 @@ def _attach_hubs(networks, nodes):
         node["port_name"] = None
         node["behind"] = None
         node["via"] = None
+        node["behind_wifi"] = False
     for net in networks:
         net["hub"] = None
         members = [n for n in nodes if n["network"] == net["cidr"]]
@@ -211,6 +215,68 @@ def _attach_hubs(networks, nodes):
             _place_behind(hub, members)
 
 
+def _mac_distance(a, b):
+    """Distanza tra due MAC che differiscono solo nell'ultimo byte (le radio di
+    un access point hanno MAC vicini al suo); None se i primi cinque differiscono."""
+    pa, pb = a.lower().split(":"), b.lower().split(":")
+    if len(pa) != 6 or pa[:5] != pb[:5]:
+        return None
+    return abs(int(pa[5], 16) - int(pb[5], 16))
+
+
+def _find_access_point(bssid, members):
+    """Il dispositivo della rete che e' l'access point con quel BSSID: quello che
+    ha la radio nella propria tabella MAC, che ha proprio quel MAC, oppure un
+    router con un MAC a pochi passi (stesso produttore, ultimo byte vicino)."""
+    for node in members:
+        if node["_fdb"] and bssid in node["_fdb"]["macs"]:
+            return node
+    for node in members:
+        if bssid in node["macs"]:
+            return node
+    best = None
+    for node in members:
+        if not (node["is_gateway"] or node["device_type"] in ("Router", "Access Point")):
+            continue
+        near = [d for d in (_mac_distance(bssid, m) for m in node["macs"]) if d is not None and d <= 16]
+        if near and (best is None or min(near) < best[0]):
+            best = (min(near), node)
+    return best[1] if best else None
+
+
+def _wifi_links(networks, nodes):
+    """Le linee Wi-Fi: dal client al suo access point. Due fonti: l'access
+    point a cui e' associata l'interfaccia dello scanner (letto in locale), e
+    la tabella MAC di un access point, che elenca i client sulla sua porta
+    wireless. Non si indovina un collegamento Wi-Fi da altro."""
+    links, seen = [], set()
+
+    def add(client, ap, via=None):
+        if client is ap or (client["ip"], ap["ip"]) in seen or client.get("behind") == ap["ip"]:
+            return
+        seen.add((client["ip"], ap["ip"]))
+        links.append({"a": client["ip"], "b": ap["ip"], "kind": "wifi", "via": via})
+
+    for net in networks:
+        members = [n for n in nodes if n["network"] == net["cidr"]]
+        mine = next((n for n in members if n["is_self"]), None)
+        for bssid in net.get("bssids") or []:
+            ap = _find_access_point(bssid, members)
+            if mine and ap:
+                add(mine, ap)
+        for ap in members:
+            if not ap["_fdb"]:
+                continue
+            names = {str(p): n for p, n in (ap["_fdb"].get("ports") or {}).items()}
+            wireless = {p for p, n in names.items() if _WIRELESS_PORT.match(n)}
+            for node in members:
+                for mac in node["macs"]:
+                    port = ap["_fdb"]["macs"].get(mac)
+                    if port is not None and str(port) in wireless:
+                        add(node, ap, names[str(port)])
+    return links
+
+
 def _uplink_path(uplink, nodes, networks):
     if not uplink or not uplink.get("hops"):
         return None
@@ -244,6 +310,7 @@ def _merge_same_network(networks):
                 by_cidr[net["cidr"]] = net
             continue
         main["ifaces"].append(net["iface"])
+        main["bssids"] = main["bssids"] + [b for b in net["bssids"] if b not in main["bssids"]]
         main["gateway"] = main["gateway"] or net["gateway"]
         known = {o["server"] for o in main["dhcp"]}
         main["dhcp"].extend(o for o in net["dhcp"] if o["server"] not in known)
@@ -269,6 +336,7 @@ def build_map(topology, devices, local_ips=(), uplink=None):
             "cidr": info.get("cidr"),
             "gateway": info.get("gateway"),
             "kind": _iface_kind(iface),
+            "bssids": [info["bssid"]] if info.get("bssid") else [],
             "dhcp": [{"server": o["server"], "router": o.get("router"), "dns": o.get("dns") or [],
                       "domain": o.get("domain")} for o in dhcp],
         })
@@ -314,12 +382,8 @@ def build_map(topology, devices, local_ips=(), uplink=None):
                 links.append({"a": first["ip"], "b": second["ip"], "kind": "same_device", "name": name})
                 first["is_bridge"] = second["is_bridge"] = True
 
-    self_nodes = [n for n in nodes if n["is_self"]]
-    for first, second in zip(self_nodes, self_nodes[1:]):
-        if first["network"] != second["network"]:
-            links.append({"a": first["ip"], "b": second["ip"], "kind": "same_device", "name": "self"})
-
     _attach_hubs(networks, nodes)
+    links.extend(_wifi_links(networks, nodes))
 
     for node in nodes:
         node["roles"] = _roles(node, dhcp_servers, dns_servers)
