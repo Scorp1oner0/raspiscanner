@@ -5,6 +5,33 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-17
+
+### Added
+
+- **Save the report as a PDF or a text file.** "⬇ PDF" and "⬇ TXT" in the
+  Report tab download the live report; each scan in the History tab has a
+  "⬇ PDF" for its audit report, and the audit box has both. Same endpoints
+  as the on-screen report with a new `format` parameter
+  (`/api/report?format=pdf|txt`, `/api/audit/report?scan_id=N&format=pdf|txt`,
+  operator): JSON stays the default. The PDF is A4 with a header band, a
+  device table per category, findings colored by severity, the risk summary
+  as four boxes, page numbers and the usual disclaimers; a report taken
+  mid-scan is marked as a partial snapshot, and the audit version includes
+  the changes since the previous scan.
+- It is written by hand with the standard library only (Helvetica and
+  Courier, which every PDF viewer has built in), so there is still no
+  dependency beyond Flask and Scapy and nothing extra to install on a Pi.
+  Characters outside Western European text (non-Latin names, emoji) print
+  as `?`.
+
+### Changed
+
+- `scanner/reporting/assessment.py` now builds a structured description of
+  each network (`network_data`, `report_data`) and the text report is
+  formatted from it, so the text and the PDF cannot disagree. The text
+  output is unchanged.
+
 ## [1.2.0] - 2026-11-17
 
 ### Added

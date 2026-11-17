@@ -220,6 +220,8 @@
     <div class="tab-panel hidden" id="panel-report">
       <div class="export-row">
         <button class="btn small" id="btn-refresh-report">🔄 Refresh report</button>
+        <a class="btn small" href="/api/report?format=pdf" title="Save the report as a PDF file">⬇ PDF</a>
+        <a class="btn small" href="/api/report?format=txt" title="Save the report as a plain text file">⬇ TXT</a>
       </div>
       <pre id="report-text" class="report-text">No data yet — start a scan, then open this tab.</pre>
     </div>
@@ -248,6 +250,8 @@
       </p>
       <div id="audit-report-box" class="hidden">
         <button class="btn small" id="btn-close-audit-report">✕ Close</button>
+        <a class="btn small" id="audit-report-pdf" href="#">⬇ PDF</a>
+        <a class="btn small" id="audit-report-txt" href="#">⬇ TXT</a>
         <pre id="audit-report-text" class="report-text"></pre>
       </div>
 

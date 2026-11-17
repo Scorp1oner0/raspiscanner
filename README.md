@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.2.0.** A network discovery and security-exposure scanner for
+**Status: 1.3.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -125,6 +125,9 @@ of some of the same discovery mechanisms.
    report from a saved scan (reproducible, unlike the live "Report" tab)
    with a changes-since-previous-scan section prepended automatically.
    Full reference: [`API.md`](API.md).
+   Any report, live or from a saved scan, downloads as a **PDF** (A4,
+   findings colored by severity) or as plain text
+   from the "Report" and "History" tabs.
 
 8. **Deep port scan of one device** ("🔎 Deep scan" on a device's row):
    checks a range you choose, up to all 65535 TCP ports, on that device

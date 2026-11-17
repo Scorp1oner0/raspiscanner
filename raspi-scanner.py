@@ -22,6 +22,7 @@ import ssl
 import sys
 import threading
 import time
+from datetime import datetime
 from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request
@@ -31,6 +32,7 @@ from scanner import auth, config, deep_scan, monitoring, platform_net, scan_engi
 from scanner.network import hotspot
 from scanner.network import setup as network_setup
 from scanner.reporting import assessment
+from scanner.reporting import pdf as pdf_report
 from scanner.reporting import risk as risk_module
 from scanner.reporting import security as security_module
 
@@ -357,21 +359,49 @@ def api_security_summary():
     return jsonify(risk_module.summarize(all_findings))
 
 
+# Lo scan processa le reti una alla volta e, dentro ciascuna, un host alla
+# volta: un report generato a meta' scan e' un'istantanea reale ma incompleta
+# (es. una rete gia' scansionata per intero, un'altra ancora a meta'), non un
+# errore di conteggio.
+_PARTIAL_NOTICE = (
+    "⚠ Scan still in progress: this report is a partial snapshot "
+    "(some networks may already be complete, others not yet) — "
+    "counts will increase. Retry once the scan has finished.\n\n"
+)
+
+
+def _report_file(fmt, devices, started_at, finished_at, changes, partial, name):
+    """Il report come file da scaricare: `pdf` o `txt`. Stessi dati e stessa
+    logica del report a video, solo con un'altra forma."""
+    if fmt not in ("pdf", "txt"):
+        return jsonify({"ok": False, "message": f"Unknown report format: {fmt}"}), 400
+    data = assessment.report_data(devices, started_at, finished_at, changes)
+    if data is None:
+        return jsonify({"error": "no_data", "message": "No data yet — run a scan first."}), 404
+    stamp = datetime.fromtimestamp(finished_at or started_at or time.time()).strftime("%Y-%m-%d-%H%M")
+    filename = f"{name}-{stamp}.{fmt}"
+    if fmt == "pdf":
+        body, mimetype = pdf_report.render(data, partial=partial), "application/pdf"
+    else:
+        text = assessment.generate_all(devices, started_at=started_at, finished_at=finished_at, changes=changes)
+        body, mimetype = (_PARTIAL_NOTICE if partial else "") + text + "\n", "text/plain; charset=utf-8"
+    return Response(body, mimetype=mimetype, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Cache-Control": "no-store",
+    })
+
+
 @app.route("/api/report")
 @require_role("operator")
 def api_report():
     state = scan_engine.get_state()
+    fmt = request.args.get("format", "json")
+    if fmt != "json":
+        return _report_file(fmt, state["devices"], state["started_at"], state["finished_at"],
+                            changes=None, partial=state["running"], name="raspiscanner-report")
     text = assessment.generate_all(state["devices"], started_at=state["started_at"], finished_at=state["finished_at"])
     if state["running"]:
-        # Lo scan processa le reti una alla volta e, dentro ciascuna, un
-        # host alla volta: un report generato a meta' scan e' un'istantanea
-        # reale ma incompleta (es. una rete gia' scansionata per intero,
-        # un'altra ancora a meta'), non un errore di conteggio.
-        text = (
-            "⚠ Scan still in progress: this report is a partial snapshot "
-            "(some networks may already be complete, others not yet) — "
-            "counts will increase. Retry once the scan has finished.\n\n" + text
-        )
+        text = _PARTIAL_NOTICE + text
     return jsonify({"text": text, "scan_running": state["running"]})
 
 
@@ -513,6 +543,7 @@ def api_audit_report():
     "CHANGES SINCE PREVIOUS SCAN" calcolata automaticamente rispetto allo
     scan salvato subito prima. Senza scan_id esplicito, usa l'ultimo
     salvato."""
+    fmt = request.args.get("format", "json")
     scan_id = request.args.get("scan_id", type=int)
     if scan_id is None:
         latest = storage.list_scans(limit=1)
@@ -527,6 +558,9 @@ def api_audit_report():
     devices = storage.get_scan_devices(scan_id)
     previous_id = storage.get_previous_scan_id(scan_id)
     changes = storage.compare_scans(previous_id, scan_id) if previous_id is not None else None
+    if fmt != "json":
+        return _report_file(fmt, devices, meta["started_at"], meta["finished_at"], changes=changes,
+                            partial=False, name=f"raspiscanner-audit-scan{scan_id}")
     text = assessment.generate_all(
         devices, started_at=meta["started_at"], finished_at=meta["finished_at"], changes=changes,
     )

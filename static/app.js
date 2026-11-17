@@ -428,7 +428,10 @@ async function refreshHistory() {
             <td>${formatTimestamp(s.started_at)}</td>
             <td>${formatTimestamp(s.finished_at)}</td>
             <td>${s.device_count}</td>
-            <td><button class="btn small btn-audit-report" data-scan-id="${s.id}">📋 Audit report</button></td>
+            <td>
+              <button class="btn small btn-audit-report" data-scan-id="${s.id}">📋 Audit report</button>
+              <a class="btn small" href="/api/audit/report?scan_id=${s.id}&format=pdf" title="Save this scan's audit report as a PDF file">⬇ PDF</a>
+            </td>
           </tr>
         `).join("")
       : '<tr><td colspan="5" class="empty">No saved scans yet — run one first.</td></tr>';
@@ -674,6 +677,8 @@ async function saveScanTargets() {
 async function viewAuditReport(scanId) {
   const box = $("audit-report-text");
   $("audit-report-box").classList.remove("hidden");
+  $("audit-report-pdf").href = `/api/audit/report?scan_id=${scanId}&format=pdf`;
+  $("audit-report-txt").href = `/api/audit/report?scan_id=${scanId}&format=txt`;
   box.textContent = "Loading...";
   try {
     const res = await fetch(`/api/audit/report?scan_id=${scanId}`);

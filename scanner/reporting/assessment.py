@@ -134,10 +134,11 @@ def _device_findings(device):
     return security_module.find_security_issues(device)
 
 
-def generate(network_cidr, devices):
-    """devices: lista di dict scan_engine gia' filtrati per questa rete
-    (device["network"] == network_cidr). Ritorna il report come stringa.
-    """
+def network_data(network_cidr, devices):
+    """I dati del report di UNA rete, senza formattazione: li usano sia il
+    testo (generate) sia il PDF (reporting.pdf), cosi' i due non possono
+    divergere. devices: lista di dict scan_engine gia' filtrati per questa
+    rete (device["network"] == network_cidr)."""
     cameras = [d for d in devices if d.get("is_camera") and not d.get("is_nvr")]
     nvrs = [d for d in devices if d.get("is_nvr")]
     infra = [d for d in devices if d.get("is_network_infra")]
@@ -145,13 +146,13 @@ def generate(network_cidr, devices):
 
     findings_by_ip = {d["ip"]: _device_findings(d) for d in devices}
 
-    # OGNI dispositivo non gia' mostrato in CAMERAS/NVR/NETWORK finisce qui,
-    # "Generico" senza alcun segnale incluso: "N devices discovered" deve
-    # sempre corrispondere al numero di righe elencate nel report, mai un
-    # conteggio piu' alto di cio' che il testo mostra davvero — versioni
-    # precedenti escludevano i "Generico" senza finding per non appesantire
-    # il report, ma il risultato ("N trovati" con solo M elencati) si e'
-    # rivelato piu' confuso che utile.
+    # OGNI dispositivo non gia' mostrato in CAMERAS/NVR/NETWORK finisce in
+    # OTHER DEVICES, "Generico" senza alcun segnale incluso: "N devices
+    # discovered" deve sempre corrispondere al numero di righe elencate nel
+    # report, mai un conteggio piu' alto di cio' che il testo mostra davvero
+    # — versioni precedenti escludevano i "Generico" senza finding per non
+    # appesantire il report, ma il risultato ("N trovati" con solo M
+    # elencati) si e' rivelato piu' confuso che utile.
     other = [d for d in devices if d["ip"] not in shown_ips]
 
     all_findings = []  # per il riepilogo rischio: ogni finding, non deduplicato
@@ -167,70 +168,85 @@ def generate(network_cidr, devices):
             seen.add(key)
             device_findings.append((f.get("severity", "low"), d["ip"], label, f["message"]))
     device_findings.sort(key=lambda t: (_SEVERITY_ORDER.get(t[0], 9), t[1]))
-    risk_counts = risk_module.summarize(all_findings)
 
-    lines = ["NETWORK ASSESSMENT", _HEADER_RULE, "", f"Network: {network_cidr}"]
     # L'interfaccia e' la stessa per ogni device di questa rete (una CIDR
     # appartiene a una sola interfaccia per scan): basta leggerla dal primo,
-    # se la lista non e' vuota (generate() e' sempre chiamata con almeno un
-    # device per rete da generate_all, ma resta chiamabile a vuoto nei test).
+    # se la lista non e' vuota (resta chiamabile a vuoto nei test).
     iface = devices[0].get("iface") if devices else None
-    if iface:
-        lines.append(f"Interface: {iface}")
-    lines.append("")
-    lines.append(f"{len(devices)} devices discovered")
-    total_findings = sum(len(v) for v in findings_by_ip.values())
-    lines.append(
-        f"Summary: {len(cameras)} camera{'s' if len(cameras) != 1 else ''}, "
-        f"{len(nvrs)} NVR/DVR, "
-        f"{len(infra)} network device{'s' if len(infra) != 1 else ''}, "
-        f"{total_findings} security finding{'s' if total_findings != 1 else ''}"
-    )
 
     # Un device senza MAC e senza essere gia' segnalato "fuori rete" e'
     # stato trovato via ICMP invece che ARP (link NOARP: VPN instradata,
     # niente livello 2 — vedi scan_engine/discovery.icmp). Senza questa
     # nota il MAC vuoto nella tabella della dashboard/nel CSV sembra un
     # dato mancante per errore invece di un limite noto del protocollo.
-    no_mac_ips = [d["ip"] for d in devices if not d.get("mac") and not d.get("network_mismatch")]
-    if no_mac_ips:
-        plural = "s" if len(no_mac_ips) != 1 else ""
+    no_mac = sum(1 for d in devices if not d.get("mac") and not d.get("network_mismatch"))
+
+    groups = []
+    if cameras:
+        groups.append({"title": "CAMERAS", "rows": [(_device_label(d), d["ip"], _services_label(d)) for d in cameras]})
+    if nvrs:
+        groups.append({"title": "NVR", "rows": [(_device_label(d), d["ip"], _services_label(d)) for d in nvrs]})
+    if infra:
+        groups.append({"title": "NETWORK", "rows": [(_device_label(d), d["ip"], None) for d in infra]})
+    if other:
+        groups.append({"title": "OTHER DEVICES",
+                       "rows": [(_other_device_label(d), d["ip"], _services_label(d)) for d in other]})
+
+    return {
+        "cidr": network_cidr,
+        "iface": iface,
+        "count": len(devices),
+        "cameras": len(cameras),
+        "nvrs": len(nvrs),
+        "infra": len(infra),
+        "findings_total": sum(len(v) for v in findings_by_ip.values()),
+        "no_mac": no_mac,
+        "groups": groups,
+        "findings": device_findings,
+        "risk": risk_module.summarize(all_findings),
+    }
+
+
+def generate(network_cidr, devices):
+    """Ritorna il report di una rete come stringa."""
+    data = network_data(network_cidr, devices)
+    lines = ["NETWORK ASSESSMENT", _HEADER_RULE, "", f"Network: {network_cidr}"]
+    if data["iface"]:
+        lines.append(f"Interface: {data['iface']}")
+    lines.append("")
+    lines.append(f"{data['count']} devices discovered")
+    cameras, nvrs, infra = data["cameras"], data["nvrs"], data["infra"]
+    total_findings = data["findings_total"]
+    lines.append(
+        f"Summary: {cameras} camera{'s' if cameras != 1 else ''}, "
+        f"{nvrs} NVR/DVR, "
+        f"{infra} network device{'s' if infra != 1 else ''}, "
+        f"{total_findings} security finding{'s' if total_findings != 1 else ''}"
+    )
+    if data["no_mac"]:
+        plural = "s" if data["no_mac"] != 1 else ""
         lines.append(
-            f"Note: {len(no_mac_ips)} device{plural} on this network have no MAC address "
+            f"Note: {data['no_mac']} device{plural} on this network have no MAC address "
             "available (found via ICMP over a VPN/NOARP link, not ARP) — expected, not a scan error."
         )
-
     lines.append("")
 
-    def _section(title, group, with_services=True):
-        if not group:
-            return
-        lines.append(title)
-        for d in group:
-            lines.append(f"  {_device_label(d)}")
-            lines.append(f"  {d['ip']}")
-            if with_services:
-                lines.append(f"  {_services_label(d)}")
+    for group in data["groups"]:
+        lines.append(group["title"])
+        for label, ip, services in group["rows"]:
+            lines.append(f"  {label}")
+            lines.append(f"  {ip}")
+            if services is not None:
+                lines.append(f"  {services}")
         lines.append("")
 
-    _section("CAMERAS", cameras)
-    _section("NVR", nvrs)
-    _section("NETWORK", infra, with_services=False)
-
-    if other:
-        lines.append("OTHER DEVICES")
-        for d in other:
-            lines.append(f"  {_other_device_label(d)}")
-            lines.append(f"  {d['ip']}")
-            lines.append(f"  {_services_label(d)}")
-        lines.append("")
-
-    if device_findings:
+    if data["findings"]:
         lines.append("SECURITY")
-        for severity, ip, label, message in device_findings:
+        for severity, ip, label, message in data["findings"]:
             lines.append(f"  ⚠ {message} — {ip} ({label})")
         lines.append("")
 
+    risk_counts = data["risk"]
     lines.append("RISK SUMMARY")
     lines.append(f"  Critical: {risk_counts['critical']}")
     lines.append(f"  High:     {risk_counts['high']}")
@@ -306,3 +322,22 @@ def generate_all(devices, started_at=None, finished_at=None, changes=None):
 
     parts = [p for p in (timing_header, changes_section, combined, _SCOPE_DISCLAIMER, _SENSITIVE_DATA_DISCLAIMER) if p]
     return "\n\n".join(parts)
+
+
+def report_data(devices, started_at=None, finished_at=None, changes=None):
+    """Tutto il report in forma strutturata, nello stesso ordine di
+    generate_all(): una voce per rete (ordinate per CIDR), piu' tempi,
+    differenze rispetto allo scan precedente (se passate) e avvertenze.
+    Ritorna None se non ci sono dispositivi."""
+    if not devices:
+        return None
+    by_network = {}
+    for d in devices:
+        by_network.setdefault(d.get("network") or "unknown network", []).append(d)
+    return {
+        "networks": [network_data(cidr, devs) for cidr, devs in sorted(by_network.items())],
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "changes": changes,
+        "disclaimers": [_SCOPE_DISCLAIMER, _SENSITIVE_DATA_DISCLAIMER],
+    }

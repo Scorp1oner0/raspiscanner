@@ -651,3 +651,89 @@ class TestPortProfileAndDeepScanApi(RaspiScannerAppTestCase):
         resp = self.client.get("/api/devices/deep-scan", auth=self.operator_auth)
         self.assertEqual(resp.status_code, 200)
         self.assertIn("running", resp.get_json())
+
+
+class TestReportDownloads(RaspiScannerAppTestCase):
+    """Il report si scarica come PDF o TXT dalla stessa rotta del report a
+    video, con ?format=. Senza format resta il JSON di sempre."""
+
+    DEVICES = [{
+        "ip": "192.168.1.10", "mac": "AA:BB:CC:00:00:01", "vendor": "Hikvision", "model": None,
+        "open_ports": [{"port": 23, "service": "Telnet"}], "http_banners": {},
+        "is_camera": True, "is_nvr": False, "is_network_infra": False, "device_type": "Camera",
+        "network": "192.168.1.0/24", "iface": "eth0",
+    }]
+
+    def setUp(self):
+        super().setUp()
+        self._orig_state = {k: scan_engine._state[k] for k in ("devices", "started_at", "finished_at", "running")}
+        scan_engine._state.update(devices={d["ip"]: dict(d) for d in self.DEVICES},
+                                  started_at=1_700_000_000, finished_at=1_700_000_030, running=False)
+
+    def tearDown(self):
+        scan_engine._state.update(self._orig_state)
+        super().tearDown()
+
+    def test_pdf_download(self):
+        resp = self.client.get("/api/report?format=pdf", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.mimetype, "application/pdf")
+        self.assertTrue(resp.data.startswith(b"%PDF-"))
+        self.assertRegex(resp.headers["Content-Disposition"],
+                         r'^attachment; filename="raspiscanner-report-\d{4}-\d{2}-\d{2}-\d{4}\.pdf"$')
+        self.assertEqual(resp.headers["Cache-Control"], "no-store")
+
+    def test_txt_download_matches_the_screen_report(self):
+        shown = self.client.get("/api/report", auth=self.operator_auth).get_json()["text"]
+        resp = self.client.get("/api/report?format=txt", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.mimetype.startswith("text/plain"))
+        self.assertIn('.txt"', resp.headers["Content-Disposition"])
+        self.assertEqual(resp.data.decode("utf-8").strip(), shown.strip())
+
+    def test_default_is_still_json(self):
+        resp = self.client.get("/api/report", auth=self.operator_auth)
+        self.assertEqual(resp.mimetype, "application/json")
+        self.assertIn("NETWORK ASSESSMENT", resp.get_json()["text"])
+
+    def test_viewer_cannot_download(self):
+        self.assertEqual(self.client.get("/api/report?format=pdf", auth=self.viewer_auth).status_code, 403)
+
+    def test_unknown_format_is_a_bad_request(self):
+        self.assertEqual(self.client.get("/api/report?format=docx", auth=self.operator_auth).status_code, 400)
+
+    def test_no_data_is_a_404_not_an_empty_file(self):
+        scan_engine._state["devices"] = {}
+        for fmt in ("pdf", "txt"):
+            resp = self.client.get(f"/api/report?format={fmt}", auth=self.operator_auth)
+            self.assertEqual(resp.status_code, 404)
+            self.assertEqual(resp.get_json()["error"], "no_data")
+
+    def test_partial_snapshot_while_scanning(self):
+        scan_engine._state["running"] = True
+        txt = self.client.get("/api/report?format=txt", auth=self.operator_auth).data.decode("utf-8")
+        self.assertIn("partial snapshot", txt)
+        pdf_bytes = self.client.get("/api/report?format=pdf", auth=self.operator_auth).data
+        import re
+        import zlib
+        text = " ".join(zlib.decompress(s).decode("latin-1")
+                        for s in re.findall(rb"stream\n(.*?)\nendstream", pdf_bytes, re.S))
+        self.assertIn("Partial snapshot", text)
+
+    def test_audit_report_pdf_from_a_saved_scan(self):
+        scan_id = storage.save_scan(list(scan_engine._state["devices"].values()), 1_700_000_000, 1_700_000_030)
+        resp = self.client.get(f"/api/audit/report?scan_id={scan_id}&format=pdf", auth=self.operator_auth)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.mimetype, "application/pdf")
+        self.assertIn(f"raspiscanner-audit-scan{scan_id}-", resp.headers["Content-Disposition"])
+
+    def test_audit_report_unknown_scan_is_404_in_every_format(self):
+        for fmt in ("json", "pdf"):
+            resp = self.client.get(f"/api/audit/report?scan_id=9999&format={fmt}", auth=self.operator_auth)
+            self.assertEqual(resp.status_code, 404)
+
+    def test_audit_report_default_is_still_json(self):
+        scan_id = storage.save_scan(list(scan_engine._state["devices"].values()), 1, 2)
+        resp = self.client.get(f"/api/audit/report?scan_id={scan_id}", auth=self.operator_auth)
+        self.assertEqual(resp.mimetype, "application/json")
+        self.assertEqual(resp.get_json()["scan_id"], scan_id)

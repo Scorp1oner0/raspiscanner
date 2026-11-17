@@ -249,6 +249,13 @@ text report (see [`examples/sample_report.txt`](examples/sample_report.txt)
 for a real example). If a scan is still running, `text` is prefixed with a
 partial-snapshot warning and `scan_running` is `true`.
 
+`?format=pdf` or `?format=txt` returns the same report as a file to save
+(`Content-Disposition: attachment`, named `raspiscanner-report-<date>-<time>`).
+The PDF is A4, with a summary box per network, findings colored by severity
+and the disclaimers at the end; a report taken mid-scan says it is a partial
+snapshot. `404 {"error": "no_data"}` when there is nothing to report yet,
+`400` for any other `format`.
+
 ### `GET /api/export?type=all&format=json` — viewer
 Downloads discovered devices as a file (`Content-Disposition: attachment`).
 `type`: `all` (default) or `cameras`. `format`: `csv` (a fixed column
@@ -367,6 +374,10 @@ data in JSON form).
 `compared_to_scan_id` is `null` (and the report has no changes section)
 if `scan_id` is the first scan ever saved. `404` if `scan_id` doesn't
 exist, or if no scan has ever been saved and none was given.
+
+`&format=pdf` or `&format=txt` downloads the same audit report as a file,
+named `raspiscanner-audit-scan<id>-<date>-<time>`; the PDF includes the
+"Changes since previous scan" section.
 
 ## Scan targets
 
