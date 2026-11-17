@@ -397,15 +397,32 @@ def _fit(text, font, size, max_w):
 
 _MAP_SELF_W, _MAP_NET_X, _MAP_NET_W, _MAP_BUS_X = 62, MARGIN + 78, 84, MARGIN + 176
 _MAP_DEV_X, _MAP_DEV_W, _MAP_DEV_H, _MAP_GAP, _MAP_COLS = MARGIN + 186, 118, 26, 6, 2
+_MAP_HUB_W, _MAP_HUB_BUS_X, _MAP_HUB_DEV_X = 96, MARGIN + 274, MARGIN + 318
+_MAP_HUB_SOURCE = {"snmp": "ports read from the switch", "lldp": "port from LLDP", "inferred": "links deduced"}
 
 
 def _map_bands(netmap):
     bands = []
     for net in netmap["networks"]:
         devs = [d for d in netmap["devices"] if d.get("iface") == net["iface"] and d.get("network") == net["cidr"]]
-        devs.sort(key=lambda d: (not d["is_self"], not d["is_gateway"], [int(p) if p.isdigit() else 0 for p in d["ip"].split(".")]))
-        rows = max(1, -(-len(devs) // _MAP_COLS))
-        bands.append({"net": net, "devs": devs, "h": max(rows * (_MAP_DEV_H + _MAP_GAP) + 6, 54)})
+        hub = next((d for d in devs if net.get("hub") and d["ip"] == net["hub"]["ip"]), None)
+        if hub:
+            devs = [d for d in devs if d is not hub]
+
+        def ip_key(d):
+            return [int(p) if p.isdigit() else 0 for p in d["ip"].split(".")]
+
+        def port_no(d):
+            digits = "".join(ch for ch in str(d.get("port") or "") if ch.isdigit())
+            return int(digits) if digits else (999 if d.get("port") else 1000)
+        if hub:
+            devs.sort(key=lambda d: (port_no(d), not d["is_self"], not d["is_gateway"], ip_key(d)))
+        else:
+            devs.sort(key=lambda d: (not d["is_self"], not d["is_gateway"], ip_key(d)))
+        cols = 1 if hub else _MAP_COLS
+        rows = max(1, -(-len(devs) // cols))
+        bands.append({"net": net, "devs": devs, "hub": hub, "cols": cols,
+                      "h": max(rows * (_MAP_DEV_H + _MAP_GAP) + 6, 54)})
     return bands
 
 
@@ -468,7 +485,8 @@ def _netmap(doc, netmap):
     _section_title(doc, "Network map")
     doc.paragraph("The networks covered by the scan, the gateway of each and the devices found in them. A device seen "
                   "in two networks under the same name is linked with a dashed line. Built only from what the scan "
-                  "saw: which switch port or access point a device hangs on is not known.",
+                  "saw. With one switch in a network it is drawn at the centre: a solid line with a port means the "
+                  "switch told us, a dashed line is deduced from the device being in the same network.",
                   size=8.5, color=MUTED, gap=6)
 
     if netmap.get("uplink"):
@@ -505,17 +523,35 @@ def _netmap(doc, netmap):
             dhcp = ", ".join(o["server"] for o in net.get("dhcp") or [])
             doc.text(_MAP_NET_X + 5, cy + 16, _fit(f"DHCP {dhcp}" if dhcp else "DHCP not seen", "F1", 6.0, _MAP_NET_W - 10),
                      "F1", 6.0, FAINT)
-            doc.line([(_MAP_NET_X + _MAP_NET_W, cy), (_MAP_BUS_X, cy)])
-            rows = -(-len(band["devs"]) // _MAP_COLS) if band["devs"] else 0
+            hub, cols = band["hub"], band["cols"]
+            bus_x, dev_x = (_MAP_HUB_BUS_X, _MAP_HUB_DEV_X) if hub else (_MAP_BUS_X, _MAP_DEV_X)
+            if hub:
+                hub_x = _MAP_NET_X + _MAP_NET_W + 8
+                doc.line([(_MAP_NET_X + _MAP_NET_W, cy), (hub_x, cy)])
+                doc.rect(hub_x, cy - 14, _MAP_HUB_W, 28, fill=STRIPE, stroke=BLUE, line=1.2)
+                doc.text(hub_x + 4, cy - 5, _fit(hub["label"], "F2", 6.8, _MAP_HUB_W - 8), "F2", 6.8, INK)
+                doc.text(hub_x + 4, cy + 3, _fit(f"{hub['ip']} switch", "F1", 5.8, _MAP_HUB_W - 8), "F1", 5.8, MUTED)
+                doc.text(hub_x + 4, cy + 11, _fit(_MAP_HUB_SOURCE.get(net["hub"]["source"], ""), "F1", 5.2, _MAP_HUB_W - 8),
+                         "F1", 5.2, FAINT)
+                doc.line([(hub_x + _MAP_HUB_W, cy), (bus_x, cy)])
+            else:
+                doc.line([(_MAP_NET_X + _MAP_NET_W, cy), (bus_x, cy)])
+            rows = -(-len(band["devs"]) // cols) if band["devs"] else 0
             if rows:
                 first_y = top + 3 + _MAP_DEV_H / 2
                 last_y = top + 3 + (rows - 1) * (_MAP_DEV_H + _MAP_GAP) + _MAP_DEV_H / 2
-                doc.line([(_MAP_BUS_X, min(first_y, cy)), (_MAP_BUS_X, max(last_y, cy))])
+                doc.line([(bus_x, min(first_y, cy)), (bus_x, max(last_y, cy))])
             for i, dev in enumerate(band["devs"]):
-                col, row = i % _MAP_COLS, i // _MAP_COLS
-                x = _MAP_DEV_X + col * (_MAP_DEV_W + 8)
+                col, row = i % cols, i // cols
+                x = dev_x + col * (_MAP_DEV_W + 8)
                 dy = top + 3 + row * (_MAP_DEV_H + _MAP_GAP)
-                doc.line([(_MAP_BUS_X, dy + _MAP_DEV_H / 2), (x, dy + _MAP_DEV_H / 2)])
+                spoke = [(bus_x, dy + _MAP_DEV_H / 2), (x, dy + _MAP_DEV_H / 2)]
+                if hub and dev.get("attach") != "seen":
+                    doc.line(spoke, dash=(3, 2))
+                else:
+                    doc.line(spoke)
+                if hub and dev.get("port"):
+                    doc.text(bus_x + 3, dy + _MAP_DEV_H / 2 - 2, _fit(dev["port"], "F1", 5.6, x - bus_x - 4), "F1", 5.6, FAINT)
                 _map_device(doc, dev, x, dy)
                 pos[(dev["ip"], dev["network"])] = (len(doc.pages) - 1, x, dy)
             top += band["h"] + 6
@@ -545,10 +581,11 @@ def _netmap(doc, netmap):
                  dash=(3, 2), page=a[0], at=marks[a[0]])
 
     doc.y += 6
-    doc.ensure(24)
-    doc.text(MARGIN, doc.y + 8, "Green: this scanner   Amber border: gateway   Blue border: seen in two networks   "
-             "Dashed: same device in two networks   +N: more addresses of the same device", "F1", 7, FAINT)
-    doc.y += 14
+    doc.ensure(32)
+    doc.text(MARGIN, doc.y + 8, "Green: this scanner   Amber border: gateway   Blue border: seen in two networks, or the switch   "
+             "+N: more addresses of the same device", "F1", 7, FAINT)
+    doc.text(MARGIN, doc.y + 19, "Dashed: same device in two networks, or a link deduced rather than told by the switch", "F1", 7, FAINT)
+    doc.y += 26
 
 
 def _footers(doc, label):

@@ -145,4 +145,9 @@ the minimum required role.
 - The network topology (`GET /api/topology`) is deliberately **one hop
   only** (gateway + LLDP/CDP neighbors seen directly): a multi-hop graph
   would need an SNMP walk on remote switches with credentials this tool
-  doesn't have and must not guess.
+  doesn't have and must not guess. The network map adds one thing to it:
+  the MAC table of a switch that answers the default `public` community
+  (`discovery/switch_fdb.py`, read-only, only from a device that already
+  answered `snmp_probe`), which says on which port each device was seen.
+  `netmap.build_map` draws the switch at the centre of its network, with
+  the port where it is known and a dashed, deduced link where it is not.

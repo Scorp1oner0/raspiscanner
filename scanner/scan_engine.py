@@ -15,7 +15,7 @@ from .cameras.classify import classify_camera, guess_admin_url, guess_rtsp_url, 
 from .cameras.onvif import get_device_info_multi, onvif_probe
 from .discovery import (
     arp_scan, dhcp_probe, icmp_scan, ipv6_discovery, lldp_cdp_probe, mdns_probe, resolve_hostname, snmp_probe,
-    trace_uplink,
+    switch_fdb, trace_uplink,
 )
 from .fingerprint import grab_http_banner, scan_ports, web_banner
 from .hosts import classify_host
@@ -227,6 +227,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip, ports=None):
             vendor_source = "snmp"
         if snmp_info.get("sysName") and not hostname:
             hostname = snmp_info["sysName"]
+    switch_ports = switch_fdb.read_switch(ip) if snmp_info.get("sysDescr") else None
 
     # Se il dispositivo risponde a ONVIF, prova a interrogare
     # GetDeviceInformation per un vendor/model REALI invece di indovinarli
@@ -296,6 +297,7 @@ def _scan_host(ip, mac, onvif_results, mdns_results, gateway_ip, ports=None):
         "model_source": model_source,
         "hostname": hostname,
         "snmp_info": snmp_info,
+        "switch_ports": switch_ports,
         "open_ports": open_ports,
         "http_banners": banners,
         "onvif": onvif_info,

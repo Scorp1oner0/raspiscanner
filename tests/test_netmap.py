@@ -126,6 +126,108 @@ class TestNetworkMap(unittest.TestCase):
         self.assertEqual((result["networks"], result["devices"], result["links"]), ([], [], []))
 
 
+class TestSwitchAtTheCentre(unittest.TestCase):
+    CIDR = "192.168.88.0/24"
+    TOPOLOGY = {"eth0": {"cidr": CIDR, "gateway": "192.168.88.2", "neighbors": []}}
+
+    def setUp(self):
+        patcher = mock.patch.object(netmap.network_setup, "is_noarp", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _switch(self, ip="192.168.88.50", mac="A8:F7:E0:C3:C7:DC", **extra):
+        device = _device(ip, "eth0", self.CIDR, mac=mac, device_type="Switch", vendor="PLANET")
+        device.update(extra)
+        return device
+
+    def _others(self):
+        return [_device("192.168.88.2", "eth0", self.CIDR, "pihole", mac="B8:27:EB:36:BA:B9"),
+                _device("192.168.88.248", "eth0", self.CIDR, "testpi", mac="B8:27:EB:CF:48:F4"),
+                _device("192.168.88.250", "eth0", self.CIDR, "localhost", mac="E4:A7:A0:F1:07:9D")]
+
+    def _build(self, devices):
+        result = netmap.build_map(self.TOPOLOGY, devices, local_ips={"192.168.88.250"})
+        return result["networks"][0], {d["ip"]: d for d in result["devices"]}
+
+    def test_a_single_switch_is_the_centre_and_the_links_are_deduced(self):
+        net, by_ip = self._build([self._switch()] + self._others())
+        self.assertEqual(net["hub"], {"ip": "192.168.88.50", "label": "PLANET", "source": "inferred"})
+        self.assertEqual(by_ip["192.168.88.50"]["attach"], "hub")
+        self.assertIn("switch", by_ip["192.168.88.50"]["roles"])
+        for ip in ("192.168.88.2", "192.168.88.248", "192.168.88.250"):
+            self.assertEqual(by_ip[ip]["attach"], "inferred")
+            self.assertIsNone(by_ip[ip]["port"])
+
+    def test_lldp_announcement_gives_the_port_of_the_scanner_cable_only(self):
+        switch = self._switch(lldp_cdp_info={"protocol": "lldp", "port_id": "2"})
+        net, by_ip = self._build([switch] + self._others())
+        self.assertEqual(net["hub"]["source"], "lldp")
+        self.assertEqual((by_ip["192.168.88.250"]["attach"], by_ip["192.168.88.250"]["port"]), ("seen", "port 2"))
+        self.assertEqual(by_ip["192.168.88.2"]["attach"], "inferred")
+
+    def test_mac_table_gives_the_port_of_every_device(self):
+        table = {"macs": {"b8:27:eb:36:ba:b9": 9, "e4:a7:a0:f1:07:9d": 2, "11:22:33:44:55:66": 2},
+                 "ports": {9: "GigabitEthernet 9", 2: "GigabitEthernet 2"}}
+        net, by_ip = self._build([self._switch(switch_ports=table)] + self._others())
+        self.assertEqual(net["hub"]["source"], "snmp")
+        self.assertEqual((by_ip["192.168.88.2"]["attach"], by_ip["192.168.88.2"]["port"]), ("seen", "port 9"))
+        self.assertEqual(by_ip["192.168.88.2"]["port_name"], "GigabitEthernet 9")
+        self.assertEqual((by_ip["192.168.88.250"]["port"]), "port 2")
+        self.assertEqual(by_ip["192.168.88.248"]["attach"], "unseen")
+        self.assertIsNone(by_ip["192.168.88.248"]["port"])
+
+    def test_scanner_with_cable_and_wifi_takes_the_least_crowded_port(self):
+        table = {"macs": {"e4:a7:a0:f1:07:9d": 2, "aa:aa:aa:aa:aa:01": 8, "aa:aa:aa:aa:aa:02": 8, "aa:aa:aa:aa:aa:03": 8,
+                          "e4:a7:a0:f1:07:9e": 8}, "ports": {}}
+        topology = {"eth0": self.TOPOLOGY["eth0"], "wlan0": {"cidr": self.CIDR, "gateway": None, "neighbors": []}}
+        devices = [self._switch(switch_ports=table),
+                   _device("192.168.88.250", "eth0", self.CIDR, mac="E4:A7:A0:F1:07:9D"),
+                   _device("192.168.88.190", "wlan0", self.CIDR, mac="E4:A7:A0:F1:07:9E")]
+        result = netmap.build_map(topology, devices, local_ips={"192.168.88.250", "192.168.88.190"})
+        me = next(d for d in result["devices"] if d["is_self"])
+        self.assertEqual(me["port"], "port 2")
+
+    def test_a_router_seeing_everything_on_one_port_is_not_the_centre(self):
+        spread = {"macs": {"b8:27:eb:36:ba:b9": 9, "e4:a7:a0:f1:07:9d": 2, "b8:27:eb:cf:48:f4": 4}, "ports": {}}
+        funnel = {"macs": {"b8:27:eb:36:ba:b9": 1, "e4:a7:a0:f1:07:9d": 1, "b8:27:eb:cf:48:f4": 1,
+                           "a8:f7:e0:c3:c7:dc": 1, "aa:aa:aa:aa:aa:01": 1}, "ports": {}}
+        router = _device("192.168.88.200", "eth0", self.CIDR, mac="74:4D:28:00:00:C8", device_type="Router")
+        router["switch_ports"] = funnel
+        net, by_ip = self._build([self._switch(switch_ports=spread), router] + self._others())
+        self.assertEqual(net["hub"]["ip"], "192.168.88.50")
+        self.assertEqual(by_ip["192.168.88.2"]["port"], "port 9")
+
+    def test_a_switch_without_a_table_beats_a_router_with_one(self):
+        router = _device("192.168.88.60", "eth0", self.CIDR, mac="74:4D:28:F5:B5:A0", device_type="Router")
+        router["switch_ports"] = {"macs": {"b8:27:eb:36:ba:b9": 1, "e4:a7:a0:f1:07:9d": 2}, "ports": {}}
+        net, by_ip = self._build([self._switch(), router] + self._others())
+        self.assertEqual((net["hub"]["ip"], net["hub"]["source"]), ("192.168.88.50", "inferred"))
+        self.assertEqual(by_ip["192.168.88.2"]["attach"], "inferred")
+
+    def test_a_router_with_a_table_is_the_centre_when_there_is_no_switch(self):
+        router = _device("192.168.88.60", "eth0", self.CIDR, mac="74:4D:28:F5:B5:A0", device_type="Router")
+        router["switch_ports"] = {"macs": {"b8:27:eb:36:ba:b9": 1, "e4:a7:a0:f1:07:9d": 2}, "ports": {}}
+        net, by_ip = self._build([router] + self._others())
+        self.assertEqual((net["hub"]["ip"], net["hub"]["source"]), ("192.168.88.60", "snmp"))
+        self.assertEqual(by_ip["192.168.88.2"]["port"], "port 1")
+
+    def test_port_names_survive_a_json_round_trip(self):
+        import json
+        table = json.loads(json.dumps({"macs": {"b8:27:eb:36:ba:b9": 9}, "ports": {9: "Gi9"}}))
+        _, by_ip = self._build([self._switch(switch_ports=table)] + self._others())
+        self.assertEqual(by_ip["192.168.88.2"]["port_name"], "Gi9")
+
+    def test_two_switches_and_no_data_means_no_centre(self):
+        devices = [self._switch(), self._switch("192.168.88.51", "A8:F7:E0:00:00:01")] + self._others()
+        net, by_ip = self._build(devices)
+        self.assertIsNone(net["hub"])
+        self.assertTrue(all(d["attach"] is None for d in by_ip.values()))
+
+    def test_no_switch_no_centre(self):
+        net, _ = self._build(self._others())
+        self.assertIsNone(net["hub"])
+
+
 class TestRolesAndPath(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch.object(netmap.network_setup, "is_noarp", side_effect=lambda i: i.startswith("wg"))

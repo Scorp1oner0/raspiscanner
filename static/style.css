@@ -404,6 +404,7 @@ label.user-row input { margin-right: 8px; vertical-align: middle; }
 .netmap-svg .nm-box { fill: var(--panel-2); stroke: var(--border); stroke-width: 1; }
 .netmap-svg .nm-self { fill: var(--accent-dim); stroke: var(--accent); }
 .netmap-svg .nm-gw { stroke: var(--medium); }
+.netmap-svg .nm-hub { stroke: var(--info); stroke-width: 1.8; }
 .netmap-svg .nm-bridge { stroke: var(--info); stroke-width: 1.6; }
 .netmap-svg .nm-line { stroke: var(--border); stroke-width: 1.2; fill: none; }
 .netmap-svg .nm-same { stroke: var(--info); stroke-width: 1.6; stroke-dasharray: 5 4; fill: none; }

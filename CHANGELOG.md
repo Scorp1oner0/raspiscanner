@@ -5,6 +5,31 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-17
+
+### Added
+
+- **The network map puts the switch at the centre.** In a network with one
+  switch (or solid data about which one), the map draws the network around it:
+  network, switch, then every device with a line to it, instead of a flat list.
+  It knows three levels and says which one it is using:
+  - the switch answers the default SNMP community `public`: the scanner reads
+    its MAC table (`discovery/switch_fdb.py`, read-only, only from a device that
+    already answered the existing SNMP probe) and each device gets its real
+    port, drawn as a solid line labelled `port N`;
+  - the switch announces itself with LLDP on the scanner's cable: the port of
+    that one cable is known (the scanner's own);
+  - neither: the lines are dashed and the switch is labelled "links deduced",
+    because a device being in the same network as the only switch found is a
+    deduction, not something seen.
+  With several switches and no solid data no switch is drawn as the centre.
+  If a router with a bridge also has a MAC table, the centre is the device whose
+  addresses spread over more ports, not the one that sees them all on one port.
+  No community is guessed and no other one is tried (see SECURITY.md).
+- The same drawing in the PDF map. `GET /api/topology/map` has `hub` on each
+  network and `attach`, `port`, `port_name` on each device; the device record
+  has `switch_ports` when a MAC table was read.
+
 ## [1.7.2] - 2026-11-17
 
 ### Fixed

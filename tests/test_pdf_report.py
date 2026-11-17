@@ -205,6 +205,20 @@ def _node(ip, network, iface, label=None, **extra):
 
 
 class TestNetworkMapSection(unittest.TestCase):
+    def test_switch_is_drawn_at_the_centre_with_ports(self):
+        nodes = [_node("192.168.1.50", "192.168.1.0/24", "eth0", "Planet", attach="hub", roles=["switch"]),
+                 _node("192.168.1.9", "192.168.1.0/24", "eth0", "This scanner", is_self=True, attach="seen", port="port 2"),
+                 _node("192.168.1.20", "192.168.1.0/24", "eth0", "NAS", attach="inferred")]
+        nm = _netmap(nodes)
+        nm["networks"][0]["hub"] = {"ip": "192.168.1.50", "label": "Planet", "source": "snmp"}
+        last = _pages_text(_render(netmap=nm))[-1]
+        self.assertIn("Planet", last)
+        self.assertIn("192.168.1.50 switch", last)
+        self.assertIn("ports read from the switch", last)
+        self.assertIn("port 2", last)
+        self.assertIn("NAS", last)
+
+
     def test_map_is_the_last_section(self):
         nodes = [_node("192.168.1.1", "192.168.1.0/24", "eth0", "router", is_gateway=True),
                  _node("192.168.1.9", "192.168.1.0/24", "eth0", "This scanner", is_self=True)]

@@ -523,11 +523,18 @@ function renderNetMap(map) {
   const bands = [];
   let y = 8 + pathH;
   map.networks.forEach((net) => {
-    const devs = map.devices.filter((d) => d.iface === net.iface && d.network === net.cidr);
-    devs.sort((a, b) => (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || a.ip.localeCompare(b.ip, undefined, { numeric: true }));
-    const rows = Math.max(1, Math.ceil(devs.length / COLS));
+    let devs = map.devices.filter((d) => d.iface === net.iface && d.network === net.cidr);
+    const hubDev = net.hub ? devs.find((d) => d.ip === net.hub.ip) : null;
+    if (hubDev) devs = devs.filter((d) => d !== hubDev);
+    const byIp = (a, b) => a.ip.localeCompare(b.ip, undefined, { numeric: true });
+    const portNo = (d) => (d.port ? parseInt(String(d.port).replace(/\D/g, ""), 10) || 999 : 1000);
+    devs.sort(hubDev
+      ? (a, b) => (portNo(a) - portNo(b)) || (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || byIp(a, b)
+      : (a, b) => (b.is_self - a.is_self) || (b.is_gateway - a.is_gateway) || byIp(a, b));
+    const cols = hubDev ? 1 : COLS;
+    const rows = Math.max(1, Math.ceil(devs.length / cols));
     const h = Math.max(rows * (BH + GY) + 14, NH + 14);
-    bands.push({ net, devs, y, h, cy: y + h / 2 });
+    bands.push({ net, devs, hubDev, cols, y, h, cy: y + h / 2 });
     y += h + 6;
   });
   const H = y + 4;
@@ -557,23 +564,37 @@ function renderNetMap(map) {
 
   bands.forEach((b) => {
     lines += `<path class="nm-line" d="M150 ${selfY} C 175 ${selfY} 175 ${b.cy} ${NX} ${b.cy}"/>`;
-    const busX = DX - 18;
-    if (b.devs.length) {
+    const HX = NX + NW + 24, HW = 172, HH = 54;
+    const dx = b.hubDev ? HX + HW + 90 : DX;
+    const busX = b.hubDev ? dx - 66 : dx - 18;
+    if (b.hubDev) {
+      lines += `<path class="nm-line" d="M${NX + NW} ${b.cy} H ${HX}"/><path class="nm-line" d="M${HX + HW} ${b.cy} H ${busX}"/>`;
+      const hubSource = { snmp: "ports read from the switch", lldp: "port from LLDP", inferred: "links deduced" }[b.net.hub.source] || "";
+      boxes += `<g><title>${escapeHtml(b.hubDev.label)} — ${escapeHtml(b.hubDev.ip)}${b.hubDev.mac ? " — " + escapeHtml(b.hubDev.mac) : ""}</title>
+        <rect class="nm-box nm-hub" x="${HX}" y="${b.cy - HH / 2}" width="${HW}" height="${HH}" rx="9"/>
+        <text x="${HX + 10}" y="${b.cy - 8}" font-size="12.5">${escapeHtml(trunc(b.hubDev.label, 22))}</text>
+        <text class="nm-dim" x="${HX + 10}" y="${b.cy + 7}">${escapeHtml(b.hubDev.ip)} · switch</text>
+        <text class="nm-tag" x="${HX + 10}" y="${b.cy + 21}">${escapeHtml(hubSource)}</text></g>`;
+    } else if (b.devs.length) {
       lines += `<path class="nm-line" d="M${NX + NW} ${b.cy} H ${busX}"/>`;
-      const firstY = b.y + 7 + BH / 2, lastRow = Math.ceil(b.devs.length / COLS) - 1;
+    }
+    if (b.devs.length) {
+      const firstY = b.y + 7 + BH / 2, lastRow = Math.ceil(b.devs.length / b.cols) - 1;
       const lastY = b.y + 7 + lastRow * (BH + GY) + BH / 2;
       lines += `<path class="nm-line" d="M${busX} ${firstY} V ${lastY}"/>`;
     }
     b.devs.forEach((d, i) => {
-      const col = i % COLS, row = Math.floor(i / COLS);
-      const x = DX + col * (BW + GX), dy = b.y + 7 + row * (BH + GY);
+      const col = i % b.cols, row = Math.floor(i / b.cols);
+      const x = dx + col * (BW + GX), dy = b.y + 7 + row * (BH + GY);
       pos[d.ip + "|" + d.network] = { x, y: dy };
       pos[d.ip] = pos[d.ip] || { x, y: dy };
-      lines += `<path class="nm-line" d="M${busX} ${dy + BH / 2} H ${x}"/>`;
+      const deduced = b.hubDev && d.attach !== "seen" ? ' stroke-dasharray="5 4"' : "";
+      lines += `<path class="nm-line" d="M${busX} ${dy + BH / 2} H ${x}"${deduced}/>`;
+      if (b.hubDev && d.port) boxes += `<text class="nm-tag" x="${busX + 8}" y="${dy + BH / 2 - 4}">${escapeHtml(d.port)}</text>`;
       const cls = "nm-box" + (d.is_self ? " nm-self" : "") + (d.is_gateway ? " nm-gw" : "") + (d.is_bridge ? " nm-bridge" : "");
-      const tags = (d.roles || []).map((r) => ROLE[r] || r).join(" · ");
+      const tags = (d.roles || []).filter((r) => r !== "switch").map((r) => ROLE[r] || r).join(" · ");
       const extra = d.ips && d.ips.length > 1 ? ` +${d.ips.length - 1}` : "";
-      boxes += `<g><title>${escapeHtml(d.label)} — ${escapeHtml((d.ips || [d.ip]).join(", "))}${d.mac ? " — " + escapeHtml(d.mac) : ""}${d.vendor ? " — " + escapeHtml(d.vendor) : ""}</title>
+      boxes += `<g><title>${escapeHtml(d.label)} — ${escapeHtml((d.ips || [d.ip]).join(", "))}${d.mac ? " — " + escapeHtml(d.mac) : ""}${d.vendor ? " — " + escapeHtml(d.vendor) : ""}${d.port_name ? " — " + escapeHtml(d.port_name) : ""}</title>
         <rect class="${cls}" x="${x}" y="${dy}" width="${BW}" height="${BH}" rx="7"/>
         <text x="${x + 10}" y="${dy + 18}" font-size="12.5">${escapeHtml(trunc(d.label, tags ? 19 : 26))}</text>
         <text class="nm-dim" x="${x + 10}" y="${dy + 34}">${escapeHtml(d.ip)}${extra}${d.device_type ? " · " + escapeHtml(trunc(d.device_type, 16)) : ""}</text>

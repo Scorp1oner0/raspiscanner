@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from scanner import config, scan_engine, targets
@@ -499,10 +500,27 @@ class TestScanHostSnmp(unittest.TestCase):
         scan_engine.grab_http_banner = lambda ip, port, use_https=False: {"server": None, "title": None}
         scan_engine.resolve_hostname = lambda ip, timeout=1: None
         scan_engine.get_device_info_multi = lambda xaddrs, timeout=3: {}
+        patcher = mock.patch.object(scan_engine.switch_fdb, "read_switch", return_value=None)
+        self.read_switch = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         for name, fn in self._orig.items():
             setattr(scan_engine, name, fn)
+
+    def test_mac_table_read_only_from_a_device_that_answered_snmp(self):
+        table = {"macs": {"aa:bb:cc:00:00:09": 3}, "ports": {3: "port 3"}}
+        self.read_switch.return_value = table
+        scan_engine.snmp_probe = lambda ip, community="public", timeout=1.0: {"sysDescr": "switch"}
+        device = scan_engine._scan_host(self.GATEWAY_IP, "AA:BB:CC:00:00:01", {}, {}, self.GATEWAY_IP)
+        self.read_switch.assert_called_once_with(self.GATEWAY_IP)
+        self.assertEqual(device["switch_ports"], table)
+
+    def test_mac_table_not_read_when_snmp_is_silent(self):
+        scan_engine.snmp_probe = lambda ip, community="public", timeout=1.0: {}
+        device = scan_engine._scan_host(self.GATEWAY_IP, "AA:BB:CC:00:00:01", {}, {}, self.GATEWAY_IP)
+        self.read_switch.assert_not_called()
+        self.assertIsNone(device["switch_ports"])
 
     def test_snmp_probed_when_host_is_the_gateway(self):
         calls = []

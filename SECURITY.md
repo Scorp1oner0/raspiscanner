@@ -30,13 +30,15 @@ Treat any of the following as a security issue, not a regular bug:
 
 **Out of scope**: this is explicitly *not* a vulnerability scanner (see
 [README, "Security notes"](README.md#security-notes)) — it doesn't
-attempt exploitation, credential guessing, or CVE matching, so reports
+attempt exploitation, credential guessing, or CVE matching (the only SNMP
+community it ever sends is the factory-default `public`, read-only, never a
+list of guesses), so reports
 asking it to detect a specific CVE on a scanned device are feature
 requests, not security reports about RaspiScanner itself.
 
 ## Supported Versions
 
-1.7.0 is the current release. Given the small size and best-effort
+1.8.0 is the current release. Given the small size and best-effort
 maintenance of this project, only the latest release is supported —
 "supported" means "fix lands on `main`," not a guarantee of backported
 patches to an older tag.

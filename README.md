@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.7.2.** A network discovery and security-exposure scanner for
+**Status: 1.8.0.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP
@@ -155,9 +155,12 @@ of some of the same discovery mechanisms.
   /api/topology`) is one hop — the gateway and directly observed LLDP/CDP
   neighbors. The network map (`GET /api/topology/map`) draws the scanned
   networks and the devices found in them, and links a device seen in two
-  of them, but not which switch port or access point a device hangs on:
-  that would need SNMP-walking remote switches with credentials this tool
-  doesn't have and won't guess.
+  of them. With one switch in a network it is drawn at the centre: the port
+  of each device is shown only where the switch answers the default SNMP
+  community (`public`) with its MAC table, or announces itself with LLDP
+  (the port of the scanner's own cable); otherwise the line is dashed, a
+  deduction from sharing the network. Without access to the switch nothing
+  more can be known, and no other community is tried.
 - **It isn't tuned for very large networks.** Hosts within a scan are
   processed one at a time; see [Known limitations](#known-limitations).
 - **It doesn't phone home.** No telemetry, no cloud dependency, no
@@ -529,6 +532,7 @@ scanner/
     icmp.py                       ICMP sweep for NOARP links (VPN tunnels)
     mdns.py                       mDNS/Bonjour probe (friendly name + Apple model)
     snmp.py                       Optional SNMP probe (sysDescr/sysName)
+    switch_fdb.py                 MAC table of a switch answering `public` (port of each device)
     lldp_cdp.py                   Passive LLDP/CDP listening (network topology)
     ipv6.py                       IPv6 discovery (ICMPv6 Echo to ff02::1)
   fingerprint/
