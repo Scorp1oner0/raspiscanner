@@ -1,6 +1,6 @@
 # RaspiScanner
 
-**Status: 1.7.1.** A network discovery and security-exposure scanner for
+**Status: 1.7.2.** A network discovery and security-exposure scanner for
 local networks, built to run unattended on a Raspberry Pi (or any Linux
 box). Point it at an unfamiliar network over Ethernet, Wi-Fi, or an active
 VPN tunnel: it auto-configures itself, discovers what's connected — IP

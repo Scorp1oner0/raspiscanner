@@ -77,7 +77,10 @@ def _merge_same_mac(nodes):
     stesso MAC: una scatola sola, con tutti gli indirizzi."""
     merged, by_mac = [], {}
     for node in nodes:
-        key = (node["network"], node["mac"].lower()) if node["mac"] else None
+        if node["is_self"]:
+            key = (node["network"], "self")
+        else:
+            key = (node["network"], node["mac"].lower()) if node["mac"] else None
         if key and key in by_mac:
             first = by_mac[key]
             first["ips"].append(node["ip"])
@@ -111,6 +114,29 @@ def _uplink_path(uplink, nodes, networks):
     return {"target": uplink.get("target"), "hops": hops, "internet": bool(uplink.get("internet")), "via": via}
 
 
+def _merge_same_network(networks):
+    """Due interfacce nello stesso indirizzamento (cavo e Wi-Fi verso la
+    stessa rete) sono una rete sola: lo scan identifica gli apparecchi per
+    indirizzo e non potrebbe comunque distinguerle. Ritorna le reti unite e
+    a quale interfaccia e' stata ricondotta ciascuna."""
+    merged, by_cidr, iface_main = [], {}, {}
+    for net in networks:
+        main = by_cidr.get(net["cidr"]) if net["cidr"] and net["kind"] != "vpn" else None
+        if main is None:
+            net["ifaces"] = [net["iface"]]
+            merged.append(net)
+            iface_main[net["iface"]] = net["iface"]
+            if net["cidr"] and net["kind"] != "vpn":
+                by_cidr[net["cidr"]] = net
+            continue
+        main["ifaces"].append(net["iface"])
+        main["gateway"] = main["gateway"] or net["gateway"]
+        known = {o["server"] for o in main["dhcp"]}
+        main["dhcp"].extend(o for o in net["dhcp"] if o["server"] not in known)
+        iface_main[net["iface"]] = main["iface"]
+    return merged, iface_main
+
+
 def build_map(topology, devices, local_ips=(), uplink=None):
     """topology: {iface: {"cidr", "gateway", "neighbors", "dhcp"}} dello scan.
     devices: elenco dei dispositivi dello scan. local_ips: indirizzi che la
@@ -133,10 +159,11 @@ def build_map(topology, devices, local_ips=(), uplink=None):
                       "domain": o.get("domain")} for o in dhcp],
         })
 
-    gateways = {(n["iface"], n["gateway"]) for n in networks if n["gateway"]}
+    networks, iface_main = _merge_same_network(networks)
+    gateways = {(iface_main.get(n["iface"], n["iface"]), n["gateway"]) for n in networks if n["gateway"]}
     nodes = []
     for device in devices:
-        iface = device.get("iface")
+        iface = iface_main.get(device.get("iface"), device.get("iface"))
         nodes.append({
             "ip": device["ip"],
             "label": _label(device, device["ip"] in local_ips),

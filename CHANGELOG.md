@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-17
+
+### Fixed
+
+- **The network map no longer draws one network twice.** A PC on the cable and
+  on the Wi-Fi of the same addresses (for instance `192.168.88.0/24` on `eth0`
+  and on `wlan0`) showed two network boxes, the second holding only the
+  scanner. It is now one network named after both interfaces (`eth0 + wlan0`),
+  with its gateway and DHCP servers merged, and the scanner is one device with
+  all its addresses. A VPN is never merged. The same applies to the PDF map.
+
 ## [1.7.1] - 2026-11-17
 
 ### Fixed

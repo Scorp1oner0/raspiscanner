@@ -499,7 +499,7 @@ def _netmap(doc, netmap):
             net = band["net"]
             color = NET_COLOR.get(net["kind"], MUTED)
             doc.rect(_MAP_NET_X, cy - 22, _MAP_NET_W, 44, fill=WHITE, stroke=color, line=1.2)
-            doc.text(_MAP_NET_X + 5, cy - 11, _fit(f"{net['iface']}  {net['kind']}", "F2", 7.4, _MAP_NET_W - 10), "F2", 7.4, INK)
+            doc.text(_MAP_NET_X + 5, cy - 11, _fit(" + ".join(net["ifaces"]) if len(net.get("ifaces") or []) > 1 else f"{net['iface']}  {net['kind']}", "F2", 7.4, _MAP_NET_W - 10), "F2", 7.4, INK)
             doc.text(_MAP_NET_X + 5, cy - 2, _fit(net.get("cidr") or "", "F1", 6.6, _MAP_NET_W - 10), "F1", 6.6, MUTED)
             doc.text(_MAP_NET_X + 5, cy + 7, _fit(f"gateway {net.get('gateway') or '-'}", "F1", 6.0, _MAP_NET_W - 10), "F1", 6.0, FAINT)
             dhcp = ", ".join(o["server"] for o in net.get("dhcp") or [])

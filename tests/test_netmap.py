@@ -39,6 +39,34 @@ class TestNetworkMap(unittest.TestCase):
         self.assertTrue(by_ip["192.168.88.250"]["is_self"])
         self.assertFalse(by_ip["192.168.88.250"]["is_gateway"])
 
+    def test_cable_and_wifi_on_the_same_addresses_are_one_network(self):
+        topology = {
+            "eth0": {"cidr": "192.168.88.0/24", "gateway": "192.168.88.2", "neighbors": [],
+                     "dhcp": [{"server": "192.168.88.200", "dns": []}]},
+            "wlan0": {"cidr": "192.168.88.0/24", "gateway": "192.168.88.2", "neighbors": [], "dhcp": []},
+        }
+        devices = [
+            _device("192.168.88.2", "eth0", "192.168.88.0/24", "pihole", mac="AA:00:00:00:00:02"),
+            _device("192.168.88.250", "eth0", "192.168.88.0/24", "localhost", mac="AA:00:00:00:00:fa"),
+            _device("192.168.88.190", "wlan0", "192.168.88.0/24", "localhost", mac="AA:00:00:00:00:be"),
+        ]
+        result = netmap.build_map(topology, devices, local_ips={"192.168.88.250", "192.168.88.190"})
+        self.assertEqual(len(result["networks"]), 1)
+        net = result["networks"][0]
+        self.assertEqual(net["ifaces"], ["eth0", "wlan0"])
+        self.assertEqual(net["dhcp"][0]["server"], "192.168.88.200")
+        self.assertEqual({d["iface"] for d in result["devices"]}, {"eth0"})
+        selves = [d for d in result["devices"] if d["is_self"]]
+        self.assertEqual(len(selves), 1)
+        self.assertEqual(selves[0]["ips"], ["192.168.88.190", "192.168.88.250"])
+        self.assertEqual(result["links"], [])
+        self.assertTrue(next(d for d in result["devices"] if d["ip"] == "192.168.88.2")["is_gateway"])
+
+    def test_a_vpn_is_never_merged_into_another_network(self):
+        topology = {"eth0": {"cidr": "10.0.0.0/24", "gateway": None, "neighbors": []},
+                    "wg0": {"cidr": "10.0.0.0/24", "gateway": None, "neighbors": []}}
+        self.assertEqual(len(netmap.build_map(topology, [])["networks"]), 2)
+
     def test_same_hostname_in_two_networks_is_a_bridge(self):
         devices = [
             _device("192.168.88.248", "eth0", "192.168.88.0/24", "TestPi.local"),

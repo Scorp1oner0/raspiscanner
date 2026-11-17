@@ -581,7 +581,7 @@ function renderNetMap(map) {
     });
     const dhcp = (b.net.dhcp || []).map((o) => o.server).join(", ");
     boxes += `<g><rect class="nm-box nm-net-${escapeHtml(b.net.kind)}" x="${NX}" y="${b.cy - NH / 2}" width="${NW}" height="${NH}" rx="9"/>
-      <text x="${NX + 12}" y="${b.cy - 15}" font-size="12.5">${escapeHtml(b.net.iface)} · ${escapeHtml(b.net.kind)}</text>
+      <text x="${NX + 12}" y="${b.cy - 15}" font-size="12.5">${escapeHtml((b.net.ifaces || [b.net.iface]).length > 1 ? b.net.ifaces.join(" + ") : b.net.iface + " · " + b.net.kind)}</text>
       <text class="nm-dim" x="${NX + 12}" y="${b.cy}">${escapeHtml(b.net.cidr || "")}</text>
       <text class="nm-tag" x="${NX + 12}" y="${b.cy + 14}">gateway ${escapeHtml(b.net.gateway || "-")}</text>
       <text class="nm-tag" x="${NX + 12}" y="${b.cy + 26}">${dhcp ? "DHCP " + escapeHtml(trunc(dhcp, 20)) : "DHCP not seen"}</text></g>`;
