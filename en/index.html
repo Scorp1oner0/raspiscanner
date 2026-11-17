@@ -31,7 +31,7 @@
   "description": "Open-source network scanner for Raspberry Pi: finds IP cameras, NVRs and network gear and reports what is exposed. Works offline, no telemetry.",
   "applicationCategory": "SecurityApplication",
   "operatingSystem": "Linux, Raspberry Pi OS, Windows",
-  "softwareVersion": "1.9.1",
+  "softwareVersion": "1.10.1",
   "license": "https://opensource.org/licenses/MIT",
   "isAccessibleForFree": true,
   "offers": {
@@ -287,7 +287,7 @@ footer a { color: var(--text-dim); }
 <main>
   <section class="hero">
     <div class="wrap">
-      <span class="eyebrow"><span class="dot"></span>v1.9.1 · open source · MIT license</span>
+      <span class="eyebrow"><span class="dot"></span>v1.10.1 · open source · MIT license</span>
       <h1>The network scanner for people who install video surveillance.</h1>
       <p class="lead">Plug a Raspberry Pi into the network. It configures itself, finds <strong>IP cameras, NVRs, DVRs and network gear</strong>, and hands you a report of what is exposed: open Telnet, reachable RTSP, admin panels without HTTPS.</p>
       <div class="ctas">
@@ -311,9 +311,19 @@ footer a { color: var(--text-dim); }
     <div class="wrap">
       <div class="window">
         <div class="bar"><i></i><i></i><i></i><span>https://raspiscanner.local:7332</span></div>
-        <img src="../dashboard.png" width="1280" height="1050" alt="RaspiScanner dashboard: counters for devices, cameras and issues by severity, network status and the table of devices found">
+        <img src="../dashboard.png" width="1700" height="1330" alt="RaspiScanner dashboard: counters for devices, cameras and issues by severity and the table of devices found in an example network with switches, an NVR and eight cameras">
       </div>
-      <p class="caption">Example data: a Hikvision camera and NVR, a TP-Link router and a Raspberry Pi. Not anyone's real network.</p>
+      <p class="caption">Example data: a site with a core switch, two switches for the cameras, an NVR and eight cameras from different makers. Not anyone's real network.</p>
+    </div>
+  </section>
+
+  <section class="shot">
+    <div class="wrap">
+      <div class="window">
+        <div class="bar"><i></i><i></i><i></i><span>https://raspiscanner.local:7332</span></div>
+        <img src="../network-map.png" width="1100" height="1488" alt="The example network map: the switch at the centre with every device on its port, the cameras under the switch they are plugged into and the Wi-Fi devices under their access point" loading="lazy">
+      </div>
+      <p class="caption">The map of the same example: the switch at the centre, the cameras under the switch they are plugged into, the Wi-Fi devices under their access point. The port number is shown only where the switch answers the default SNMP community.</p>
     </div>
   </section>
 
